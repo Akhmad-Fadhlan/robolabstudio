@@ -1,0 +1,946 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Arduino Uno Rev3 - SVG Akurat
+  
+  Referensi: ARDUINO_UNO_REV3.mod dan ARDUINO_UNO_REV3.step
+  
+  Dimensi board (dari outline DS di .mod):
+    x: -34.2673 sampai +34.2673
+    y: -26.6493 sampai +26.6507
+    Lebar board: 68.58mm
+    Tinggi board: 53.30mm
+  
+  Board outline shape (dari DS lines):
+    - Sisi kiri: x=-34.27, y dari -25.63 ke +25.66
+    - Sisi atas: y=-26.65, x dari -33.27 ke +30.20
+    - Pojok kanan-atas-bawah ada notch:
+        x=+30.20, y=-26.65  -> x=+31.73, y=-25.13
+        x=+31.73 lurus dari y=-25.13 ke y=-13.70
+        Melebar ke: x=+34.27, y=-11.16
+        x=+34.27 lurus dari y=-11.16 ke y=+21.57
+        Menyempit ke: x=+31.73, y=+24.11
+        x=+31.73 lurus dari y=+24.11 ke y=+25.66
+    - Sisi bawah: y=+26.65, x dari +30.73 ke -33.27
+    - Sudut kiri bawah dan kiri atas: radius
+  
+  Semua koordinat pad (dalam mm, sistem koordinat mod):
+    Header bawah (y = +24.1093):
+      P1(NC/Square):  x=-6.327
+      IOREF:          x=-3.787
+      RST:            x=-1.247
+      3V3:            x=+1.293
+      5V:             x=+3.833
+      GND_2:          x=+6.373
+      GND_1:          x=+8.913
+      VIN:            x=+11.453
+      A0(Square):     x=+16.533
+      A1:             x=+19.073
+      A2:             x=+21.613
+      A3:             x=+24.153
+      A4:             x=+26.693
+      A5:             x=+29.233
+    
+    Header atas (y = -24.1507):
+      A5_SCL:         x=-15.471
+      A4_SDA:         x=-12.931
+      GND_3:          x=-7.851
+      D13:            x=-5.311
+      D12:            x=-2.771
+      D11:            x=-0.231
+      D10:            x=+2.309
+      D9:             x=+4.849
+      D8(Square):     x=+7.389   <-- ada gap setelah ini!
+      D7:             x=+11.453  <-- gap 4.064mm (bukan 2.54mm)
+      D6:             x=+13.993
+      D5:             x=+16.533
+      D4:             x=+19.073
+      D3:             x=+21.613
+      D2:             x=+24.153
+      D1:             x=+26.693
+      D0(Square):     x=+29.233
+      AREF:           x=-10.391
+    
+    Mounting holes (diameter 3.3mm):
+      Hole1: x=+31.773, y=-8.911
+      Hole2: x=+31.773, y=+19.029
+      Hole3: x=-19.027, y=-24.151
+      Hole4: x=-20.297, y=+24.109
+  
+  KONVERSI ke SVG:
+    Offset: svg_x = mod_x + 35.27  (agar board x=-34.27 => svg_x=1.0)
+            svg_y = mod_y + 27.65  (agar board y=-26.65 => svg_y=1.0)
+    ViewBox: "0 0 72 57" (approx)
+    Scale: 1 SVG unit = 1mm
+-->
+<svg version="1.1" id="arduino_uno_rev3"
+     xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="-6 -5 86 66"
+     width="860" height="660">
+
+  <defs>
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e7540"/>
+      <stop offset="50%" style="stop-color:#155c30"/>
+      <stop offset="100%" style="stop-color:#0d3d20"/>
+    </linearGradient>
+    <linearGradient id="padGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8c85a"/>
+      <stop offset="50%" style="stop-color:#f5d97a"/>
+      <stop offset="100%" style="stop-color:#c8a440"/>
+    </linearGradient>
+    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2d2d2d"/>
+      <stop offset="100%" style="stop-color:#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="usbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#b8b8b8"/>
+      <stop offset="100%" style="stop-color:#707070"/>
+    </linearGradient>
+    <linearGradient id="barrelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#606060"/>
+      <stop offset="100%" style="stop-color:#282828"/>
+    </linearGradient>
+    <radialGradient id="ledGreen" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" style="stop-color:#aaffaa"/>
+      <stop offset="100%" style="stop-color:#00aa00"/>
+    </radialGradient>
+    <radialGradient id="ledYellow" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" style="stop-color:#ffffaa"/>
+      <stop offset="100%" style="stop-color:#aaaa00"/>
+    </radialGradient>
+    <radialGradient id="ledOrange" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" style="stop-color:#ffcc66"/>
+      <stop offset="100%" style="stop-color:#cc6600"/>
+    </radialGradient>
+    <filter id="boardShadow">
+      <feDropShadow dx="0.5" dy="0.5" stdDeviation="0.5" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="0.3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Pattern untuk copper trace -->
+    <pattern id="tracePattern" x="0" y="0" width="2" height="2" patternUnits="userSpaceOnUse">
+      <rect width="2" height="2" fill="none"/>
+    </pattern>
+  </defs>
+
+  <!-- ===================================================
+       OFFSET TRANSFORM: semua koordinat .mod di-offset
+       svg_x = mod_x + 35.27
+       svg_y = mod_y + 27.65
+       =================================================== -->
+  <g id="board" transform="translate(35.27, 27.65)" filter="url(#boardShadow)">
+
+    <!-- ================================================
+         BOARD OUTLINE (dari DS lines di .mod)
+         Bentuk tidak persegi - ada step di kanan
+         ================================================ -->
+    <path id="pcb-board"
+      d="
+        M -33.27, -26.65
+        L  30.20, -26.65
+        L  31.73, -25.13
+        L  31.73, -13.70
+        L  34.27, -11.16
+        L  34.27,  21.57
+        L  31.73,  24.11
+        L  31.73,  25.66
+        Q  31.73,  26.65   30.73, 26.65
+        L -33.27,  26.65
+        Q -34.27,  26.65  -34.27, 25.66
+        L -34.27, -25.63
+        Q -34.27, -26.65  -33.27, -26.65
+        Z
+      "
+      fill="url(#boardGrad)"
+      stroke="#0a3010"
+      stroke-width="0.4"/>
+
+    <!-- ============================================
+         PCB EDGE MARKINGS (garis tepi silkscreen)
+         ============================================ -->
+    <!-- Garis silkscreen luar (layer 26) sudah di board outline -->
+    <!-- Inner courtyard line (layer 27 / 21) -->
+    <path
+      d="
+        M -33.27, -26.65
+        L  30.20, -26.65
+        L  31.73, -25.13
+        L  31.73, -13.70
+        L  34.27, -11.16
+        L  34.27,  21.57
+        L  31.73,  24.11
+        L  31.73,  25.66
+        Q  31.73,  26.65   30.73, 26.65
+        L -33.27,  26.65
+        Q -34.27,  26.65  -34.27, 25.66
+        L -34.27, -25.63
+        Q -34.27, -26.65  -33.27, -26.65
+        Z
+      "
+      fill="none"
+      stroke="#1a5530"
+      stroke-width="0.15"
+      opacity="0.5"/>
+
+    <!-- ============================================
+         COPPER POURS / PCB ARTWORK  
+         (simulasi jalur tembaga di board)
+         ============================================ -->
+    <!-- Ground plane (dark green area) -->
+    <rect x="-33" y="-25" width="30" height="50" rx="1" fill="#0d4020" opacity="0.3"/>
+
+    <!-- ============================================
+         MOUNTING HOLES
+         Dari .mod:
+           Hole1: mod(31.773, -8.911)
+           Hole2: mod(31.773, 19.029)
+           Hole3: mod(-19.027, -24.151)  
+           Hole4: mod(-20.297, 24.109)
+         ============================================ -->
+    <!-- Hole 1 - kanan atas (dalam notch) -->
+    <g id="hole1">
+      <circle cx="31.773" cy="-8.911" r="2.0" fill="#1a6030" stroke="#0a3520" stroke-width="0.3"/>
+      <circle cx="31.773" cy="-8.911" r="1.65" fill="#0a3020" stroke="#333" stroke-width="0.25"/>
+      <circle cx="31.773" cy="-8.911" r="1.0" fill="#050f08" stroke="#444" stroke-width="0.15"/>
+    </g>
+    <!-- Hole 2 - kanan bawah (dalam notch) -->
+    <g id="hole2">
+      <circle cx="31.773" cy="19.029" r="2.0" fill="#1a6030" stroke="#0a3520" stroke-width="0.3"/>
+      <circle cx="31.773" cy="19.029" r="1.65" fill="#0a3020" stroke="#333" stroke-width="0.25"/>
+      <circle cx="31.773" cy="19.029" r="1.0" fill="#050f08" stroke="#444" stroke-width="0.15"/>
+    </g>
+    <!-- Hole 3 - kiri atas (dekat header digital) -->
+    <g id="hole3">
+      <circle cx="-19.027" cy="-24.151" r="2.0" fill="#1a6030" stroke="#0a3520" stroke-width="0.3"/>
+      <circle cx="-19.027" cy="-24.151" r="1.65" fill="#0a3020" stroke="#333" stroke-width="0.25"/>
+      <circle cx="-19.027" cy="-24.151" r="1.0" fill="#050f08" stroke="#444" stroke-width="0.15"/>
+    </g>
+    <!-- Hole 4 - kiri bawah -->
+    <g id="hole4">
+      <circle cx="-20.297" cy="24.109" r="2.0" fill="#1a6030" stroke="#0a3520" stroke-width="0.3"/>
+      <circle cx="-20.297" cy="24.109" r="1.65" fill="#0a3020" stroke="#333" stroke-width="0.25"/>
+      <circle cx="-20.297" cy="24.109" r="1.0" fill="#050f08" stroke="#444" stroke-width="0.15"/>
+    </g>
+
+    <!-- ============================================
+         USB TYPE-B CONNECTOR
+         Di sisi kiri board (mod_x ~ -34, mod_y ~ 2.5 ke 14.5)
+         ============================================ -->
+    <g id="usb-type-b">
+      <!-- Metal shell -->
+      <rect x="-37.5" y="2.5" width="6" height="12" rx="0.5"
+            fill="url(#usbGrad)" stroke="#555" stroke-width="0.3"/>
+      <!-- Highlight -->
+      <rect x="-37.3" y="2.7" width="5.6" height="11.6" rx="0.3"
+            fill="none" stroke="#d0d0d0" stroke-width="0.15" opacity="0.5"/>
+      <!-- USB port opening -->
+      <rect x="-36.8" y="3.8" width="4.5" height="9.5" rx="0.5"
+            fill="#111" stroke="#444" stroke-width="0.2"/>
+      <!-- Port inner detail -->
+      <rect x="-36.3" y="4.5" width="3.5" height="8" rx="0.3"
+            fill="#1a1a1a"/>
+      <!-- Metal tabs (konektor ke PCB) -->
+      <rect x="-37.5" y="2.5" width="0.8" height="2" fill="#999" stroke="#777" stroke-width="0.1"/>
+      <rect x="-37.5" y="13.0" width="0.8" height="2" fill="#999" stroke="#777" stroke-width="0.1"/>
+    </g>
+    <!-- Label USB -->
+    <text x="-33" y="9.5" font-family="Arial" font-size="1.8" font-weight="bold"
+          fill="white" text-anchor="middle" transform="rotate(-90,-33,9.5)">USB</text>
+
+    <!-- ============================================
+         POWER BARREL JACK (DC 2.1mm/5.5mm)  
+         Di sisi kiri bawah, mod_x ~ -34, mod_y ~ 17 ke 25
+         ============================================ -->
+    <g id="barrel-jack">
+      <!-- Outer body -->
+      <rect x="-37.5" y="20" width="6" height="10" rx="0.6"
+            fill="url(#barrelGrad)" stroke="#1a1a1a" stroke-width="0.3"/>
+      <!-- Barrel socket -->
+      <circle cx="-34.5" cy="25" r="2.8" fill="#1a1a1a" stroke="#555" stroke-width="0.3"/>
+      <circle cx="-34.5" cy="25" r="1.8" fill="#111" stroke="#444" stroke-width="0.2"/>
+      <circle cx="-34.5" cy="25" r="0.6" fill="#555"/>
+      <!-- Mounting tabs -->
+      <rect x="-37.5" y="20" width="0.7" height="2" fill="#666" stroke="#444" stroke-width="0.1"/>
+      <rect x="-37.5" y="28" width="0.7" height="2" fill="#666" stroke="#444" stroke-width="0.1"/>
+    </g>
+    <text x="-32" y="24.5" font-family="Arial" font-size="1.5" font-weight="bold"
+          fill="white" text-anchor="middle" transform="rotate(-90,-32,24.5)" opacity="0.8">POWER</text>
+
+    <!-- ============================================
+         ATmega328P (main MCU)
+         Posisi kira-kira tengah board, ukuran DIP28 ~37x7mm
+         atau lebih realistis TQFP32 ~7x7mm
+         ============================================ -->
+    <g id="atmega328p">
+      <!-- Package body TQFP-28 style, posisi tengah board -->
+      <rect x="-4" y="-5" width="15" height="12" rx="0.6"
+            fill="url(#chipGrad)" stroke="#111" stroke-width="0.3"/>
+      <!-- Pin 1 marker (notch/dot) -->
+      <circle cx="-3.2" cy="-4.2" r="0.55" fill="#444"/>
+      <!-- Label -->
+      <text x="3.5" y="-1.5" font-family="Arial" font-size="1.8" font-weight="bold"
+            fill="#aaa" text-anchor="middle">ATmega</text>
+      <text x="3.5" y="0.5" font-family="Arial" font-size="1.8" font-weight="bold"
+            fill="#aaa" text-anchor="middle">328P-PU</text>
+      <text x="3.5" y="2.5" font-family="Arial" font-size="1.2"
+            fill="#666" text-anchor="middle">ARDUINO</text>
+      <text x="3.5" y="4.2" font-family="Arial" font-size="1.0"
+            fill="#555" text-anchor="middle">2023</text>
+      <!-- Chip pins kiri -->
+      <line x1="-5" y1="-3.5" x2="-4" y2="-3.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="-2.0" x2="-4" y2="-2.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="-0.5" x2="-4" y2="-0.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="1.0" x2="-4" y2="1.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="2.5" x2="-4" y2="2.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="4.0" x2="-4" y2="4.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="-5" y1="5.5" x2="-4" y2="5.5" stroke="#bbb" stroke-width="0.5"/>
+      <!-- Chip pins kanan -->
+      <line x1="11" y1="-3.5" x2="12" y2="-3.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="-2.0" x2="12" y2="-2.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="-0.5" x2="12" y2="-0.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="1.0" x2="12" y2="1.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="2.5" x2="12" y2="2.5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="4.0" x2="12" y2="4.0" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="11" y1="5.5" x2="12" y2="5.5" stroke="#bbb" stroke-width="0.5"/>
+      <!-- Chip pins atas -->
+      <line x1="-1.5" y1="-6" x2="-1.5" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="0.0" y1="-6" x2="0.0" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="1.5" y1="-6" x2="1.5" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="3.0" y1="-6" x2="3.0" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="4.5" y1="-6" x2="4.5" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="6.0" y1="-6" x2="6.0" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="7.5" y1="-6" x2="7.5" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="9.0" y1="-6" x2="9.0" y2="-5" stroke="#bbb" stroke-width="0.5"/>
+      <!-- Chip pins bawah -->
+      <line x1="-1.5" y1="7" x2="-1.5" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="0.0" y1="7" x2="0.0" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="1.5" y1="7" x2="1.5" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="3.0" y1="7" x2="3.0" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="4.5" y1="7" x2="4.5" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="6.0" y1="7" x2="6.0" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="7.5" y1="7" x2="7.5" y2="8" stroke="#bbb" stroke-width="0.5"/>
+      <line x1="9.0" y1="7" x2="9.0" y2="8" stroke="#bbb" stroke-width="0.5"/>
+    </g>
+
+    <!-- ============================================
+         ATmega16U2 (USB-Serial chip)
+         Di sisi kiri dekat USB, lebih kecil
+         ============================================ -->
+    <g id="atmega16u2">
+      <rect x="-27" y="-12" width="9" height="7" rx="0.5"
+            fill="url(#chipGrad)" stroke="#111" stroke-width="0.25"/>
+      <circle cx="-26.2" cy="-11.2" r="0.45" fill="#444"/>
+      <text x="-22.5" y="-9.5" font-family="Arial" font-size="1.6" font-weight="bold"
+            fill="#aaa" text-anchor="middle">ATmega</text>
+      <text x="-22.5" y="-7.5" font-family="Arial" font-size="1.6" font-weight="bold"
+            fill="#aaa" text-anchor="middle">16U2</text>
+      <!-- Pins -->
+      <line x1="-28.2" y1="-11" x2="-27" y2="-11" stroke="#999" stroke-width="0.4"/>
+      <line x1="-28.2" y1="-10" x2="-27" y2="-10" stroke="#999" stroke-width="0.4"/>
+      <line x1="-28.2" y1="-9" x2="-27" y2="-9" stroke="#999" stroke-width="0.4"/>
+      <line x1="-28.2" y1="-8" x2="-27" y2="-8" stroke="#999" stroke-width="0.4"/>
+      <line x1="-28.2" y1="-7" x2="-27" y2="-7" stroke="#999" stroke-width="0.4"/>
+      <line x1="-18" y1="-11" x2="-17" y2="-11" stroke="#999" stroke-width="0.4"/>
+      <line x1="-18" y1="-10" x2="-17" y2="-10" stroke="#999" stroke-width="0.4"/>
+      <line x1="-18" y1="-9" x2="-17" y2="-9" stroke="#999" stroke-width="0.4"/>
+      <line x1="-18" y1="-8" x2="-17" y2="-8" stroke="#999" stroke-width="0.4"/>
+      <line x1="-18" y1="-7" x2="-17" y2="-7" stroke="#999" stroke-width="0.4"/>
+    </g>
+
+    <!-- ============================================
+         CRYSTAL OSCILLATOR (16 MHz)
+         Dekat ATmega328P
+         ============================================ -->
+    <g id="crystal-16mhz">
+      <rect x="-11" y="-3" width="5" height="2.5" rx="1"
+            fill="#c0a000" stroke="#806000" stroke-width="0.2"/>
+      <text x="-8.5" y="0.8" font-family="Arial" font-size="1.2" font-weight="bold"
+            fill="#fff8cc" text-anchor="middle">16MHz</text>
+      <!-- Leads -->
+      <line x1="-11" y1="-2.5" x2="-12" y2="-2.5" stroke="#999" stroke-width="0.4"/>
+      <line x1="-11" y1="-1.0" x2="-12" y2="-1.0" stroke="#999" stroke-width="0.4"/>
+      <line x1="-6" y1="-2.5" x2="-5" y2="-2.5" stroke="#999" stroke-width="0.4"/>
+      <line x1="-6" y1="-1.0" x2="-5" y2="-1.0" stroke="#999" stroke-width="0.4"/>
+    </g>
+
+    <!-- Crystal kecil untuk 16U2 (8MHz) -->
+    <g id="crystal-8mhz">
+      <rect x="-28" y="-3" width="3.5" height="2" rx="0.8"
+            fill="#a08000" stroke="#705000" stroke-width="0.15"/>
+      <text x="-26.25" y="-1.3" font-family="Arial" font-size="0.9"
+            fill="#fff8cc" text-anchor="middle">8MHz</text>
+    </g>
+
+    <!-- ============================================
+         VOLTAGE REGULATOR (NCP1117 atau LM1117)
+         Package SOT-223 atau TO-252
+         ============================================ -->
+    <g id="voltage-reg">
+      <rect x="-31" y="8" width="6" height="8" rx="0.5"
+            fill="#383838" stroke="#1a1a1a" stroke-width="0.25"/>
+      <text x="-28" y="13" font-family="Arial" font-size="1.4" font-weight="bold"
+            fill="#888" text-anchor="middle">NCP1117</text>
+      <!-- Leads bawah -->
+      <line x1="-30" y1="16" x2="-30" y2="18" stroke="#aaa" stroke-width="0.6"/>
+      <line x1="-28" y1="16" x2="-28" y2="18" stroke="#aaa" stroke-width="0.6"/>
+      <line x1="-26" y1="16" x2="-26" y2="18" stroke="#aaa" stroke-width="0.6"/>
+    </g>
+
+    <!-- ============================================
+         RESET BUTTON (tactile switch)
+         Di area tengah-atas board
+         ============================================ -->
+    <g id="reset-button">
+      <!-- Body switch -->
+      <rect x="-17" y="-21" width="5" height="5" rx="0.8"
+            fill="#cc1111" stroke="#880000" stroke-width="0.25"/>
+      <!-- Cap tombol -->
+      <circle cx="-14.5" cy="-18.5" r="1.8" fill="#ee2222" stroke="#cc0000" stroke-width="0.2"/>
+      <circle cx="-14.5" cy="-18.5" r="1.2" fill="#ff3333" stroke="#dd1111" stroke-width="0.1"/>
+      <!-- Legs -->
+      <rect x="-17" y="-21" width="0.6" height="0.8" fill="#888" rx="0.1"/>
+      <rect x="-12.6" y="-21" width="0.6" height="0.8" fill="#888" rx="0.1"/>
+      <rect x="-17" y="-16.8" width="0.6" height="0.8" fill="#888" rx="0.1"/>
+      <rect x="-12.6" y="-16.8" width="0.6" height="0.8" fill="#888" rx="0.1"/>
+      <!-- Label -->
+      <text x="-14.5" y="-14.8" font-family="Arial" font-size="1.5" fill="white" text-anchor="middle">RESET</text>
+    </g>
+
+    <!-- ============================================
+         ICSP HEADER 1 (untuk ATmega328P)
+         6-pin 2x3 di kanan area board
+         ============================================ -->
+    <g id="icsp-main">
+      <!-- Body connector -->
+      <rect x="14" y="-7" width="7" height="5.5" rx="0.4"
+            fill="#1a1a1a" stroke="#111" stroke-width="0.25"/>
+      <!-- 6 pin (2 baris x 3 kolom) -->
+      <!-- Row 1 -->
+      <circle cx="15.2" cy="-5.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="17.5" cy="-5.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="19.8" cy="-5.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <!-- Row 2 -->
+      <circle cx="15.2" cy="-3.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="17.5" cy="-3.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="19.8" cy="-3.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <!-- Pin 1 marker -->
+      <circle cx="15.2" cy="-5.9" r="0.25" fill="#fff" opacity="0.8"/>
+      <text x="17.5" y="-8" font-family="Arial" font-size="1.2" fill="white" text-anchor="middle">ICSP</text>
+    </g>
+
+    <!-- ============================================
+         ICSP HEADER 2 (untuk ATmega16U2)
+         6-pin di sisi kiri atas
+         ============================================ -->
+    <g id="icsp-16u2">
+      <rect x="-27" y="-22" width="7" height="5.5" rx="0.4"
+            fill="#1a1a1a" stroke="#111" stroke-width="0.25"/>
+      <circle cx="-25.8" cy="-20.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-23.5" cy="-20.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-21.2" cy="-20.9" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-25.8" cy="-18.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-23.5" cy="-18.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-21.2" cy="-18.2" r="0.6" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-25.8" cy="-20.9" r="0.25" fill="#fff" opacity="0.8"/>
+      <text x="-23.5" y="-23" font-family="Arial" font-size="1.2" fill="white" text-anchor="middle">ICSP</text>
+    </g>
+
+    <!-- ============================================
+         LED INDICATORS
+         (dari kiri ke kanan: ON, L, TX, RX)
+         ============================================ -->
+    <!-- LED ON (power, hijau) -->
+    <g id="led-on">
+      <rect x="-6.5" y="-18" width="2" height="3" rx="0.5"
+            fill="#003300" stroke="#005500" stroke-width="0.15"/>
+      <rect x="-6.3" y="-17.8" width="1.6" height="2.6" rx="0.3"
+            fill="url(#ledGreen)" filter="url(#glow)"/>
+      <text x="-5.5" y="-14.7" font-family="Arial" font-size="1.3" fill="#00ff00" text-anchor="middle">ON</text>
+    </g>
+    <!-- LED L (pin13, kuning) -->
+    <g id="led-l">
+      <rect x="-3.5" y="-18" width="2" height="3" rx="0.5"
+            fill="#333300" stroke="#555500" stroke-width="0.15"/>
+      <rect x="-3.3" y="-17.8" width="1.6" height="2.6" rx="0.3"
+            fill="url(#ledYellow)" filter="url(#glow)"/>
+      <text x="-2.5" y="-14.7" font-family="Arial" font-size="1.3" fill="#ffff00" text-anchor="middle">L</text>
+    </g>
+    <!-- LED TX (oranye) -->
+    <g id="led-tx">
+      <rect x="-9.5" y="-18" width="2" height="3" rx="0.5"
+            fill="#331100" stroke="#552200" stroke-width="0.15"/>
+      <rect x="-9.3" y="-17.8" width="1.6" height="2.6" rx="0.3"
+            fill="url(#ledOrange)" filter="url(#glow)"/>
+      <text x="-8.5" y="-14.7" font-family="Arial" font-size="1.3" fill="#ff8800" text-anchor="middle">TX</text>
+    </g>
+    <!-- LED RX (oranye) -->
+    <g id="led-rx">
+      <rect x="-12.5" y="-18" width="2" height="3" rx="0.5"
+            fill="#331100" stroke="#552200" stroke-width="0.15"/>
+      <rect x="-12.3" y="-17.8" width="1.6" height="2.6" rx="0.3"
+            fill="url(#ledOrange)" filter="url(#glow)"/>
+      <text x="-11.5" y="-14.7" font-family="Arial" font-size="1.3" fill="#ff8800" text-anchor="middle">RX</text>
+    </g>
+
+    <!-- ============================================
+         DECOUPLING CAPACITORS (small 0402/0603)
+         ============================================ -->
+    <!-- Beberapa kapasitor kecil dekat MCU -->
+    <rect x="13" y="2" width="2" height="1.2" rx="0.2" fill="#555" stroke="#333" stroke-width="0.1"/>
+    <rect x="13" y="4" width="2" height="1.2" rx="0.2" fill="#555" stroke="#333" stroke-width="0.1"/>
+    <rect x="13" y="6" width="2" height="1.2" rx="0.2" fill="#555" stroke="#333" stroke-width="0.1"/>
+    <rect x="-3" y="8" width="2" height="1.2" rx="0.2" fill="#555" stroke="#333" stroke-width="0.1"/>
+    <rect x="-3" y="10" width="2" height="1.2" rx="0.2" fill="#555" stroke="#333" stroke-width="0.1"/>
+    <!-- Elco (electrolytic cap) besar -->
+    <circle cx="-16" cy="10" r="2.5" fill="#444" stroke="#222" stroke-width="0.2"/>
+    <line x1="-17.5" y1="10" x2="-16.5" y2="10" stroke="#aaa" stroke-width="0.3"/>
+    <text x="-16" y="10.5" font-family="Arial" font-size="1.3" fill="#888" text-anchor="middle">+</text>
+    <!-- Elco kecil -->
+    <circle cx="-22" cy="12" r="1.8" fill="#3a3a3a" stroke="#222" stroke-width="0.2"/>
+    <line x1="-23.5" y1="12" x2="-22.5" y2="12" stroke="#aaa" stroke-width="0.3"/>
+
+    <!-- ============================================
+         ARDUINO BRANDING (silkscreen)
+         ============================================ -->
+    <!-- Logo teks ARDUINO UNO -->
+    <text x="3" y="16" font-family="Arial, sans-serif" font-size="4.5" font-weight="bold"
+          fill="white" text-anchor="middle" opacity="0.7" letter-spacing="0.5">ARDUINO</text>
+    <text x="3" y="21" font-family="Arial, sans-serif" font-size="6" font-weight="bold"
+          fill="white" text-anchor="middle" opacity="0.7" letter-spacing="1">UNO</text>
+    <!-- Silkscreen Rev -->
+    <text x="14" y="24" font-family="Arial, sans-serif" font-size="1.8"
+          fill="#ccffcc" text-anchor="middle" opacity="0.6">Rev3</text>
+    <!-- Silkscreen logo infinity -->
+    <g transform="translate(-30, 18)" opacity="0.5">
+      <path d="M0,4 Q1.5,1 3.5,1 Q6,1 6,4 Q6,7 3.5,7 Q1.5,7 0,4 Z
+               M6,4 Q6,1 8,1 Q10.5,1 10.5,4 Q10.5,7 8,7 Q6,7 6,4 Z"
+            fill="none" stroke="#00aaff" stroke-width="0.5"/>
+      <line x1="1.5" y1="4" x2="4.5" y2="4" stroke="#00aaff" stroke-width="0.5"/>
+      <line x1="7.5" y1="3" x2="7.5" y2="5" stroke="#00aaff" stroke-width="0.5"/>
+      <line x1="6.5" y1="4" x2="8.5" y2="4" stroke="#00aaff" stroke-width="0.5"/>
+    </g>
+
+    <!-- ============================================
+         RESISTORS (small SMD)
+         ============================================ -->
+    <rect x="-28" y="2" width="1.8" height="1" rx="0.2" fill="#6a4a1a" stroke="#3a2a0a" stroke-width="0.1"/>
+    <rect x="-28" y="4" width="1.8" height="1" rx="0.2" fill="#6a4a1a" stroke="#3a2a0a" stroke-width="0.1"/>
+    <rect x="-28" y="6" width="1.8" height="1" rx="0.2" fill="#6a4a1a" stroke="#3a2a0a" stroke-width="0.1"/>
+
+    <!-- ============================================
+         PCB TRACES (jalur tembaga visibel)
+         ============================================ -->
+    <!-- Trace USB ke 16U2 -->
+    <line x1="-32" y1="-8.5" x2="-27" y2="-8.5" stroke="#b8a000" stroke-width="0.2" opacity="0.4"/>
+    <line x1="-32" y1="-9.5" x2="-27" y2="-9.5" stroke="#b8a000" stroke-width="0.2" opacity="0.4"/>
+    <!-- Trace Crystal ke MCU -->
+    <line x1="-6" y1="-2" x2="-4" y2="-2" stroke="#b8a000" stroke-width="0.2" opacity="0.4"/>
+    <!-- Via dots -->
+    <circle cx="-15" cy="-5" r="0.4" fill="#b8a000" opacity="0.5"/>
+    <circle cx="-10" cy="5" r="0.4" fill="#b8a000" opacity="0.5"/>
+    <circle cx="5" cy="-8" r="0.4" fill="#b8a000" opacity="0.5"/>
+    <circle cx="12" cy="0" r="0.4" fill="#b8a000" opacity="0.5"/>
+    <circle cx="-20" cy="5" r="0.4" fill="#b8a000" opacity="0.5"/>
+
+    <!-- ============================================
+         SILKSCREEN LABELS HEADER  
+         (Labels yang tercetak di board)
+         ============================================ -->
+    <!-- Label header Digital atas -->
+    <text x="-5" y="-28.5" font-family="Arial" font-size="2.2" font-weight="bold"
+          fill="white" text-anchor="middle" opacity="0.8">DIGITAL (PWM ~)</text>
+    <!-- Label header bawah kiri -->
+    <text x="-4" y="31" font-family="Arial" font-size="2.2" font-weight="bold"
+          fill="white" text-anchor="middle" opacity="0.8">POWER</text>
+    <!-- Label header bawah kanan -->
+    <text x="23" y="31" font-family="Arial" font-size="2.2" font-weight="bold"
+          fill="white" text-anchor="middle" opacity="0.8">ANALOG IN</text>
+
+    <!-- ============================================
+         ========== PIN HEADERS ====================
+         (Semua koordinat TEPAT dari .mod file)
+         
+         Rumus: svg_coord = mod_coord (karena group sudah di-offset)
+         Ukuran pad: radius = 0.838mm (1.6764/2)
+         Lubang: radius = 0.508mm (1.016/2)
+         ============================================ -->
+
+    <!-- ==========================================
+         HEADER BAWAH - POWER SECTION
+         y_mod = +24.1093
+         ========================================== -->
+    
+    <!-- P1 / NC (Square pad, mod_x=-6.32731) -->
+    <g id="pad-P1" class="header-pin">
+      <rect x="-7.165" y="23.271" width="1.676" height="1.676"
+            fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-6.327" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="-6.327" y1="24.109" x2="-6.327" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-6.327" y="28.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">NC</text>
+    </g>
+    
+    <!-- IOREF (mod_x=-3.78731) -->
+    <g id="pad-IOREF" class="header-pin">
+      <circle cx="-3.787" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-3.787" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="-3.787" y1="24.109" x2="-3.787" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-3.787" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">IOREF</text>
+    </g>
+    
+    <!-- RST (mod_x=-1.24731) -->
+    <g id="pad-RST" class="header-pin">
+      <circle cx="-1.247" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-1.247" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="-1.247" y1="24.109" x2="-1.247" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-1.247" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">RST</text>
+    </g>
+    
+    <!-- 3V3 (mod_x=1.29269) -->
+    <g id="pad-3V3" class="header-pin">
+      <circle cx="1.293" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="1.293" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="1.293" y1="24.109" x2="1.293" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="1.293" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">3.3V</text>
+    </g>
+    
+    <!-- 5V (mod_x=3.83269) -->
+    <g id="pad-5V" class="header-pin">
+      <circle cx="3.833" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="3.833" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="3.833" y1="24.109" x2="3.833" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="3.833" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">5V</text>
+    </g>
+    
+    <!-- GND_2 (mod_x=6.37269) -->
+    <g id="pad-GND2" class="header-pin">
+      <circle cx="6.373" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="6.373" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="6.373" y1="24.109" x2="6.373" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="6.373" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">GND</text>
+    </g>
+    
+    <!-- GND_1 (mod_x=8.91269) -->
+    <g id="pad-GND1" class="header-pin">
+      <circle cx="8.913" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="8.913" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="8.913" y1="24.109" x2="8.913" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="8.913" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">GND</text>
+    </g>
+    
+    <!-- VIN (mod_x=11.4527) -->
+    <g id="pad-VIN" class="header-pin">
+      <circle cx="11.453" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="11.453" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="11.453" y1="24.109" x2="11.453" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="11.453" y="28.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">VIN</text>
+    </g>
+
+    <!-- ==========================================
+         HEADER BAWAH - ANALOG SECTION
+         y_mod = +24.1093
+         ========================================== -->
+    
+    <!-- A0 (Square pad, mod_x=16.5327) -->
+    <g id="pad-A0" class="header-pin">
+      <rect x="15.694" y="23.271" width="1.676" height="1.676"
+            fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="16.533" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="16.533" y1="24.109" x2="16.533" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="16.533" y="28.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">A0</text>
+    </g>
+    
+    <!-- A1 (mod_x=19.0727) -->
+    <g id="pad-A1" class="header-pin">
+      <circle cx="19.073" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="19.073" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="19.073" y1="24.109" x2="19.073" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="19.073" y="28.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">A1</text>
+    </g>
+    
+    <!-- A2 (mod_x=21.6127) -->
+    <g id="pad-A2" class="header-pin">
+      <circle cx="21.613" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="21.613" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="21.613" y1="24.109" x2="21.613" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="21.613" y="28.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">A2</text>
+    </g>
+    
+    <!-- A3 (mod_x=24.1527) -->
+    <g id="pad-A3" class="header-pin">
+      <circle cx="24.153" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="24.153" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="24.153" y1="24.109" x2="24.153" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="24.153" y="28.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">A3</text>
+    </g>
+    
+    <!-- A4 / SDA (mod_x=26.6927) -->
+    <g id="pad-A4" class="header-pin">
+      <circle cx="26.693" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="26.693" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="26.693" y1="24.109" x2="26.693" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="26.693" y="27.8" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">A4</text>
+      <text x="26.693" y="29.4" font-family="Arial" font-size="1.0"
+            fill="#aaddff" text-anchor="middle">SDA</text>
+    </g>
+    
+    <!-- A5 / SCL (mod_x=29.2327) -->
+    <g id="pad-A5" class="header-pin">
+      <circle cx="29.233" cy="24.109" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="29.233" cy="24.109" r="0.508" fill="#111"/>
+      <line x1="29.233" y1="24.109" x2="29.233" y2="26.65"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="29.233" y="27.8" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">A5</text>
+      <text x="29.233" y="29.4" font-family="Arial" font-size="1.0"
+            fill="#aaddff" text-anchor="middle">SCL</text>
+    </g>
+
+    <!-- ==========================================
+         HEADER ATAS - DIGITAL SECTION
+         y_mod = -24.1507
+         ========================================== -->
+    
+    <!-- SCL / A5 duplicate pin (mod_x=-15.4713) -->
+    <g id="pad-SCL" class="header-pin">
+      <circle cx="-15.471" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-15.471" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-15.471" y1="-26.65" x2="-15.471" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-15.471" y="-27.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">SCL</text>
+    </g>
+    
+    <!-- SDA / A4 duplicate pin (mod_x=-12.9313) -->
+    <g id="pad-SDA" class="header-pin">
+      <circle cx="-12.931" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-12.931" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-12.931" y1="-26.65" x2="-12.931" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-12.931" y="-27.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">SDA</text>
+    </g>
+    
+    <!-- AREF (mod_x=-10.3913) -->
+    <g id="pad-AREF" class="header-pin">
+      <circle cx="-10.391" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-10.391" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-10.391" y1="-26.65" x2="-10.391" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-10.391" y="-27.0" font-family="Arial" font-size="1.2"
+            fill="white" text-anchor="middle">AREF</text>
+    </g>
+    
+    <!-- GND_3 (mod_x=-7.85131) -->
+    <g id="pad-GND3" class="header-pin">
+      <circle cx="-7.851" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-7.851" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-7.851" y1="-26.65" x2="-7.851" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-7.851" y="-27.0" font-family="Arial" font-size="1.3"
+            fill="white" text-anchor="middle">GND</text>
+    </g>
+    
+    <!-- D13 (mod_x=-5.31131) -->
+    <g id="pad-D13" class="header-pin">
+      <circle cx="-5.311" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-5.311" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-5.311" y1="-26.65" x2="-5.311" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-5.311" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">13</text>
+    </g>
+    
+    <!-- D12 (mod_x=-2.77131) -->
+    <g id="pad-D12" class="header-pin">
+      <circle cx="-2.771" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-2.771" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-2.771" y1="-26.65" x2="-2.771" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-2.771" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">12</text>
+    </g>
+    
+    <!-- D11 (mod_x=-0.231309) -->
+    <g id="pad-D11" class="header-pin">
+      <circle cx="-0.231" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="-0.231" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="-0.231" y1="-26.65" x2="-0.231" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="-0.231" y="-27.2" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">~11</text>
+    </g>
+    
+    <!-- D10 (mod_x=2.30869) -->
+    <g id="pad-D10" class="header-pin">
+      <circle cx="2.309" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="2.309" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="2.309" y1="-26.65" x2="2.309" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="2.309" y="-27.2" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">~10</text>
+    </g>
+    
+    <!-- D9 (mod_x=4.84869) -->
+    <g id="pad-D9" class="header-pin">
+      <circle cx="4.849" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="4.849" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="4.849" y1="-26.65" x2="4.849" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="4.849" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">~9</text>
+    </g>
+    
+    <!-- D8 (Square pad, mod_x=7.38869) -->
+    <g id="pad-D8" class="header-pin">
+      <rect x="6.550" y="-24.989" width="1.676" height="1.676"
+            fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="7.389" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="7.389" y1="-26.65" x2="7.389" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="7.389" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">8</text>
+    </g>
+    
+    <!-- === GAP 4.064mm antara D8 dan D7 === -->
+    <!-- (ini adalah gap fisik antara 2 header connector) -->
+    
+    <!-- D7 (mod_x=11.4527) -->
+    <g id="pad-D7" class="header-pin">
+      <circle cx="11.453" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="11.453" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="11.453" y1="-26.65" x2="11.453" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="11.453" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">7</text>
+    </g>
+    
+    <!-- D6 (mod_x=13.9927) -->
+    <g id="pad-D6" class="header-pin">
+      <circle cx="13.993" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="13.993" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="13.993" y1="-26.65" x2="13.993" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="13.993" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">~6</text>
+    </g>
+    
+    <!-- D5 (mod_x=16.5327) -->
+    <g id="pad-D5" class="header-pin">
+      <circle cx="16.533" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="16.533" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="16.533" y1="-26.65" x2="16.533" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="16.533" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">~5</text>
+    </g>
+    
+    <!-- D4 (mod_x=19.0727) -->
+    <g id="pad-D4" class="header-pin">
+      <circle cx="19.073" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="19.073" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="19.073" y1="-26.65" x2="19.073" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="19.073" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">4</text>
+    </g>
+    
+    <!-- D3 (mod_x=21.6127) -->
+    <g id="pad-D3" class="header-pin">
+      <circle cx="21.613" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="21.613" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="21.613" y1="-26.65" x2="21.613" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="21.613" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">~3</text>
+    </g>
+    
+    <!-- D2 (mod_x=24.1527) -->
+    <g id="pad-D2" class="header-pin">
+      <circle cx="24.153" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="24.153" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="24.153" y1="-26.65" x2="24.153" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="24.153" y="-27.0" font-family="Arial" font-size="1.5"
+            fill="white" text-anchor="middle">2</text>
+    </g>
+    
+    <!-- D1 / TX (mod_x=26.6927) -->
+    <g id="pad-D1" class="header-pin">
+      <circle cx="26.693" cy="-24.151" r="0.838" fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="26.693" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="26.693" y1="-26.65" x2="26.693" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="26.693" y="-27.2" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">TX→1</text>
+    </g>
+    
+    <!-- D0 / RX (Square pad, mod_x=29.2327) -->
+    <g id="pad-D0" class="header-pin">
+      <rect x="28.394" y="-24.989" width="1.676" height="1.676"
+            fill="url(#padGold)" stroke="#888" stroke-width="0.1"/>
+      <circle cx="29.233" cy="-24.151" r="0.508" fill="#111"/>
+      <line x1="29.233" y1="-26.65" x2="29.233" y2="-24.151"
+            stroke="#b8a000" stroke-width="0.2" opacity="0.3"/>
+      <text x="29.233" y="-27.2" font-family="Arial" font-size="1.4"
+            fill="white" text-anchor="middle">←RX0</text>
+    </g>
+
+    <!-- ============================================
+         HEADER CONNECTOR BODIES (plastik hitam)
+         Menggambarkan fisik connector
+         ============================================ -->
+    <!-- Header bawah kiri (Power, 8 pin) -->
+    <rect x="-7.2" y="23.0" width="20.0" height="2.5" rx="0.3"
+          fill="#1a1a1a" stroke="#333" stroke-width="0.2" opacity="0.5"/>
+    <!-- Header bawah kanan (Analog, 6 pin) -->
+    <rect x="15.7" y="23.0" width="14.5" height="2.5" rx="0.3"
+          fill="#1a1a1a" stroke="#333" stroke-width="0.2" opacity="0.5"/>
+    <!-- Header atas kiri (Digital 0-8, 10 pin) -->
+    <rect x="-16.4" y="-25.2" width="25.7" height="2.5" rx="0.3"
+          fill="#1a1a1a" stroke="#333" stroke-width="0.2" opacity="0.5"/>
+    <!-- Header atas kanan (Digital 7-13, 8 pin) -->
+    <rect x="10.6" y="-25.2" width="20.5" height="2.5" rx="0.3"
+          fill="#1a1a1a" stroke="#333" stroke-width="0.2" opacity="0.5"/>
+
+    <!-- ============================================
+         TEKS TAMBAHAN DAN SILKSCREEN
+         ============================================ -->
+    <!-- "www.arduino.cc" -->
+    <text x="3" y="25" font-family="Arial" font-size="1.2"
+          fill="#88cc88" text-anchor="middle" opacity="0.5">www.arduino.cc</text>
+
+  </g><!-- end board group -->
+
+</svg>

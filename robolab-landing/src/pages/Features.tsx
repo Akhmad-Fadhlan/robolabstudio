@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Download, BookOpen, Rocket, Code2, Globe, GraduationCap, ChevronRight } from 'lucide-react'
+import { Download, BookOpen, Rocket, Code2, Globe, GraduationCap } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import FeatureCard from '../components/FeatureCard'
@@ -99,32 +99,32 @@ export default function Features() {
       <Navbar />
 
       {/* ─── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="bg-white pt-12 pb-14 border-b border-slate-100">
-        <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16">
-          <div className="grid lg:grid-cols-2 gap-10 items-start">
+      <section className="bg-white pt-10 pb-12 sm:pt-12 sm:pb-14 border-b border-slate-100">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 items-start">
             {/* Left */}
             <div>
-              <div className="section-badge mb-5">
+              <div className="section-badge mb-4 sm:mb-5">
                 <Rocket size={11} />
                 Powerful Features
               </div>
-              <h1 className="font-display font-extrabold text-[clamp(2rem,4vw,3rem)] text-[#0F172A] leading-[1.1] mb-4">
+              <h1 className="font-display font-extrabold text-[clamp(1.85rem,4vw,3rem)] text-[#0F172A] leading-[1.1] mb-3 sm:mb-4">
                 Everything You Need<br />in <span className="text-blue-accent">One Workspace</span>
               </h1>
-              <p className="text-slate-500 text-base leading-relaxed max-w-lg">
+              <p className="text-slate-500 text-sm sm:text-base leading-relaxed max-w-lg">
                 RoboLab Studio menggabungkan editor kode, visual block, simulator, library manager, hingga AI assistant dalam satu platform terintegrasi untuk belajar dan membangun project IoT &amp; Robotika.
               </p>
             </div>
 
             {/* Right: 4 highlights */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {highlights.map(h => (
-                <div key={h.label} className="flex flex-col items-center text-center p-5 rounded-xl bg-[#F8FAFC] border border-slate-100">
-                  <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 shadow-card flex items-center justify-center mb-3 text-[#1557B0]">
-                    <h.icon size={22} />
+                <div key={h.label} className="flex flex-col items-center text-center p-4 sm:p-5 rounded-xl bg-[#F8FAFC] border border-slate-100">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white border border-slate-100 shadow-card flex items-center justify-center mb-2.5 sm:mb-3 text-[#1557B0]">
+                    <h.icon size={20} />
                   </div>
-                  <div className="font-display font-bold text-sm text-[#0F172A] mb-1">{h.label}</div>
-                  <div className="text-xs text-slate-500 leading-relaxed">{h.desc}</div>
+                  <div className="font-display font-bold text-xs sm:text-sm text-[#0F172A] mb-1">{h.label}</div>
+                  <div className="text-[11px] sm:text-xs text-slate-500 leading-relaxed">{h.desc}</div>
                 </div>
               ))}
             </div>
@@ -133,9 +133,9 @@ export default function Features() {
       </section>
 
       {/* ─── 8 Feature Cards ──────────────────────────────────────────────── */}
-      <section className="py-14 lg:py-20">
-        <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {features.map(f => (
               <FeatureCard
                 key={f.title}
@@ -155,26 +155,26 @@ export default function Features() {
       </section>
 
       {/* ─── CTA Band ─────────────────────────────────────────────────────── */}
-      <section className="py-14 bg-gradient-to-br from-[#1557B0] via-[#1E40AF] to-[#7C3AED]">
-        <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16 flex flex-col md:flex-row items-center justify-between gap-8">
+      <section className="py-12 sm:py-14 bg-gradient-to-br from-[#1557B0] via-[#1E40AF] to-[#7C3AED]">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8">
           <div className="text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold mb-4 border border-white/20">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-white text-xs font-semibold mb-3 sm:mb-4 border border-white/20">
               <Download size={12} />
               Akses Gratis Sekarang
             </div>
-            <h2 className="font-display font-bold text-2xl md:text-3xl text-white mb-2">
+            <h2 className="font-display font-bold text-xl sm:text-2xl md:text-3xl text-white mb-2">
               Siap membangun project IoT &amp; Robotika Anda?
             </h2>
-            <p className="text-blue-200 text-base">Download RoboLab Studio sekarang dan mulai berkreasi!</p>
+            <p className="text-blue-200 text-xs sm:text-sm md:text-base">Download RoboLab Studio sekarang dan mulai berkreasi!</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0 w-full md:w-auto">
             <Link to="/download"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#1557B0] font-bold text-sm hover:bg-blue-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
+              className="inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-white text-[#1557B0] font-bold text-xs sm:text-sm hover:bg-blue-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
               <Download size={16} />
               Download RoboLab Studio
             </Link>
             <Link to="/docs/getting-started"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold text-sm border border-white/20 hover:bg-white/20 transition-all">
+              className="inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-white/10 text-white font-semibold text-xs sm:text-sm border border-white/20 hover:bg-white/20 transition-all">
               <BookOpen size={16} />
               Lihat Dokumentasi
             </Link>

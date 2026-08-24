@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Rocket, Code2, GraduationCap, Download, Wifi, Cpu, FolderPlus, Upload,
-  ChevronRight, Info, Home, Search, Play, CheckCircle2, Monitor
+  ChevronRight, Home, CheckCircle2, Monitor
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -77,30 +77,24 @@ export default function DocsGettingStarted() {
 
       {/* Breadcrumb */}
       <div className="bg-white border-b border-slate-100">
-        <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16">
-          <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
-            <Link to="/" className="hover:text-[#1557B0] flex items-center gap-1 transition-colors">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16">
+          <div className="flex items-center gap-1.5 sm:gap-2 py-3 text-xs sm:text-sm text-slate-500 overflow-x-auto whitespace-nowrap">
+            <Link to="/" className="hover:text-[#1557B0] flex items-center gap-1 transition-colors flex-shrink-0">
               <Home size={13} /> Home
             </Link>
-            <ChevronRight size={13} />
-            <span className="text-slate-500">Docs</span>
-            <ChevronRight size={13} />
-            <span className="text-[#1557B0] font-medium">Getting Started</span>
-
-            {/* Search display */}
-            <div className="ml-auto hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400">
-              <Search size={12} />
-              Cari panduan...
-            </div>
+            <ChevronRight size={12} className="flex-shrink-0" />
+            <span className="text-slate-500 flex-shrink-0">Docs</span>
+            <ChevronRight size={12} className="flex-shrink-0" />
+            <span className="text-[#1557B0] font-medium flex-shrink-0">Getting Started</span>
           </div>
         </div>
       </div>
 
       {/* Main Layout */}
-      <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16 py-8">
-        <div className="flex gap-8">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16 py-6 sm:py-8">
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
 
-          {/* ─── Sidebar Navigation ───────────────────────────────────────── */}
+          {/* ─── Sidebar Navigation (Desktop) ─────────────────────────────── */}
           <aside className="hidden lg:block w-64 flex-shrink-0">
             <div className="sticky top-20 bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 px-2">
@@ -137,20 +131,33 @@ export default function DocsGettingStarted() {
 
           {/* ─── Main Content ─────────────────────────────────────────────── */}
           <main className="flex-1 min-w-0">
+            {/* Mobile Quick Jump Pills */}
+            <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-3 mb-6 no-scrollbar">
+              {sidebarItems.map(item => (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-xs font-medium text-slate-600 whitespace-nowrap hover:border-[#1557B0] hover:text-[#1557B0] transition-colors shadow-2xs"
+                >
+                  {item.label}
+                </a>
+              ))}
+            </div>
+
             {/* Badge + H1 */}
-            <div id="overview" className="section-badge mb-4">
+            <div id="overview" className="section-badge mb-3 sm:mb-4">
               <Rocket size={11} />
               Dokumentasi Resmi
             </div>
-            <h1 className="font-display font-extrabold text-3xl sm:text-4xl text-[#0F172A] mb-3">
+            <h1 className="font-display font-extrabold text-2xl sm:text-3xl md:text-4xl text-[#0F172A] mb-3">
               Getting Started with RoboLab Studio
             </h1>
-            <p className="text-slate-500 text-base leading-relaxed mb-8 max-w-2xl">
+            <p className="text-slate-500 text-sm sm:text-base leading-relaxed mb-6 sm:mb-8 max-w-2xl">
               Selamat datang di RoboLab Studio! Panduan ini akan memandu Anda dari instalasi awal, menghubungkan perangkat, hingga berhasil menjalankan project IoT &amp; Robotika pertama Anda.
             </p>
 
             {/* 3 Value Cards */}
-            <div id="fitur-utama" className="grid sm:grid-cols-3 gap-4 mb-8">
+            <div id="fitur-utama" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
               {[
                 {
                   icon: Rocket, color: 'text-[#1557B0]', bg: 'bg-blue-50',
@@ -168,8 +175,8 @@ export default function DocsGettingStarted() {
                   desc: 'Dukungan contoh project siap pakai dan pembelajaran terstruktur untuk mempercepat penguasaan.',
                 },
               ].map(card => (
-                <div key={card.title} className="card p-5">
-                  <div className={`w-10 h-10 rounded-xl ${card.bg} flex items-center justify-center mb-3 ${card.color}`}>
+                <div key={card.title} className="card p-4 sm:p-5">
+                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${card.bg} flex items-center justify-center mb-3 ${card.color}`}>
                     <card.icon size={20} />
                   </div>
                   <h3 className="font-display font-semibold text-[#0F172A] text-sm mb-1.5">{card.title}</h3>
@@ -179,9 +186,9 @@ export default function DocsGettingStarted() {
             </div>
 
             {/* Info Banner: Simulasi */}
-            <div id="simulasi" className="rounded-xl border border-blue-100 bg-blue-50/70 p-5 mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div id="simulasi" className="rounded-xl border border-blue-100 bg-blue-50/70 p-4 sm:p-5 mb-8 sm:mb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#1557B0] flex items-center justify-center flex-shrink-0 text-white shadow">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1557B0] flex items-center justify-center flex-shrink-0 text-white shadow">
                   <Monitor size={18} />
                 </div>
                 <div>
@@ -199,11 +206,11 @@ export default function DocsGettingStarted() {
             </div>
 
             {/* Quick Steps */}
-            <div id="langkah-cepat" className="mb-12">
-              <h2 className="font-display font-bold text-2xl text-[#0F172A] mb-2">5 Langkah Cepat Memulai</h2>
-              <p className="text-slate-500 text-sm mb-6">Ikuti urutan langkah di bawah ini untuk memulai project Anda:</p>
+            <div id="langkah-cepat" className="mb-10 sm:mb-12">
+              <h2 className="font-display font-bold text-xl sm:text-2xl text-[#0F172A] mb-2">5 Langkah Cepat Memulai</h2>
+              <p className="text-slate-500 text-xs sm:text-sm mb-5 sm:mb-6">Ikuti urutan langkah di bawah ini untuk memulai project Anda:</p>
 
-              <div className="flex flex-col md:flex-row md:items-stretch gap-2 md:gap-0">
+              <div className="flex flex-col md:flex-row md:items-stretch gap-3 md:gap-0">
                 {steps.map(step => (
                   <StepCard key={step.number} {...step} />
                 ))}
@@ -211,12 +218,12 @@ export default function DocsGettingStarted() {
             </div>
 
             {/* Board Support Section */}
-            <div id="board-didukung" className="card p-6 mb-10">
-              <h3 className="font-display font-bold text-lg text-[#0F172A] mb-2">Board &amp; Platform yang Didukung</h3>
-              <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+            <div id="board-didukung" className="card p-4 sm:p-6 mb-8 sm:mb-10">
+              <h3 className="font-display font-bold text-base sm:text-lg text-[#0F172A] mb-2">Board &amp; Platform yang Didukung</h3>
+              <p className="text-xs text-slate-500 mb-4 sm:mb-5 leading-relaxed">
                 RoboLab Studio mendukung beragam mikrokontroler dan bahasa pemrograman populer secara native:
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3 text-xs text-slate-700">
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                   <CheckCircle2 size={15} className="text-green-500 flex-shrink-0" />
                   <span>Arduino Uno, Nano, Mega</span>
@@ -245,12 +252,12 @@ export default function DocsGettingStarted() {
             </div>
 
             {/* Bottom CTA Button */}
-            <div className="flex flex-col sm:flex-row items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 gap-4 text-center sm:text-left">
               <div>
-                <h4 className="font-display font-bold text-base text-[#0F172A] mb-1">Siap untuk Mulai Mengoding?</h4>
+                <h4 className="font-display font-bold text-sm sm:text-base text-[#0F172A] mb-1">Siap untuk Mulai Mengoding?</h4>
                 <p className="text-xs text-slate-500">Unduh aplikasinya sekarang dan nikmati kemudahan belajar robotika.</p>
               </div>
-              <Link to="/download" className="btn-primary px-6 py-3 text-sm flex-shrink-0">
+              <Link to="/download" className="btn-primary px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm flex-shrink-0 w-full sm:w-auto justify-center">
                 <Download size={15} />
                 Download RoboLab Studio
               </Link>

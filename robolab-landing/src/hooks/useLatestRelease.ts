@@ -11,12 +11,12 @@ export interface ReleaseInfo {
 }
 
 const DEFAULT_RELEASE: ReleaseInfo = {
-  version: 'v0.0.2',
-  downloadUrl: 'https://github.com/Akhmad-Fadhlan/robolab/releases/download/v0.0.2/RoboLab.Studio.Setup.0.0.2.exe',
+  version: 'v0.8.0',
+  downloadUrl: 'https://github.com/Akhmad-Fadhlan/robolab/releases/download/v0.8.0/RoboLab-Studio-Setup-0.8.0.exe',
   releaseUrl: 'https://github.com/Akhmad-Fadhlan/robolab/releases/latest',
-  fileSize: '124 MB',
-  releaseDate: '15 Agustus 2026',
-  fileName: 'RoboLab.Studio.Setup.0.0.2.exe',
+  fileSize: '131 MB',
+  releaseDate: '16 Agustus 2026',
+  fileName: 'RoboLab-Studio-Setup-0.8.0.exe',
   loading: false,
 }
 

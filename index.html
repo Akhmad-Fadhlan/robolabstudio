@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>robolab-studio</title>
+    <!-- 
+      CRITICAL: Save and clear Electron's require BEFORE any scripts load.
+      Monaco AMD loader detects window.require / window.nodeRequire and switches
+      to using Node.js fs.readFileSync, causing ENOENT path errors in Electron.
+      By clearing them here (earliest possible), Monaco uses browser XHR instead.
+    -->
+    <script>
+      if (typeof require !== 'undefined' && typeof require === 'function') {
+        window.__electronRequire = require;
+        window.require = undefined;
+        window.nodeRequire = undefined;
+      }
+      // Also clear any pre-existing AMD define to prevent conflicts with Monaco's AMD loader
+      if (typeof define !== 'undefined') {
+        window.__electronDefine = define;
+        window.define = undefined;
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

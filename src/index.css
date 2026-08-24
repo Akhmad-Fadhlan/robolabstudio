@@ -1,0 +1,2154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+
+/* ============================================================
+   CSS CUSTOM PROPERTIES — Glass & 3D Design System
+   ============================================================ */
+@layer base {
+  :root {
+    /* Standard RoboLab Palette */
+    --primary: #8b5cf6;
+    --success: #10b981;
+    --danger: #ef4444;
+    --surface: #0f172a;
+    --border: rgba(255, 255, 255, 0.08);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+
+    /* Base theme settings - dark defaults */
+    --body-bg: #05060a;
+    --body-color: #e2e8f0;
+    --body-bg-image:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59, 130, 246, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(6, 182, 212, 0.04) 0%, transparent 70%);
+
+    /* Dynamic Theme Color Accent (default sky blue in dark) */
+    --accent-primary: #38bdf8;
+    --accent-primary-glow: rgba(56, 189, 248, 0.15);
+    --accent-primary-hover: #0ea5e9;
+    --accent-rgb: 56, 189, 248;
+
+    /* Glass surface values */
+    --glass-bg: rgba(255, 255, 255, 0.035);
+    --glass-bg-hover: rgba(255, 255, 255, 0.055);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-bright: rgba(255, 255, 255, 0.15);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --glass-shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.7), 0 8px 24px rgba(0, 0, 0, 0.5);
+    --glass-panel-lg-bg: rgba(255, 255, 255, 0.028);
+
+    /* Sidebar, header and panel bases */
+    --sidebar-bg: rgba(8, 9, 15, 0.85);
+    --sidebar-border: rgba(255, 255, 255, 0.06);
+    --header-bg: rgba(5, 6, 10, 0.80);
+    --header-border: rgba(255, 255, 255, 0.07);
+
+    /* Glow accent colors */
+    --glow-blue: rgba(59, 130, 246, 0.35);
+    --glow-cyan: rgba(6, 182, 212, 0.35);
+    --glow-purple: rgba(139, 92, 246, 0.35);
+    --glow-green: rgba(16, 185, 129, 0.35);
+    --glow-amber: rgba(245, 158, 11, 0.35);
+
+    /* Panel accent configurations */
+    --panel-border-blockly: rgba(99, 102, 241, 0.28);
+    --panel-shadow-blockly: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.25), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+    --panel-bg-blockly: rgba(10, 12, 22, 0.55);
+
+    --panel-border-code: rgba(6, 182, 212, 0.28);
+    --panel-shadow-code: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(6, 182, 212, 0.25), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+    --panel-bg-code: rgba(10, 12, 22, 0.55);
+
+    --panel-border-simulator: rgba(16, 185, 129, 0.28);
+    --panel-shadow-simulator: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(16, 185, 129, 0.25), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+    --panel-bg-simulator: rgba(10, 12, 22, 0.55);
+
+    --panel-border-explorer: rgba(99, 102, 241, 0.2);
+    --panel-shadow-explorer: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.15), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --panel-bg-explorer: rgba(8, 9, 15, 0.6);
+
+    --panel-border-terminal: rgba(56, 189, 248, 0.18);
+    --panel-shadow-terminal: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.12), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    --panel-bg-terminal: rgba(6, 8, 12, 0.65);
+  }
+
+  /* LIGHT MODE DEFINITION */
+  .theme-light {
+    color-scheme: light;
+    --body-bg: #f8fafc;
+    --body-color: #0f172a;
+    --body-bg-image:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--accent-rgb), 0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.03) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(var(--accent-rgb), 0.02) 0%, transparent 70%);
+
+    /* Premium Light Mode Glassmorphism - crisp, high contrast, soft shadows */
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-bg-hover: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(226, 232, 240, 0.9); /* slate-200 */
+    --glass-border-bright: rgba(203, 213, 225, 0.9); /* slate-300 */
+    --glass-shadow: 0 10px 40px -10px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+    --glass-shadow-lg: 0 20px 60px -15px rgba(15, 23, 42, 0.12), 0 10px 24px -10px rgba(15, 23, 42, 0.06);
+    --glass-panel-lg-bg: rgba(255, 255, 255, 0.92);
+
+    /* Sidebar, header and panel bases for light mode */
+    --sidebar-bg: rgba(255, 255, 255, 0.85);
+    --sidebar-border: rgba(226, 232, 240, 0.8);
+    --header-bg: rgba(255, 255, 255, 0.85);
+    --header-border: rgba(226, 232, 240, 0.8);
+
+    /* Glow accent colors for light mode (very subtle) */
+    --glow-blue: rgba(59, 130, 246, 0.08);
+    --glow-cyan: rgba(6, 182, 212, 0.08);
+    --glow-purple: rgba(139, 92, 246, 0.08);
+    --glow-green: rgba(16, 185, 129, 0.08);
+    --glow-amber: rgba(245, 158, 11, 0.08);
+
+    /* Panel accent configurations for light mode */
+    --panel-border-blockly: rgba(99, 102, 241, 0.15);
+    --panel-shadow-blockly: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
+    --panel-bg-blockly: rgba(255, 255, 255, 0.9);
+
+    --panel-border-code: rgba(6, 182, 212, 0.15);
+    --panel-shadow-code: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
+    --panel-bg-code: rgba(255, 255, 255, 0.9);
+
+    --panel-border-simulator: rgba(16, 185, 129, 0.15);
+    --panel-shadow-simulator: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
+    --panel-bg-simulator: rgba(255, 255, 255, 0.9);
+
+    --panel-border-explorer: rgba(226, 232, 240, 0.9);
+    --panel-shadow-explorer: 0 4px 12px rgba(15, 23, 42, 0.04);
+    --panel-bg-explorer: rgba(255, 255, 255, 0.85);
+
+    --panel-border-terminal: rgba(226, 232, 240, 0.9);
+    --panel-shadow-terminal: 0 -4px 20px rgba(15, 23, 42, 0.05);
+    --panel-bg-terminal: rgba(255, 255, 255, 0.95);
+  }
+
+  /* Accent Color Swatch Definitions (applies to both theme-light and theme-dark but customized here) */
+  .color-cyan {
+    --accent-primary: #0891b2; /* cyan-600 */
+    --accent-primary-glow: rgba(6, 182, 212, 0.18);
+    --accent-primary-hover: #0e7490;
+    --accent-rgb: 6, 182, 212;
+    --accent-gradient: linear-gradient(135deg, #06b6d4, #0891b2);
+    --accent-gradient-hover: linear-gradient(135deg, #0891b2, #0e7490);
+  }
+  .theme-light.color-cyan {
+    --body-bg: #f2fafb; /* subtle cyan tint */
+  }
+
+  .color-sky {
+    --accent-primary: #0284c7; /* sky-600 */
+    --accent-primary-glow: rgba(14, 165, 233, 0.18);
+    --accent-primary-hover: #0369a1;
+    --accent-rgb: 14, 165, 233;
+    --accent-gradient: linear-gradient(135deg, #0ea5e9, #0284c7);
+    --accent-gradient-hover: linear-gradient(135deg, #0284c7, #0369a1);
+  }
+  .theme-light.color-sky {
+    --body-bg: #f4f8fd; /* subtle sky blue tint */
+  }
+
+  .color-emerald {
+    --accent-primary: #059669; /* emerald-600 */
+    --accent-primary-glow: rgba(16, 185, 129, 0.18);
+    --accent-primary-hover: #047857;
+    --accent-rgb: 16, 185, 129;
+    --accent-gradient: linear-gradient(135deg, #10b981, #059669);
+    --accent-gradient-hover: linear-gradient(135deg, #059669, #047857);
+  }
+  .theme-light.color-emerald {
+    --body-bg: #f3faf6; /* subtle emerald tint */
+  }
+
+  .color-pink {
+    --accent-primary: #db2777; /* pink-600 */
+    --accent-primary-glow: rgba(236, 72, 153, 0.18);
+    --accent-primary-hover: #be185d;
+    --accent-rgb: 236, 72, 153;
+    --accent-gradient: linear-gradient(135deg, #ec4899, #db2777);
+    --accent-gradient-hover: linear-gradient(135deg, #db2777, #be185d);
+  }
+  .theme-light.color-pink {
+    --body-bg: #fdf5f9; /* subtle pink tint */
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--body-bg);
+    color: var(--body-color);
+    overflow-x: hidden;
+    /* Deep space or tinted gradient background */
+    background-image: var(--body-bg-image);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+/* ============================================================
+   CUSTOM SCROLLBAR — Premium thin dark style
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ============================================================
+   APP ROOT — Theme-aware background container
+   ============================================================ */
+.app-root {
+  background: linear-gradient(135deg, #05060a 0%, #080a12 40%, #060810 100%);
+  color: #e2e8f0;
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+.app-root.theme-light {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--accent-rgb), 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.05) 0%, transparent 60%),
+    linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%) !important;
+  color: #0f172a !important;
+}
+
+/* All hardcoded dark hex bg → frosted light glass */
+.app-root.theme-light .bg-\[\#07080d\],
+.app-root.theme-light .bg-\[\#08090d\],
+.app-root.theme-light .bg-\[\#080910\],
+.app-root.theme-light .bg-\[\#0c0d12\],
+.app-root.theme-light .bg-\[\#0c0d14\],
+.app-root.theme-light .bg-\[\#0e0f16\],
+.app-root.theme-light .bg-\[\#0f111a\],
+.app-root.theme-light .bg-\[\#12131a\],
+.app-root.theme-light .bg-\[\#14151b\],
+.app-root.theme-light .bg-\[\#18191f\] {
+  background-color: rgba(255,255,255,0.70) !important;
+  color: #0f172a !important;
+}
+
+/* border hex overrides */
+.app-root.theme-light .border-\[\#181b28\] { border-color: rgba(0,0,0,0.08) !important; }
+
+/* slate backgrounds */
+.app-root.theme-light .bg-slate-800,
+.app-root.theme-light .bg-slate-850,
+.app-root.theme-light .bg-slate-900 { background-color: rgba(255,255,255,0.55) !important; }
+
+/* text remapping */
+.app-root.theme-light .text-white, .app-root.theme-light .hover\:text-white:hover { color: #0f172a !important; }
+.app-root.theme-light .text-slate-100, .app-root.theme-light .hover\:text-slate-100:hover { color: #0f172a !important; }
+.app-root.theme-light .text-slate-200, .app-root.theme-light .hover\:text-slate-200:hover { color: #1e293b !important; }
+.app-root.theme-light .text-slate-300, .app-root.theme-light .hover\:text-slate-300:hover { color: #334155 !important; }
+.app-root.theme-light .text-slate-350, .app-root.theme-light .hover\:text-slate-350:hover { color: #3e4e63 !important; }
+.app-root.theme-light .text-slate-400, .app-root.theme-light .hover\:text-slate-400:hover { color: #475569 !important; }
+.app-root.theme-light .text-slate-500, .app-root.theme-light .hover\:text-slate-500:hover { color: #475569 !important; }
+.app-root.theme-light .text-slate-600, .app-root.theme-light .hover\:text-slate-600:hover { color: #334155 !important; }
+
+/* colorful text remapping for readability in light mode */
+.app-root.theme-light .text-indigo-300, .app-root.theme-light .hover\:text-indigo-300:hover { color: #4338ca !important; }
+.app-root.theme-light .text-cyan-400, .app-root.theme-light .hover\:text-cyan-400:hover { color: #0e7490 !important; }
+.app-root.theme-light .text-blue-400, .app-root.theme-light .hover\:text-blue-400:hover { color: #1d4ed8 !important; }
+.app-root.theme-light .text-rose-400, .app-root.theme-light .hover\:text-rose-400:hover { color: #be123c !important; }
+.app-root.theme-light .text-rose-500, .app-root.theme-light .hover\:text-rose-500:hover { color: #e11d48 !important; }
+.app-root.theme-light .text-emerald-400, .app-root.theme-light .hover\:text-emerald-400:hover { color: #047857 !important; }
+.app-root.theme-light .border-cyan-500 { border-color: #0e7490 !important; }
+
+/* Exception: colored buttons keep white text + helper class */
+.app-root.theme-light .text-white-force { color: #ffffff !important; }
+
+/* border-slate */
+.app-root.theme-light .border-slate-700,
+.app-root.theme-light .border-slate-800 { border-color: rgba(0,0,0,0.08) !important; }
+
+/* Glassmorphism inner highlight in light mode */
+.app-root.theme-light .glass-panel::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.82) 0%, transparent 60%) !important;
+}
+
+/* Enhanced 3D hover in light mode */
+.app-root.theme-light .panel-3d:hover {
+  box-shadow:
+    0 22px 55px rgba(var(--accent-rgb),0.12),
+    0 8px 20px rgba(15,23,42,0.07),
+    0 0 0 1px rgba(var(--accent-rgb), 0.20),
+    0 1px 0 rgba(255,255,255,0.95) inset !important;
+  transform: translateY(-2px) rotateX(0.5deg) !important;
+}
+
+/* scrollbar in light mode */
+.app-root.theme-light ::-webkit-scrollbar-track { background: rgba(0,0,0,0.04); }
+.app-root.theme-light ::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb),0.22); border-radius: 10px; }
+.app-root.theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb),0.38); }
+
+/* ============================================================
+   GLASS PANEL UTILITY CLASSES
+   ============================================================ */
+
+/* Base glass card */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Inner highlight on top-left corner */
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Large glass surface */
+.glass-panel-lg {
+  background: var(--glass-panel-lg-bg);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+/* Glass nav sidebar */
+.glass-sidebar {
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+/* Glass header */
+.glass-header {
+  background: var(--header-bg);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-bottom: 1px solid var(--header-border);
+}
+
+/* ============================================================
+   3D WORKSPACE CONTAINER
+   ============================================================ */
+.workspace-3d {
+  perspective: 2400px;
+  perspective-origin: 50% 40%;
+}
+
+/* Panel tilt on hover — subtle 3D depth */
+.panel-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.35s ease;
+  will-change: transform;
+}
+.panel-3d:hover {
+  transform: translateY(-1px) rotateX(0.4deg);
+  box-shadow:
+    var(--glass-shadow-lg),
+    0 0 0 1px var(--glass-border-bright),
+    0 1px 0 rgba(255, 255, 255, 0.1) inset;
+}
+
+/* Blockly panel accent — rich purple glow */
+.panel-blockly {
+  border: 1px solid var(--panel-border-blockly) !important;
+  box-shadow: var(--panel-shadow-blockly) !important;
+  background: var(--panel-bg-blockly) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-blockly::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Code editor panel accent — rich cyan glow */
+.panel-code {
+  border: 1px solid var(--panel-border-code) !important;
+  box-shadow: var(--panel-shadow-code) !important;
+  background: var(--panel-bg-code) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-code::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Simulator panel accent — rich green glow */
+.panel-simulator {
+  border: 1px solid var(--panel-border-simulator) !important;
+  box-shadow: var(--panel-shadow-simulator) !important;
+  background: var(--panel-bg-simulator) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-simulator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Explorer panel accent — purple/indigo glow */
+.panel-explorer {
+  border: 1px solid var(--panel-border-explorer) !important;
+  box-shadow: var(--panel-shadow-explorer) !important;
+  background: var(--panel-bg-explorer) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+
+/* Terminal panel accent — blue/cyan glow */
+.panel-terminal {
+  border: 1px solid var(--panel-border-terminal) !important;
+  box-shadow: var(--panel-shadow-terminal) !important;
+  background: var(--panel-bg-terminal) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+
+/* ============================================================
+   CUSTOM SCROLLBAR — Premium thin dark style
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.theme-light ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* ============================================================
+   GLASS PANEL UTILITY CLASSES
+   ============================================================ */
+
+/* Base glass card */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Inner highlight on top-left corner */
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Large glass surface */
+.glass-panel-lg {
+  background: var(--glass-panel-lg-bg);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+}
+
+/* Glass nav sidebar */
+.glass-sidebar {
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+/* Glass header */
+.glass-header {
+  background: var(--header-bg);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-bottom: 1px solid var(--header-border);
+}
+
+/* ============================================================
+   3D WORKSPACE CONTAINER
+   ============================================================ */
+.workspace-3d {
+  perspective: 2400px;
+  perspective-origin: 50% 40%;
+}
+
+/* Panel tilt on hover — subtle 3D depth */
+.panel-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.35s ease;
+  will-change: transform;
+}
+.panel-3d:hover {
+  transform: translateY(-1px) rotateX(0.4deg);
+  box-shadow:
+    var(--glass-shadow-lg),
+    0 0 0 1px var(--glass-border-bright),
+    0 1px 0 rgba(255, 255, 255, 0.1) inset;
+}
+
+/* Blockly panel accent — rich purple glow */
+.panel-blockly {
+  border: 1px solid var(--panel-border-blockly) !important;
+  box-shadow: var(--panel-shadow-blockly) !important;
+  background: var(--panel-bg-blockly) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-blockly::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Code editor panel accent — rich cyan glow */
+.panel-code {
+  border: 1px solid var(--panel-border-code) !important;
+  box-shadow: var(--panel-shadow-code) !important;
+  background: var(--panel-bg-code) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-code::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Simulator panel accent — rich green glow */
+.panel-simulator {
+  border: 1px solid var(--panel-border-simulator) !important;
+  box-shadow: var(--panel-shadow-simulator) !important;
+  background: var(--panel-bg-simulator) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.panel-simulator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Explorer panel accent — purple/indigo glow */
+.panel-explorer {
+  border: 1px solid var(--panel-border-explorer) !important;
+  box-shadow: var(--panel-shadow-explorer) !important;
+  background: var(--panel-bg-explorer) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+
+/* Terminal panel accent — blue/cyan glow */
+.panel-terminal {
+  border: 1px solid var(--panel-border-terminal) !important;
+  box-shadow: var(--panel-shadow-terminal) !important;
+  background: var(--panel-bg-terminal) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+
+/* ============================================================
+   GLOW ORBS — background ambiance
+   ============================================================ */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: orb-float 12s ease-in-out infinite alternate;
+}
+.orb-blue {
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.35) 0%, transparent 70%);
+}
+.orb-purple {
+  background: radial-gradient(circle, rgba(139,92,246,0.35) 0%, transparent 70%);
+}
+.orb-cyan {
+  background: radial-gradient(circle, rgba(6,182,212,0.35) 0%, transparent 70%);
+}
+@keyframes orb-float {
+  0% { transform: translateY(0px) scale(1); }
+  100% { transform: translateY(-30px) scale(1.08); }
+}
+
+/* ============================================================
+   GLOWING NAV ICON ACTIVE STATE
+   ============================================================ */
+.nav-icon-active {
+  color: var(--accent-primary);
+  background: var(--accent-primary-glow);
+  box-shadow: 0 0 20px var(--accent-primary-glow), 0 0 0 1px var(--accent-primary-glow);
+}
+
+/* ============================================================
+   GLASS CARD — home/package cards
+   ============================================================ */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-3px) scale(1.005);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   DIVIDER — glowing neon between panels
+   ============================================================ */
+.panel-divider {
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.2s ease;
+  position: relative;
+  cursor: col-resize;
+  flex-shrink: 0;
+}
+.theme-light .panel-divider {
+  background: rgba(0, 0, 0, 0.08);
+}
+.panel-divider:hover,
+.panel-divider:active {
+  background: var(--accent-primary, rgba(6, 182, 212, 0.5)) !important;
+  box-shadow: 0 0 8px var(--accent-primary-glow), 0 0 20px var(--accent-primary-glow) !important;
+}
+
+/* ============================================================
+   STATUS BADGE / INDICATOR GLOWS
+   ============================================================ */
+.status-running {
+  animation: pulse-green 1.5s ease-in-out infinite;
+}
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+
+/* ============================================================
+   BLOCKLY EDITOR OVERRIDES (preserve dark theme inside glass)
+   ============================================================ */
+.blocklyWorkspace {
+  width: 100%;
+  height: 100%;
+  background-color: rgba(10, 11, 18, 0.95) !important;
+}
+
+.blocklySvg {
+  background-color: rgba(10, 11, 18, 0.95) !important;
+}
+
+
+
+.blocklyToolboxContents {
+  box-sizing: border-box !important;
+  padding-top: 10px !important;
+}
+
+/* Premium Search Container (Hidden to prevent canvas dark box overlap) */
+.blockly-search-container {
+  display: none !important;
+}
+
+html body.light .blockly-search-container,
+.theme-light .blockly-search-container {
+  background-color: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html body:not(.light) .blockly-search-container,
+.theme-dark .blockly-search-container {
+  background-color: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+.blockly-search-container input {
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  font-family: 'Inter', sans-serif !important;
+  box-shadow: none !important;
+}
+
+html body.light .blockly-search-container input,
+.theme-light .blockly-search-container input {
+  color: #0f172a !important;
+}
+
+html body.light .blockly-search-container input::placeholder,
+.theme-light .blockly-search-container input::placeholder {
+  color: #94a3b8 !important;
+}
+
+html body:not(.light) .blockly-search-container input,
+.theme-dark .blockly-search-container input {
+  color: #f8fafc !important;
+}
+
+html body:not(.light) .blockly-search-container input::placeholder,
+.theme-dark .blockly-search-container input::placeholder {
+  color: #64748b !important;
+}
+
+.blocklyFlyoutBackground {
+  fill: rgba(14, 15, 24, 0.97) !important;
+  stroke: none !important;
+}
+
+
+/* Disable all legacy pseudo-element icons to prevent double icons */
+.blocklyToolboxDiv .blocklyTreeIcon,
+.blocklyToolboxDiv .blocklyToolboxCategoryIcon,
+.blocklyToolboxDiv .blocklyToolboxIcon,
+.blocklyToolboxDiv .blocklyTreeRow::before,
+.blocklyToolboxDiv .blocklyToolboxCategory::before,
+html body #root .blocklyTreeRow::before {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  border: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+
+
+
+/* Blockly grid dots — faint for glass look */
+.blocklyMainBackground {
+  stroke: none !important;
+}
+
+/* ============================================================
+   MONACO EDITOR OVERRIDES
+   ============================================================ */
+.monaco-editor {
+  padding-top: 8px;
+  background: transparent !important;
+}
+.monaco-editor .margin {
+  background: rgba(10, 11, 18, 0.8) !important;
+}
+.theme-light .monaco-editor .margin {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================================
+   ANIMATED GRADIENT BUTTON
+   ============================================================ */
+.btn-glow-blue {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35), 0 0 0 1px rgba(99, 102, 241, 0.2);
+  transition: all 0.25s ease;
+}
+.btn-glow-blue:hover {
+  box-shadow: 0 6px 28px rgba(99, 102, 241, 0.55), 0 0 0 1px rgba(99, 102, 241, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-glow-red {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.1);
+  transition: all 0.25s ease;
+}
+.btn-glow-red:hover {
+  background: rgba(239, 68, 68, 0.2);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+}
+
+/* ============================================================
+   TERMINAL GLASS OVERRIDE
+   ============================================================ */
+.terminal-glass {
+  background: rgba(5, 6, 10, 0.88);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.theme-light .terminal-glass {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ============================================================
+   NOISE TEXTURE OVERLAY (subtle premium feel)
+   ============================================================ */
+.noise-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* ============================================================
+   RESPONSIVE — keep panels stacked on small screens
+   ============================================================ */
+@media (max-width: 1024px) {
+  .panel-3d:hover {
+    transform: none;
+  }
+  .workspace-3d {
+    perspective: none;
+  }
+}
+
+/* ============================================================
+   SELECTION HIGHLIGHT
+   ============================================================ */
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #fff;
+}
+.theme-light ::selection {
+  background: var(--accent-primary-glow);
+  color: var(--accent-primary);
+}
+
+
+/* ================================================================
+   THEME LIGHT — COMPREHENSIVE UNIFIED OVERRIDES
+   ================================================================
+   Strategy: .theme-light acts as a parent scope that overrides
+   every hardcoded dark Tailwind class or inline style.
+   ================================================================ */
+
+/* ── 1. BASE TYPOGRAPHY — all text must be dark ── */
+.theme-light,
+.theme-light * {
+  color-scheme: light;
+}
+
+/* Headings */
+.theme-light h1,
+.theme-light h2,
+.theme-light h3,
+.theme-light h4,
+.theme-light h5,
+.theme-light h6 {
+  color: #0f172a;
+}
+
+/* Slate colour scale remapped to dark values */
+.theme-light .text-slate-100 { color: #0f172a !important; }
+.theme-light .text-slate-200 { color: #1e293b !important; }
+.theme-light .text-slate-300 { color: #334155 !important; }
+.theme-light .text-slate-350 { color: #3e4e63 !important; }
+.theme-light .text-slate-400 { color: #475569 !important; }
+.theme-light .text-slate-500,
+.theme-light .text-slate-550 { color: #64748b !important; }
+.theme-light .text-slate-600 { color: #475569 !important; }
+.theme-light .text-slate-700 { color: #334155 !important; }
+
+/* Hover text remaps */
+.theme-light .hover\:text-white:hover     { color: #0f172a !important; }
+.theme-light .hover\:text-slate-200:hover { color: #1e293b !important; }
+.theme-light .hover\:text-slate-300:hover { color: #334155 !important; }
+.theme-light .hover\:text-slate-400:hover { color: #475569 !important; }
+
+/* Accent colours — must have enough contrast on white/light backgrounds */
+.theme-light .text-indigo-300,
+.theme-light .text-indigo-400  { color: #4338ca !important; }
+.theme-light .text-sky-300,
+.theme-light .text-sky-400     { color: #0284c7 !important; }
+.theme-light .text-cyan-300,
+.theme-light .text-cyan-400    { color: #0891b2 !important; }
+.theme-light .text-emerald-300,
+.theme-light .text-emerald-400 { color: #059669 !important; }
+.theme-light .text-yellow-400,
+.theme-light .text-yellow-500  { color: #d97706 !important; }
+.theme-light .text-amber-400   { color: #b45309 !important; }
+.theme-light .text-purple-400  { color: #7c3aed !important; }
+.theme-light .text-rose-400    { color: #e11d48 !important; }
+.theme-light .text-blue-400    { color: #2563eb !important; }
+
+/* Font mono inputs always dark */
+.theme-light input,
+.theme-light textarea,
+.theme-light select {
+  color: #0f172a !important;
+}
+.theme-light input::placeholder,
+.theme-light textarea::placeholder { color: #94a3b8 !important; }
+
+/* ── 2. BACKGROUND REMAPS ── */
+/* Pure black/very dark backgrounds → white/light */
+.theme-light .bg-black\/20,
+.theme-light .bg-black\/25,
+.theme-light .bg-black\/30 { background-color: rgba(255,255,255,0.5) !important; }
+
+/* White-alpha (glassmorphism) → black-alpha so tint direction flips */
+.theme-light .bg-white\/5, .theme-light .hover\:bg-white\/5:hover  { background-color: rgba(0,0,0,0.035) !important; }
+.theme-light .bg-white\/10, .theme-light .hover\:bg-white\/10:hover { background-color: rgba(0,0,0,0.06)  !important; }
+.theme-light .bg-white\/\[0\.04\] { background-color: rgba(0,0,0,0.04) !important; }
+
+/* Dark hardcoded hex backgrounds → light */
+.theme-light .bg-\[\#0c0d12\],
+.theme-light .bg-\[\#0e0f16\],
+.theme-light .bg-\[\#12131a\],
+.theme-light .bg-\[\#050608\],
+.theme-light .bg-\[\#0f111a\],
+.theme-light .bg-\[\#08090d\] {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* slate-900 / slate-950 used for editor/chat backgrounds */
+.theme-light .bg-slate-900  { background-color: rgba(0,0,0,0.04) !important; }
+.theme-light .bg-slate-950\/40 { background-color: rgba(255,255,255,0.7) !important; }
+.theme-light .bg-slate-950\/60 { background-color: rgba(255,255,255,0.8) !important; }
+
+/* Hover backgrounds */
+.theme-light .hover\:bg-white\/5:hover  { background-color: rgba(0,0,0,0.04) !important; }
+.theme-light .hover\:bg-white\/10:hover { background-color: rgba(0,0,0,0.07) !important; }
+
+/* Option elements inside selects */
+.theme-light .bg-\[\#0c0d12\] option,
+.theme-light .bg-\[\#0e0f16\] option {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+/* ── 3. BORDER REMAPS ── */
+.theme-light .border-white\/5   { border-color: rgba(0,0,0,0.06)  !important; }
+.theme-light .border-white\/10  { border-color: rgba(0,0,0,0.09)  !important; }
+.theme-light .border-white\/20  { border-color: rgba(0,0,0,0.12)  !important; }
+.theme-light .border-slate-800  { border-color: rgba(0,0,0,0.08)  !important; }
+.theme-light .border-\[\#181b28\] { border-color: rgba(0,0,0,0.09) !important; }
+
+/* ── 4. PREMIUM GLASS CARDS ── */
+.theme-light .glass-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(255,255,255,0.5)) !important;
+  border: 1px solid rgba(255,255,255,0.85) !important;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.04), inset 0 1px 1px rgba(255,255,255,0.95) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+}
+.theme-light .glass-card:hover {
+  background: linear-gradient(135deg, rgba(255,255,255,0.88), rgba(255,255,255,0.65)) !important;
+  border-color: rgba(var(--accent-rgb), 0.35) !important;
+  box-shadow: 0 16px 40px rgba(var(--accent-rgb),0.08), inset 0 1px 1px rgba(255,255,255,1) !important;
+  transform: translateY(-2px);
+}
+
+/* ── 5. PANEL INSET HIGHLIGHTS ── */
+.theme-light .panel-blockly,
+.theme-light .panel-code,
+.theme-light .panel-simulator,
+.theme-light .panel-explorer,
+.theme-light .panel-terminal {
+  box-shadow: 0 8px 32px rgba(15,23,42,0.04), inset 0 1px 0 rgba(255,255,255,0.9) !important;
+  border: 1px solid rgba(0,0,0,0.07) !important;
+}
+
+/* ── 6. BUTTONS — Run All, Stop, accent primary ── */
+/* Run All (teal) */
+.theme-light .bg-teal-500 {
+  background: linear-gradient(135deg, #0d9488, #0f766e) !important;
+  box-shadow: 0 4px 14px rgba(13,148,136,0.28) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(13,148,136,0.15) !important;
+  transition: all 0.2s ease !important;
+}
+.theme-light .bg-teal-500:hover {
+  background: linear-gradient(135deg, #0f766e, #115e59) !important;
+  box-shadow: 0 6px 20px rgba(13,148,136,0.38) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Stop (rose) */
+.theme-light .bg-rose-500 {
+  background: linear-gradient(135deg, #e11d48, #be123c) !important;
+  box-shadow: 0 4px 14px rgba(225,29,72,0.28) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(225,29,72,0.15) !important;
+  transition: all 0.2s ease !important;
+}
+.theme-light .bg-rose-500:hover {
+  background: linear-gradient(135deg, #be123c, #9f1239) !important;
+  box-shadow: 0 6px 20px rgba(225,29,72,0.38) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Primary accent button (upload, compile, etc.) */
+.theme-light .btn-glow-blue {
+  background: var(--accent-gradient) !important;
+  box-shadow: 0 4px 14px var(--accent-primary-glow) !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+.theme-light .btn-glow-blue:hover {
+  background: var(--accent-gradient-hover) !important;
+  box-shadow: 0 6px 22px var(--accent-primary-glow) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Danger button */
+.theme-light .btn-glow-red {
+  background: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.08)) !important;
+  border: 1px solid rgba(239,68,68,0.3) !important;
+  color: #b91c1c !important;
+}
+.theme-light .btn-glow-red:hover {
+  background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(220,38,38,0.14)) !important;
+}
+
+/* ── 7. ACTIVE NAV ICONS ── */
+.theme-light .nav-icon-active {
+  color: var(--accent-primary) !important;
+  background: rgba(var(--accent-rgb), 0.10) !important;
+  box-shadow: 0 0 16px rgba(var(--accent-rgb),0.18), 0 0 0 1px rgba(var(--accent-rgb),0.14) !important;
+}
+.theme-light .glass-sidebar button:not(.nav-icon-active) {
+  color: #64748b !important;
+}
+.theme-light .glass-sidebar button:not(.nav-icon-active):hover {
+  color: #0f172a !important;
+  background: rgba(0,0,0,0.05) !important;
+}
+
+/* ── 8. DIVIDERS ── */
+.theme-light .panel-divider { background: rgba(0,0,0,0.08) !important; }
+.theme-light .w-px         { background-color: rgba(0,0,0,0.08) !important; }
+.theme-light .bg-white\/10 { background-color: rgba(0,0,0,0.07) !important; }
+
+/* ── 9. TERMINAL / GLASS SIDEBAR ── */
+.theme-light .terminal-glass {
+  background: rgba(255,255,255,0.78) !important;
+  border-top: 1px solid rgba(0,0,0,0.07) !important;
+}
+
+/* ── 10. SELECTION ── */
+.theme-light ::selection {
+  background: var(--accent-primary-glow);
+  color: var(--accent-primary);
+}
+
+/* ── 11. MONACO EDITOR MARGIN ── */
+.theme-light .monaco-editor .margin {
+  background: rgba(248,250,252,0.95) !important;
+}
+
+/* ── 12. HOME CAROUSEL ── */
+.home-carousel-bg {
+  background: radial-gradient(circle at center, #0d0f18 0%, #040508 100%);
+}
+.theme-light .home-carousel-bg {
+  background: radial-gradient(circle at center, #f8fafc 0%, #e2e8f0 100%) !important;
+}
+.home-carousel-title {
+  background: linear-gradient(135deg, #ffffff 30%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.theme-light .home-carousel-title {
+  background: linear-gradient(135deg, #0f172a 30%, var(--accent-primary) 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* ── 13. BLOCKLY OVERRIDES (CSS layer — JS layer handles workspace colours) ── */
+.theme-light .blocklyWorkspace,
+.theme-light .blocklySvg {
+  background-color: #f8fafc !important;
+}
+.theme-light .blocklyToolboxDiv {
+  background-color: #ffffff !important;
+  border-right: 1px solid rgba(0,0,0,0.08) !important;
+}
+.theme-light .blocklyToolboxDiv * {
+  color: #1e293b !important;
+}
+.theme-light .blocklyFlyoutBackground {
+  fill: #f1f5f9 !important;
+}
+.theme-light .blocklyTreeLabel,
+.theme-light .blocklyFlyoutLabelText {
+  color: #334155 !important;
+  fill: #334155 !important;
+  font-weight: 500 !important;
+}
+.theme-light .blocklyTreeRow {
+  border-radius: 6px !important;
+  margin: 1px 4px !important;
+}
+.theme-light .blocklyTreeRow:not(.blocklyTreeSelected):hover {
+  background-color: rgba(var(--accent-rgb), 0.06) !important;
+}
+.theme-light .blocklyTreeSelected {
+  background-color: rgba(var(--accent-rgb), 0.12) !important;
+}
+.theme-light .blocklyTreeSelected .blocklyTreeLabel {
+  color: var(--accent-primary) !important;
+  fill: var(--accent-primary) !important;
+  font-weight: 700 !important;
+}
+.theme-light .blocklyGridPattern path,
+.theme-light pattern path {
+  stroke: #c8d4e0 !important;
+}
+.theme-light .blocklyZoom > image,
+.theme-light .blocklyZoom > svg { filter: invert(0.8); }
+
+/* ── 14. SIMULATOR PANEL — all internal dark classes ── */
+.theme-light .panel-simulator .bg-\[\#08090d\],
+.theme-light .panel-simulator .bg-\[\#0c0d12\] { background-color: #f8fafc !important; }
+.theme-light .panel-simulator .bg-slate-900,
+.theme-light .panel-simulator .bg-slate-900\/40 { background-color: rgba(0,0,0,0.03) !important; }
+.theme-light .panel-simulator .bg-slate-950\/40,
+.theme-light .panel-simulator .bg-slate-950\/60 { background-color: rgba(255,255,255,0.72) !important; }
+.theme-light .panel-simulator .bg-slate-800,
+.theme-light .panel-simulator .bg-slate-800\/90 { background-color: rgba(0,0,0,0.04) !important; }
+.theme-light .panel-simulator .border-slate-800,
+.theme-light .panel-simulator .border-slate-850,
+.theme-light .panel-simulator .border-slate-700 { border-color: rgba(0,0,0,0.08) !important; }
+.theme-light .panel-simulator .text-slate-100  { color: #0f172a !important; }
+.theme-light .panel-simulator .text-slate-200  { color: #1e293b !important; }
+.theme-light .panel-simulator .text-slate-300  { color: #334155 !important; }
+.theme-light .panel-simulator .text-slate-400,
+.theme-light .panel-simulator .text-slate-500  { color: #475569 !important; }
+.theme-light .panel-simulator .text-slate-600  { color: #334155 !important; }
+.theme-light .panel-simulator .text-white      { color: #0f172a !important; }
+.theme-light .panel-simulator .text-sky-300    { color: #0284c7 !important; }
+.theme-light .panel-simulator .text-emerald-300,
+.theme-light .panel-simulator .text-emerald-400 { color: #059669 !important; }
+.theme-light .panel-simulator .text-purple-400 { color: #7c3aed !important; }
+.theme-light .panel-simulator .text-cyan-400   { color: #0891b2 !important; }
+.theme-light .panel-simulator .bg-sky-950\/90  {
+  background-color: rgba(14,165,233,0.07) !important;
+  color: #0369a1 !important;
+}
+.theme-light .panel-simulator .bg-sky-900 {
+  background-color: var(--accent-primary) !important;
+  color: #ffffff !important;
+}
+.theme-light .panel-simulator button {
+  transition: all 0.18s ease !important;
+}
+.theme-light .panel-simulator .bg-slate-800\/90:hover,
+.theme-light .panel-simulator .hover\:bg-slate-700:hover {
+  background-color: rgba(0,0,0,0.08) !important;
+}
+
+.theme-light h3,
+.theme-light h4,
+.theme-light h5,
+.theme-light h6 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-100 {
+  color: #0f172a !important;
+}
+.theme-light .text-slate-200 {
+  color: #1e293b !important;
+}
+.theme-light .text-slate-300 {
+  color: #334155 !important;
+}
+.theme-light .text-slate-400 {
+  color: #475569 !important;
+}
+.theme-light .text-slate-550,
+.theme-light .text-slate-500 {
+  color: #475569 !important;
+}
+.theme-light .text-slate-600 {
+  color: #334155 !important;
+}
+.theme-light .text-slate-700 {
+  color: #1e293b !important;
+}
+
+/* Accent Color Contrast Overrides for Light Mode */
+.theme-light .text-indigo-300,
+.theme-light .text-indigo-400 {
+  color: #4f46e5 !important; /* indigo-600 */
+}
+.theme-light .text-sky-400 {
+  color: #0284c7 !important; /* sky-600 */
+}
+.theme-light .text-emerald-400 {
+  color: #059669 !important; /* emerald-600 */
+}
+.theme-light .text-yellow-500 {
+  color: #d97706 !important; /* amber-600 */
+}
+
+/* Hover text adjustments */
+.theme-light .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+.theme-light .hover\:text-slate-200:hover {
+  color: #1e293b !important;
+}
+.theme-light .hover\:text-slate-300:hover {
+  color: #334155 !important;
+}
+
+/* Background/Border transparency overrides for Light Mode */
+.theme-light .bg-black\/20 {
+  background-color: rgba(255, 255, 255, 0.45) !important;
+}
+.theme-light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.theme-light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.07) !important;
+}
+.theme-light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.theme-light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.07) !important;
+}
+.theme-light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+.theme-light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.09) !important;
+}
+.theme-light .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* React modal and POPUP overrides */
+.theme-light .bg-\[\#0c0d12\] {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.09) !important;
+}
+.theme-light .border-\[\#181b28\] {
+  border-color: rgba(0, 0, 0, 0.09) !important;
+}
+.theme-light .bg-\[\#0e0f16\] {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+.theme-light .bg-\[\#12131a\] {
+  background-color: #f8fafc !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+.theme-light .bg-\[\#050608\] {
+  background-color: #f1f5f9 !important;
+}
+.theme-light .bg-\[\#0f111a\] {
+  background-color: #f8fafc !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+.theme-light .bg-\[\#0c0d12\] option,
+.theme-light .bg-\[\#0e0f16\] option {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+/* Dynamic slate background replacements for light mode */
+.theme-light .bg-slate-900 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.theme-light .border-slate-800 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light input,
+.theme-light select {
+  color: #0f172a !important;
+}
+.theme-light input::placeholder {
+  color: #64748b !important;
+}
+
+/* Blockly Workspace Light Theme Overrides */
+.theme-light .blocklyWorkspace,
+.theme-light .blocklySvg {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+}
+.theme-light .blocklyToolboxDiv {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light .blocklyToolboxDiv * {
+  background-color: transparent;
+  color: #1e293b !important;
+}
+.theme-light .blocklyFlyoutBackground {
+  fill: rgba(255, 255, 255, 0.92) !important;
+}
+.theme-light .blocklyTreeLabel,
+.theme-light .blocklyFlyoutLabelText {
+  color: #334155 !important;
+  fill: #334155 !important;
+  font-weight: 500 !important;
+}
+.theme-light .blocklyTreeRow {
+  padding-left: 8px !important;
+  margin: 2px 0 !important;
+}
+.theme-light .blocklyTreeRow:not(.blocklyTreeSelected):hover,
+.theme-light .blocklyTreeRow:not(.blocklyTreeSelected):hover * {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.theme-light .blocklyTreeSelected,
+.theme-light .blocklyTreeSelected * {
+  background-color: var(--accent-primary-glow) !important;
+  color: var(--accent-primary) !important;
+  font-weight: 700 !important;
+}
+.theme-light .blocklyGridPattern path,
+.theme-light pattern path {
+  stroke: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Home template carousel backgrounds */
+.home-carousel-bg {
+  background: radial-gradient(circle at center, #0d0f18 0%, #040508 100%);
+}
+.theme-light .home-carousel-bg {
+  background: radial-gradient(circle at center, #f8fafc 0%, #e2e8f0 100%) !important;
+}
+
+.home-carousel-title {
+  background: linear-gradient(135deg, #ffffff 30%, #3b82f6 100%);
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+.theme-light .home-carousel-title {
+  background: linear-gradient(135deg, #0f172a 30%, var(--accent-primary) 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Premium Apple-style Glass Cards */
+.theme-light .glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.45)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.03), inset 0 1px 1px rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px !important;
+}
+.theme-light .glass-card:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6)) !important;
+  border-color: rgba(var(--accent-rgb), 0.3) !important;
+  box-shadow: 0 16px 40px rgba(var(--accent-rgb), 0.06), inset 0 1px 1px rgba(255, 255, 255, 1) !important;
+  transform: translateY(-2px);
+}
+
+/* Premium Panel Highlights */
+.theme-light .panel-blockly,
+.theme-light .panel-code,
+.theme-light .panel-simulator,
+.theme-light .panel-explorer,
+.theme-light .panel-terminal {
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.03), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Accent Buttons */
+.theme-light .btn-glow-blue {
+  background: var(--accent-gradient) !important;
+  box-shadow: 0 4px 20px var(--accent-primary-glow), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
+  color: #ffffff !important;
+}
+.theme-light .btn-glow-blue:hover {
+  background: var(--accent-gradient-hover) !important;
+  box-shadow: 0 6px 28px var(--accent-primary-glow), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Run All & Stop Gradients in Light Mode */
+.theme-light .bg-teal-500 {
+  background: linear-gradient(135deg, #0d9488, #0f766e) !important; /* Teal gradient */
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(13, 148, 136, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+.theme-light .bg-teal-500:hover {
+  background: linear-gradient(135deg, #0f766e, #115e59) !important;
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.35) !important;
+  transform: translateY(-0.5px);
+}
+.theme-light .bg-rose-500 {
+  background: linear-gradient(135deg, #e11d48, #be123c) !important; /* Rose gradient */
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(225, 29, 72, 0.1) !important;
+  transition: all 0.2s ease !important;
+}
+.theme-light .bg-rose-500:hover {
+  background: linear-gradient(135deg, #be123c, #9f1239) !important;
+  box-shadow: 0 6px 18px rgba(225, 29, 72, 0.35) !important;
+  transform: translateY(-0.5px);
+}
+
+/* Sidebar active icons */
+.theme-light .nav-icon-active {
+  color: var(--accent-primary) !important;
+  background: rgba(var(--accent-rgb), 0.08) !important;
+  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.15), 0 0 0 1px rgba(var(--accent-rgb), 0.12) !important;
+}
+.theme-light .glass-sidebar button:not(.nav-icon-active) {
+  color: #475569 !important;
+}
+.theme-light .glass-sidebar button:not(.nav-icon-active):hover {
+  color: #0f172a !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ============================================================
+   SIMULATOR LIGHT MODE OVERRIDES
+   ============================================================ */
+.theme-light .panel-simulator button {
+  transition: all 0.2s ease !important;
+}
+.theme-light .panel-simulator button:hover {
+  border-color: var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+}
+.theme-light .panel-simulator .bg-slate-900,
+.theme-light .panel-simulator .bg-slate-900\/40,
+.theme-light .panel-simulator .bg-slate-900\/80 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+.theme-light .panel-simulator .bg-slate-950\/40,
+.theme-light .panel-simulator .bg-slate-950\/60 {
+  background-color: rgba(255, 255, 255, 0.65) !important;
+}
+.theme-light .panel-simulator .bg-\[\#08090d\] {
+  background-color: #f8fafc !important;
+}
+.theme-light .panel-simulator .bg-\[\#0c0d12\] {
+  background-color: #f1f5f9 !important;
+}
+.theme-light .panel-simulator .bg-slate-800,
+.theme-light .panel-simulator .bg-slate-800\/90 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  color: #1e293b !important;
+}
+.theme-light .panel-simulator .border-slate-800,
+.theme-light .panel-simulator .border-slate-850,
+.theme-light .panel-simulator .border-slate-700 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light .panel-simulator .text-slate-100 {
+  color: #0f172a !important;
+}
+.theme-light .panel-simulator .text-slate-200 {
+  color: #1e293b !important;
+}
+.theme-light .panel-simulator .text-slate-300 {
+  color: #334155 !important;
+}
+.theme-light .panel-simulator .text-slate-400 {
+  color: #475569 !important;
+}
+.theme-light .panel-simulator .text-slate-500 {
+  color: #475569 !important;
+}
+.theme-light .panel-simulator .text-slate-600 {
+  color: #334155 !important;
+}
+.theme-light .panel-simulator .bg-slate-800\/90:hover,
+.theme-light .panel-simulator .hover\:bg-slate-700:hover {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+.theme-light .panel-simulator .bg-sky-950\/90 {
+  background-color: rgba(14, 165, 233, 0.08) !important;
+  border-color: rgba(14, 165, 233, 0.2) !important;
+  color: #0369a1 !important;
+}
+.theme-light .panel-simulator .text-sky-300 {
+  color: #0284c7 !important;
+}
+.theme-light .panel-simulator .bg-sky-900 {
+  background-color: var(--accent-primary) !important;
+  color: #ffffff !important;
+}
+.theme-light .panel-simulator .text-emerald-300,
+.theme-light .panel-simulator .text-emerald-400 {
+  color: #059669 !important;
+}
+.theme-light .panel-simulator .text-white {
+  color: #0f172a !important;
+}
+.theme-light .panel-simulator .bg-emerald-500\/5 {
+  background-color: rgba(16, 185, 129, 0.05) !important;
+}
+.theme-light .panel-simulator .bg-amber-500\/5 {
+  background-color: rgba(245, 158, 11, 0.05) !important;
+}
+.theme-light .panel-simulator .bg-sky-500\/5 {
+  background-color: rgba(56, 189, 248, 0.05) !important;
+}
+.theme-light .panel-simulator .bg-indigo-500\/10 {
+  background-color: rgba(99, 102, 241, 0.08) !important;
+}
+.theme-light .panel-simulator .bg-cyan-500\/10 {
+  background-color: rgba(6, 182, 212, 0.08) !important;
+}
+.theme-light .panel-simulator .border-emerald-500\/20,
+.theme-light .panel-simulator .border-emerald-500\/15 {
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+.theme-light .panel-simulator .border-amber-500\/15 {
+  border-color: rgba(245, 158, 11, 0.25) !important;
+}
+.theme-light .panel-simulator .border-sky-500\/15 {
+  border-color: rgba(56, 189, 248, 0.25) !important;
+}
+.theme-light .panel-simulator .border-indigo-500\/20 {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+}
+.theme-light .panel-simulator .border-cyan-500\/20 {
+  border-color: rgba(6, 182, 212, 0.25) !important;
+}
+.theme-light .panel-simulator .text-purple-400 {
+  color: #7c3aed !important;
+}
+.theme-light .panel-simulator .text-cyan-400 {
+  color: #0891b2 !important;
+}
+.theme-light .panel-simulator .border-t-\[\#10b981\] {
+  border-top-color: #10b981 !important;
+}
+.theme-light .panel-simulator .border-t-\[\#f59e0b\] {
+  border-top-color: #f59e0b !important;
+}
+.theme-light .panel-simulator .border-t-\[\#38bdf8\] {
+  border-top-color: #38bdf8 !important;
+}
+
+/* ================================================================
+   TARGETED LIGHT MODE FIXES — Specific UI elements
+   ================================================================ */
+
+/* A. HEADER ACTION BUTTONS (Camera, Status, Actions)
+   bg-slate-900/60 border-slate-800 -> clean glass pill */
+.app-root.theme-light button[class*="bg-slate-900"] {
+  background: rgba(255,255,255,0.72) !important;
+  border-color: rgba(0,0,0,0.10) !important;
+  color: #334155 !important;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9) !important;
+}
+.app-root.theme-light button[class*="bg-slate-900"]:hover {
+  background: rgba(var(--accent-rgb), 0.08) !important;
+  border-color: rgba(var(--accent-rgb), 0.25) !important;
+  color: var(--accent-primary) !important;
+}
+/* Active popover button */
+.app-root.theme-light button[class*="bg-blue-950"] {
+  background: rgba(var(--accent-rgb), 0.10) !important;
+  border-color: rgba(var(--accent-rgb), 0.28) !important;
+  color: var(--accent-primary) !important;
+}
+
+/* B. BOTTOM PANEL TABS (SERIAL MONITOR, TERMINAL SHELL, etc.) */
+.app-root.theme-light .panel-terminal button.text-slate-600 {
+  color: #475569 !important;
+}
+.app-root.theme-light .panel-terminal button.text-slate-600:hover {
+  color: #1e293b !important;
+}
+.app-root.theme-light .panel-terminal button.text-cyan-400 {
+  color: var(--accent-primary) !important;
+  border-bottom-color: var(--accent-primary) !important;
+}
+
+/* C. BLOCKLY TOOLBAR (Run Sim, Reset View, Clear Canvas, Tutup) */
+.app-root.theme-light .panel-blockly div.bg-slate-900 {
+  background: rgba(255,255,255,0.80) !important;
+  border-bottom-color: rgba(0,0,0,0.08) !important;
+}
+/* Run Sim green */
+.app-root.theme-light button[class*="bg-emerald-950"] {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0) !important;
+  color: #065f46 !important;
+  border-color: rgba(5,150,105,0.30) !important;
+  font-weight: 700 !important;
+}
+.app-root.theme-light button[class*="bg-emerald-950"]:hover {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  color: #ffffff !important;
+}
+/* Stop Sim red */
+.app-root.theme-light button[class*="bg-red-950"] {
+  background: linear-gradient(135deg, #fee2e2, #fecaca) !important;
+  color: #991b1b !important;
+  border-color: rgba(239,68,68,0.28) !important;
+  font-weight: 700 !important;
+}
+.app-root.theme-light button[class*="bg-red-950"]:hover {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  color: #ffffff !important;
+}
+/* Reset View */
+.app-root.theme-light button.bg-slate-800 {
+  background: rgba(255,255,255,0.65) !important;
+  color: #334155 !important;
+  border: 1px solid rgba(0,0,0,0.09) !important;
+}
+.app-root.theme-light button.bg-slate-800:hover {
+  background: rgba(var(--accent-rgb), 0.07) !important;
+  color: var(--accent-primary) !important;
+}
+
+/* D. POPOVER DROPDOWNS */
+.app-root.theme-light div[class*="bg-\[#0c0d12\]"] {
+  background: rgba(255,255,255,0.92) !important;
+  border-color: rgba(0,0,0,0.09) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  box-shadow: 0 16px 40px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.07) !important;
+}
+.app-root.theme-light div[class*="bg-\[#0f111a\]"] {
+  background: rgba(var(--accent-rgb), 0.04) !important;
+  border-color: rgba(0,0,0,0.08) !important;
+}
+.app-root.theme-light div[class*="bg-\[#0f111a\]"]:hover {
+  background: rgba(var(--accent-rgb), 0.10) !important;
+  border-color: rgba(var(--accent-rgb), 0.22) !important;
+}
+
+/* E. WORKSPACE VIEW BOTTOM */
+.app-root.theme-light div[class*="bg-black\/25"] {
+  background: rgba(0,0,0,0.025) !important;
+  border-top-color: rgba(0,0,0,0.06) !important;
+}
+
+/* F. SYNC BLOCK / SKY-950 */
+.app-root.theme-light button[class*="bg-sky-950"] {
+  background: rgba(var(--accent-rgb), 0.08) !important;
+  color: var(--accent-primary) !important;
+  border-color: rgba(var(--accent-rgb), 0.22) !important;
+}
+
+/* G. FILE EXPLORER items */
+.app-root.theme-light .panel-explorer div[class*="text-slate-5"],
+.app-root.theme-light .panel-explorer div[class*="text-slate-4"] {
+  color: #475569 !important;
+}
+
+/* H. BUILD PROGRESS BAR */
+.app-root.theme-light div[class*="bg-\[#0b0c10\]"] {
+  background: rgba(255,255,255,0.75) !important;
+  border-bottom-color: rgba(0,0,0,0.07) !important;
+}
+.app-root.theme-light div[class*="bg-\[#0b0c10\]"] span { color: #475569 !important; }
+
+.app-root.theme-light .blocklyTreeRow {
+  border: 1px solid transparent !important;
+}
+
+.app-root.theme-light .blocklyTreeLabel {
+  color: #475569 !important;
+  font-weight: 500 !important;
+}
+
+/* Light mode hover: translate and subtle shadow */
+.app-root.theme-light .blocklyTreeRow:not(.blocklyTreeSelected):hover {
+  background: rgba(255, 255, 255, 0.75) !important;
+  transform: translateX(4px) scale(1.02) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05) !important;
+}
+
+.app-root.theme-light .blocklyTreeRow:not(.blocklyTreeSelected):hover .blocklyTreeLabel {
+  color: #0f172a !important;
+}
+
+/* Light mode Selected Category: Dynamic Accent Color Glow & 3D Lift */
+.app-root.theme-light .blocklyTreeSelected {
+  background: rgba(var(--accent-rgb), 0.12) !important;
+  border-color: rgba(var(--accent-rgb), 0.35) !important;
+  transform: translateX(6px) scale(1.04) !important;
+  box-shadow: 
+    0 6px 18px rgba(var(--accent-rgb), 0.18), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.app-root.theme-light .blocklyTreeSelected .blocklyTreeLabel {
+  color: var(--accent-primary) !important;
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(var(--accent-rgb), 0.15) !important;
+}
+
+/* Make category row icon colors stand out in 3D */
+.blocklyTreeIcon {
+  opacity: 0.85 !important;
+  transform: scale(1.1) !important;
+}
+.blocklyTreeSelected .blocklyTreeIcon {
+  opacity: 1 !important;
+  transform: scale(1.2) !important;
+}
+
+/* ABSOLUTE OVERRIDES FOR BLOCKLY PREMIUM UI */
+html body .app-root .blocklyToolboxDiv,
+html body .app-root.theme-light .blocklyToolboxDiv,
+.blocklyToolboxDiv {
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(25px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(180%) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.03) !important;
+}
+
+html body .app-root:not(.theme-light) .blocklyToolboxDiv {
+  background: rgba(13, 16, 27, 0.65) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Remove ANY weird borders on flyout/toolbox */
+.blocklyFlyoutBackground {
+  fill: transparent !important;
+}
+ /* we don't hide flyout entirely, but wait, flyout is needed for categories */
+/* just hide its harsh background stroke */
+.blocklyFlyoutBackground {
+  stroke: none !important;
+}
+.theme-light .blocklyFlyoutBackground {
+  fill: rgba(248, 250, 252, 0.95) !important;
+}
+.app-root:not(.theme-light) .blocklyFlyoutBackground {
+  fill: rgba(15, 23, 42, 0.95) !important;
+}
+
+/* Fix category rows */
+.blocklyTreeRow {
+  border: none !important;
+}
+
+/* Fix Grid Pattern */
+.blocklyGridPattern path,
+pattern path {
+  stroke: rgba(0, 0, 0, 0.06) !important;
+}
+.app-root:not(.theme-light) .blocklyGridPattern path,
+.app-root:not(.theme-light) pattern path {
+  stroke: rgba(255, 255, 255, 0.04) !important;
+}
+
+
+/* SCRATCH-STYLE TOOLBOX CATEGORIES */
+.blocklyTreeRow {
+  padding: 6px 12px !important;
+  margin: 6px 8px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  transition: all 0.2s ease !important;
+  border: 1px solid transparent !important;
+}
+
+/* Transform the tall rectangular icon into a cute circular bubble */
+.blocklyTreeIcon {
+  border-radius: 50% !important;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  margin-right: 10px !important;
+  display: inline-block !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15), inset 0 1px 2px rgba(255,255,255,0.3) !important;
+  opacity: 0.9 !important;
+  transform: none !important; /* disable previous scale */
+}
+
+/* Hover & Selected States */
+.blocklyTreeRow:hover {
+  background-color: rgba(120, 130, 150, 0.1) !important;
+  transform: translateX(2px) !important;
+}
+.theme-light .blocklyTreeRow:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.blocklyTreeSelected {
+  background-color: rgba(120, 130, 150, 0.15) !important;
+  box-shadow: inset 2px 0 0 var(--accent-primary, #6366f1) !important;
+  border: 1px solid rgba(120, 130, 150, 0.1) !important;
+}
+.theme-light .blocklyTreeSelected {
+  background-color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05), inset 3px 0 0 var(--accent-primary, #6366f1) !important;
+  border: 1px solid rgba(0,0,0,0.04) !important;
+}
+.blocklyTreeSelected .blocklyTreeIcon {
+  opacity: 1 !important;
+  box-shadow: 0 0 8px currentColor, inset 0 1px 2px rgba(255,255,255,0.4) !important;
+}
+
+/* Labels */
+.blocklyTreeLabel {
+  font-family: 'Inter', 'Outfit', sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  color: #e2e8f0 !important;
+}
+.theme-light .blocklyTreeLabel {
+  color: #475569 !important;
+}
+.blocklyTreeSelected .blocklyTreeLabel {
+  color: #ffffff !important;
+}
+.theme-light .blocklyTreeSelected .blocklyTreeLabel {
+  color: #0f172a !important;
+}
+
+/* Hide annoying pink lines or default borders from Blockly */
+.blocklyToolboxDiv {
+  border-right: none !important;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.15) !important;
+}
+.theme-light .blocklyToolboxDiv {
+  border-right: 1px solid rgba(0,0,0,0.04) !important;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.03) !important;
+}
+.blocklyFlyout {
+  border: none !important;
+}
+
+
+
+/* ============================================================
+   BLOCK CODE CATEGORY SIDEBAR — Elegant, Stylish, Modern IDE
+   Preserving original colors, exact category names, order & identity.
+   ============================================================ */
+
+/* Primary Sidebar Panel Container */
+.blocklyToolboxDiv {
+  width: 215px !important;
+  min-width: 215px !important;
+  max-width: 215px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  user-select: none !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease !important;
+}
+
+html body.light .blocklyToolboxDiv,
+.theme-light .blocklyToolboxDiv {
+  background-color: #ffffff !important;
+  border-right: 1px solid #e2e8f0 !important;
+}
+
+html body:not(.light) .blocklyToolboxDiv,
+.theme-dark .blocklyToolboxDiv {
+  background-color: #0f172a !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.blocklyToolboxContents {
+  box-sizing: border-box !important;
+  padding-top: 6px !important;
+  padding-bottom: 32px !important;
+}
+
+/* Obliterate native Blockly vertical color bars & tree icons */
+.blocklyToolboxDiv .blocklyTreeIcon,
+.blocklyToolboxDiv .blocklyTreeIconNone,
+.blocklyToolboxDiv .blocklyToolboxCategoryIcon,
+.blocklyToolboxDiv .blocklyToolboxCategoryColor,
+.blocklyToolboxDiv [class*="TreeIcon"],
+.blocklyToolboxDiv [class*="CategoryIcon"],
+.blocklyToolboxDiv [class*="CategoryColor"] {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-left: none !important;
+  background: none !important;
+  background-color: transparent !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.blocklyToolboxDiv .blocklyTreeRow,
+.blocklyToolboxDiv .blocklyToolboxCategory,
+.blocklyToolboxDiv [role="treeitem"],
+.blocklyToolboxDiv .blocklyTreeLabel,
+.blocklyToolboxDiv .blocklyToolboxCategoryLabel {
+  border-left: none !important;
+  border-left-width: 0 !important;
+}
+
+/* Category Row Layout */
+.blocklyToolboxDiv .blocklyTreeRow,
+.blocklyToolboxDiv .blocklyToolboxCategory,
+.blocklyToolboxDiv [role="treeitem"] {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  padding: 0 10px 0 8px !important;
+  margin: 2px 8px !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease !important;
+  transform: none !important;
+}
+
+/* Hover state */
+html body.light .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected):hover,
+html body.light .blocklyToolboxDiv .blocklyToolboxCategory:not(.blocklyToolboxCategorySelected):hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border-color: transparent !important;
+}
+
+html body:not(.light) .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected):hover,
+html body:not(.light) .blocklyToolboxDiv .blocklyToolboxCategory:not(.blocklyToolboxCategorySelected):hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: transparent !important;
+}
+
+/* Selected Active State */
+.blocklyToolboxDiv .blocklyTreeSelected,
+.blocklyToolboxDiv .blocklyToolboxCategorySelected {
+  background-color: var(--cat-selected-bg, rgba(76, 151, 255, 0.12)) !important;
+  border-color: var(--cat-border, rgba(76, 151, 255, 0.25)) !important;
+}
+
+/* Active Accent Bar */
+.blocklyToolboxDiv .cat-active-bar {
+  display: none;
+}
+
+.blocklyToolboxDiv .blocklyTreeSelected .cat-active-bar,
+.blocklyToolboxDiv .blocklyToolboxCategorySelected .cat-active-bar {
+  display: block !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 6px !important;
+  bottom: 6px !important;
+  width: 3.5px !important;
+  border-radius: 0 4px 4px 0 !important;
+  background-color: var(--cat-color, #4c97ff) !important;
+}
+
+/* Category Label Typography */
+.blocklyToolboxDiv .blocklyTreeRow .blocklyTreeLabel,
+.blocklyToolboxDiv .blocklyToolboxCategory .blocklyToolboxCategoryLabel {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+  padding-left: 0 !important;
+  flex: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  transition: color 0.15s ease, font-weight 0.15s ease !important;
+}
+
+html body.light .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected) .blocklyTreeLabel {
+  color: #334155 !important;
+}
+
+html body.light .blocklyToolboxDiv .blocklyTreeSelected .blocklyTreeLabel {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+html body:not(.light) .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected) .blocklyTreeLabel {
+  color: #cbd5e1 !important;
+}
+
+html body:not(.light) .blocklyToolboxDiv .blocklyTreeSelected .blocklyTreeLabel {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+/* Category Icon Box */
+.codekit-icon-box {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  border-radius: 6px !important;
+  margin-right: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  transition: transform 0.15s ease !important;
+}
+
+.blocklyTreeSelected .codekit-icon-box,
+.blocklyToolboxCategorySelected .codekit-icon-box {
+  transform: scale(1.02) !important;
+}
+
+/* Section Header Labels */
+.cat-section-header {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  padding: 12px 12px 4px 12px !important;
+  user-select: none !important;
+  pointer-events: none !important;
+}
+
+html body.light .cat-section-header {
+  color: #94a3b8 !important;
+}
+
+html body:not(.light) .cat-section-header {
+  color: #64748b !important;
+}
+
+/* Scrollbar polish */
+.blocklyToolboxDiv {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.blocklyToolboxDiv::-webkit-scrollbar {
+  width: 5px;
+}
+.blocklyToolboxDiv::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+.blocklyToolboxDiv::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------
+   TERMINAL-SAFE HEIGHT
+   The terminal panel is an absolutely-positioned overlay pinned to the
+   bottom of the workspace (z-50). Blockly positions its own toolbox/
+   workspace with an internally-computed pixel height, which can go stale
+   after a resize and end up running under the terminal. Pin the toolbox
+   to its container's top/bottom instead of a fixed height so it can
+   never render past the space actually available, and let it scroll
+   internally so every category (including the last one) stays reachable.
+   ------------------------------------------------------------ */
+.panel-blockly,
+.panel-blockly > div {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+.blocklyToolboxDiv {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  height: auto !important;
+  max-height: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.blocklySvg,
+.blocklyWorkspace {
+  max-height: 100% !important;
+}
+
+#workspace-split-container {
+  min-height: 0 !important;
+}

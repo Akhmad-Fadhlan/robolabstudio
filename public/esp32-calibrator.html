@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ESP32 Pin Calibrator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #08090d; color: #fff; font-family: monospace; padding: 8px; }
+  h2 { font-size: 12px; color: #67e8f9; margin-bottom: 6px; }
+  .container { display: flex; gap: 12px; }
+  .board-panel { flex-shrink: 0; }
+  .info-panel { flex: 1; font-size: 11px; }
+  #log { background: #0d1117; border: 1px solid #30363d; padding: 8px; max-height: 500px; overflow-y: auto; font-size: 10px; white-space: pre; color: #67e8f9; }
+  .board-svg-container { position: relative; display: inline-block; width: 170px; height: 345px; border: 1px solid #334155; }
+  .overlay-svg { position: absolute; top: 0; left: 0; width: 170px; height: 345px; cursor: crosshair; }
+  .controls { margin-bottom: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  button { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 10px; cursor: pointer; }
+  button:hover { background: #334155; color: #fff; }
+  #coord-display { background: #0f172a; border: 1px solid #334155; padding: 6px; font-size: 10px; color: #22d3ee; margin-bottom: 6px; border-radius: 4px; }
+  .pin-number { fill: #22d3ee; font-size: 8px; font-family: monospace; }
+</style>
+</head>
+<body>
+<h2>🎯 ESP32 DevKitC V4 — Pin Hole Position Calibrator</h2>
+<p style="font-size:10px; color:#94a3b8; margin-bottom: 8px;">Click on each pin hole in the board image to record its exact screen coordinates.</p>
+
+<div class="controls">
+  <button onclick="clearAll()">Clear All</button>
+  <button onclick="copyCoords()">Copy Coords as Code</button>
+  <button onclick="exportLeft()">Show Left Col</button>
+  <button onclick="exportRight()">Show Right Col</button>
+</div>
+
+<div id="coord-display">Move cursor over board... | Click to mark pin position</div>
+
+<div class="container">
+  <div class="board-panel">
+    <p style="font-size:9px; color:#64748b; margin-bottom: 3px;">Board (170×345px as rendered in simulator):</p>
+    <div class="board-svg-container">
+      <!-- ESP32 board image - same transform as used in Simulator.tsx -->
+      <svg width="170" height="345" viewBox="0 0 170 345" style="position:absolute; top:0; left:0;">
+        <g transform="translate(170, 0) rotate(90)">
+          <image href="/1666364456Esp32_devkitc_v4.svg" x="0" y="0" width="345" height="170" />
+        </g>
+      </svg>
+
+      <!-- Interactive overlay SVG for clicking -->
+      <svg class="overlay-svg" id="overlay" onmousemove="onMove(event)" onclick="onClickPin(event)">
+        <!-- Dots layer -->
+        <g id="dots"></g>
+        <!-- Cursor indicator -->
+        <circle id="cursor" r="3" fill="rgba(255,200,0,0.6)" stroke="#fcd34d" stroke-width="1" cx="-100" cy="-100" style="pointer-events:none;"/>
+        <text id="cursor-label" x="-100" y="-100" fill="#fcd34d" font-size="8" font-family="monospace" style="pointer-events:none;"></text>
+        <!-- Reference lines for the left and right pin columns -->
+        <line id="left-col-line" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255,0,0,0.3)" stroke-width="1" stroke-dasharray="3,3" style="pointer-events:none;"/>
+        <line id="right-col-line" x1="0" y1="0" x2="0" y2="0" stroke="rgba(0,255,0,0.3)" stroke-width="1" stroke-dasharray="3,3" style="pointer-events:none;"/>
+      </svg>
+    </div>
+    <p style="font-size:9px; color:#64748b; margin-top:4px;">Left col = red dots | Right col = green dots</p>
+  </div>
+
+  <div class="info-panel">
+    <div id="log">Click pin holes to record positions...
+
+Pin naming guide:
+Left column (top to bottom): 3V3, EN, VP, VN, D34, D35, D32, D33, D25, D26, D27, D14, D12, D13, GND, D9, D10, D11, 5V
+Right column (top to bottom): GND, D23, D22, TX0, RX0, D21, D19, D18, D5, D17, D16, D4, D0, D2, D15, D8, D7, D6, D3
+
+</div>
+  </div>
+</div>
+
+<script>
+let dots = [];
+let pinCounter = 0;
+let isLeftCol = true;
+
+const leftPinNames = ['3V3','EN','G36','G39','G34','G35','G32','G33','G25','G26','G27','G14','G12','G13','GND','G9','G10','G11','5V'];
+const rightPinNames = ['GND','G23','G22','TX0','RX0','G21','G19','G18','G5','G17','G16','G4','G0','G2','G15','G8','G7','G6','VIN'];
+
+let leftDots = [];
+let rightDots = [];
+
+function getPos(e) {
+  const svg = document.getElementById('overlay');
+  const rect = svg.getBoundingClientRect();
+  return {
+    x: parseFloat((e.clientX - rect.left).toFixed(1)),
+    y: parseFloat((e.clientY - rect.top).toFixed(1))
+  };
+}
+
+function onMove(e) {
+  const pos = getPos(e);
+  document.getElementById('cursor').setAttribute('cx', pos.x);
+  document.getElementById('cursor').setAttribute('cy', pos.y);
+  document.getElementById('cursor-label').setAttribute('x', pos.x + 5);
+  document.getElementById('cursor-label').setAttribute('y', pos.y - 3);
+  document.getElementById('cursor-label').textContent = `${pos.x},${pos.y}`;
+  document.getElementById('coord-display').textContent = `Cursor: x=${pos.x}, y=${pos.y} | Next: ${isLeftCol ? 'LEFT' : 'RIGHT'} col Pin #${(isLeftCol ? leftDots.length : rightDots.length) + 1}`;
+}
+
+function onClickPin(e) {
+  const pos = getPos(e);
+  const colDots = isLeftCol ? leftDots : rightDots;
+  const pinNames = isLeftCol ? leftPinNames : rightPinNames;
+  const pinIdx = colDots.length;
+  const pinName = pinNames[pinIdx] || `P${pinIdx+1}`;
+  const color = isLeftCol ? '#ef4444' : '#22c55e';
+  
+  colDots.push({ x: pos.x, y: pos.y, name: pinName });
+  
+  const dotsG = document.getElementById('dots');
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('cx', pos.x);
+  circle.setAttribute('cy', pos.y);
+  circle.setAttribute('r', '4');
+  circle.setAttribute('fill', color + '66');
+  circle.setAttribute('stroke', color);
+  circle.setAttribute('stroke-width', '1.5');
+  
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  text.setAttribute('x', isLeftCol ? pos.x + 5 : pos.x - 5);
+  text.setAttribute('y', pos.y + 3);
+  text.setAttribute('fill', color);
+  text.setAttribute('font-size', '7');
+  text.setAttribute('font-family', 'monospace');
+  text.setAttribute('text-anchor', isLeftCol ? 'start' : 'end');
+  text.textContent = pinName;
+  
+  g.appendChild(circle);
+  g.appendChild(text);
+  dotsG.appendChild(g);
+  
+  // Log it
+  const log = document.getElementById('log');
+  log.textContent += `${isLeftCol ? 'L' : 'R'} Pin ${pinIdx+1} ${pinName}: x=${pos.x}, y=${pos.y}\n`;
+  log.scrollTop = log.scrollHeight;
+  
+  // Auto-switch to right column after 19 left pins
+  if (isLeftCol && leftDots.length >= 19) {
+    isLeftCol = false;
+    log.textContent += '\n--- Switching to RIGHT column ---\n\n';
+  }
+}
+
+function clearAll() {
+  document.getElementById('dots').innerHTML = '';
+  leftDots = [];
+  rightDots = [];
+  isLeftCol = true;
+  document.getElementById('log').textContent = 'Cleared. Click left column pins first (top to bottom), then right column.\n\n';
+}
+
+function exportLeft() {
+  const lines = leftDots.map((d, i) => `  { id: '${d.name}', name: '${leftPinNames[i] || d.name}', cx: bx + ${d.x}, cy: by + ${d.y}, type: 'mcu' },`);
+  document.getElementById('log').textContent = '// LEFT COLUMN PINS:\n' + lines.join('\n');
+}
+
+function exportRight() {
+  const lines = rightDots.map((d, i) => `  { id: '${d.name}', name: '${rightPinNames[i] || d.name}', cx: bx + ${d.x}, cy: by + ${d.y}, type: 'mcu' },`);
+  document.getElementById('log').textContent = '// RIGHT COLUMN PINS:\n' + lines.join('\n');
+}
+
+function copyCoords() {
+  const leftLines = leftDots.map((d, i) => `      { id: '${leftPinNames[i] || d.name}', name: '${leftPinNames[i] || d.name}', cx: bx + ${d.x}, cy: by + ${d.y}, type: 'mcu' },`);
+  const rightLines = rightDots.map((d, i) => `      { id: '${rightPinNames[i] || d.name}', name: '${rightPinNames[i] || d.name}', cx: bx + ${d.x}, cy: by + ${d.y}, type: 'mcu' },`);
+  const text = '// LEFT COLUMN (top → bottom):\n' + leftLines.join('\n') + '\n\n// RIGHT COLUMN (top → bottom):\n' + rightLines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('coord-display').textContent = '✅ Coordinates copied to clipboard!';
+  });
+}
+</script>
+</body>
+</html>

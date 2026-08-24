@@ -22,15 +22,15 @@ export default function StepCard({
   isLast = false,
 }: StepCardProps) {
   return (
-    <div className="flex items-start md:items-stretch gap-0 flex-1 min-w-0">
+    <div className="flex flex-col md:flex-row items-stretch gap-0 flex-1 min-w-0">
       {/* Card */}
-      <div className="card p-5 flex flex-col gap-3 flex-1 min-w-0">
+      <div className="card p-4 sm:p-5 flex flex-col gap-3 flex-1 min-w-0">
         {/* Number badge */}
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${numberColor} ${numberTextColor}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${numberColor} ${numberTextColor} shadow-sm`}>
             {number}
           </div>
-          <div className={`w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center ${iconColor}`}>
+          <div className={`w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0 ${iconColor} border border-slate-100`}>
             <Icon size={18} />
           </div>
         </div>

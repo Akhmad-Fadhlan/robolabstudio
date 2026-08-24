@@ -33,17 +33,17 @@ export default function Navbar() {
         scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-white'
       } border-b border-slate-100`}
     >
-      <div className="max-w-[1440px] mx-auto px-5 md:px-8 lg:px-16">
-        <div className="flex items-center h-16 gap-6">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 lg:px-16">
+        <div className="flex items-center justify-between h-16 gap-3 sm:gap-6">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 group">
             <img
               src="/assets/robolab-logo.png"
               alt="RoboLab Studio"
-              className="w-9 h-9 object-contain rounded-lg shadow-sm group-hover:scale-105 transition-transform"
+              className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-lg shadow-sm group-hover:scale-105 transition-transform"
             />
             <div>
-              <div className="font-display font-bold text-base leading-tight text-[#0F172A]">
+              <div className="font-display font-bold text-sm sm:text-base leading-tight text-[#0F172A]">
                 <span className="text-[#1557B0]">RoboLab</span> Studio
               </div>
               <div className="text-[10px] text-slate-400 leading-tight hidden sm:block">Build. Simulate. Code. Create.</div>
@@ -51,7 +51,7 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-1 flex-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {navItems.map(item => (
               <Link
                 key={item.label}
@@ -71,7 +71,7 @@ export default function Navbar() {
           </nav>
 
           {/* Right side */}
-          <div className="hidden lg:flex items-center gap-3 ml-auto">
+          <div className="hidden lg:flex items-center gap-3">
             <Link to="/download" className="btn-primary text-sm px-4 py-2">
               <Download size={14} />
               Download Now
@@ -80,7 +80,7 @@ export default function Navbar() {
 
           {/* Mobile hamburger */}
           <button
-            className="lg:hidden ml-auto w-9 h-9 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-all"
+            className="lg:hidden w-9 h-9 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-all"
             onClick={() => setMobileOpen(o => !o)}
             aria-label="Toggle menu"
           >
@@ -91,22 +91,27 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="lg:hidden border-t border-slate-100 bg-white pb-4 shadow-lg">
-          <div className="max-w-[1440px] mx-auto px-5 pt-2">
+        <div className="lg:hidden border-t border-slate-100 bg-white pb-5 shadow-xl animate-fade-in">
+          <div className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-3 space-y-1">
             {navItems.map(item => (
               <Link
                 key={item.label}
                 to={item.to}
-                className={`flex items-center justify-between py-3 text-sm border-b border-slate-50 last:border-0 ${
-                  isActive(item.to) ? 'text-[#1557B0] font-semibold bg-blue-50/50 px-2 rounded-lg' : 'text-slate-700 px-2'
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center justify-between py-2.5 px-3 rounded-xl text-sm transition-colors ${
+                  isActive(item.to) ? 'text-[#1557B0] font-semibold bg-blue-50/80' : 'text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 {item.label}
               </Link>
             ))}
-            <div className="pt-4">
-              <Link to="/download" className="btn-primary text-sm w-full justify-center">
-                <Download size={14} /> Download
+            <div className="pt-3">
+              <Link
+                to="/download"
+                onClick={() => setMobileOpen(false)}
+                className="btn-primary text-sm w-full justify-center py-2.5"
+              >
+                <Download size={14} /> Download Now
               </Link>
             </div>
           </div>
