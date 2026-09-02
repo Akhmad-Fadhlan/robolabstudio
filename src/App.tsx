@@ -60,8 +60,9 @@ const INITIAL_PACKAGES = {
     { name: 'ultralytics', desc: 'YOLOv8 deep learning training and inference library.', version: '8.0.200', installed: false }
   ],
   boards: [
-    { name: 'ESP32 Arduino', desc: 'Espressif ESP32 core for Arduino IDE. Supports all ESP32 variants.', version: '2.0.17', installed: true, url: 'https://dl.espressif.com/dl/package_esp32_index.json' },
+    { name: 'ESP32 Arduino', desc: 'Espressif ESP32 core for Arduino IDE. Supports all ESP32 variants.', version: '2.0.17', installed: true, url: 'https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json' },
     { name: 'Arduino AVR Boards', desc: 'Official Arduino AVR core (Uno, Mega, Nano, Leonardo, etc).', version: '1.8.6', installed: true, url: 'https://downloads.arduino.cc/packages/package_index.json' },
+    { name: 'MegaCore (ATmega128)', desc: 'MCUdude MegaCore for ATmega128, ATmega64, ATmega32, ATmega16.', version: '3.0.0', installed: false, url: 'https://mcudude.github.io/MegaCore/package_MCUdude_MegaCore_index.json' },
     { name: 'STM32 Boards', desc: 'STMicroelectronics STM32 family board support package.', version: '2.7.1', installed: false, url: 'https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json' },
     { name: 'Raspberry Pi Pico', desc: 'RP2040 Arduino core by Earle Philhower.', version: '3.9.3', installed: false, url: 'https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json' },
     { name: 'ESP8266 Arduino', desc: 'Espressif ESP8266 core for Arduino IDE.', version: '3.1.2', installed: false, url: 'https://arduino.esp8266.com/stable/package_esp8266com_index.json' }
@@ -3206,6 +3207,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [showExtensionsModal, setShowExtensionsModal] = useState(false);
   const [libSearchQuery, setLibSearchQuery] = useState('');
   const [installingLib, setInstallingLib] = useState<string | null>(null);
+  const [liveSearchResults, setLiveSearchResults] = useState<Array<{ name: string; author: string; desc: string; cat: string; version: string }>>([]);
+  const [isSearchingLibs, setIsSearchingLibs] = useState(false);
+  const [customGithubUrl, setCustomGithubUrl] = useState('');
+
+  useEffect(() => {
+    if (!libSearchQuery || libSearchQuery.trim().length < 2) {
+      setLiveSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const req = (window as any).__electronRequire || (window as any).require;
+      if (req) {
+        setIsSearchingLibs(true);
+        req('electron').ipcRenderer.invoke('search-arduino-lib', libSearchQuery).then((results: any[]) => {
+          if (Array.isArray(results)) setLiveSearchResults(results);
+          setIsSearchingLibs(false);
+        }).catch(() => setIsSearchingLibs(false));
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [libSearchQuery]);
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -3516,6 +3538,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           const coreNameMap: Record<string, string> = {
             'ESP32 Arduino': 'esp32:esp32',
             'Arduino AVR Boards': 'arduino:avr',
+            'MegaCore (ATmega128)': 'MegaCore:avr',
             'ESP8266 Arduino': 'esp8266:esp8266',
             'STM32 Boards': 'STMicroelectronics:stm32',
             'Raspberry Pi Pico': 'rp2040:rp2040'
@@ -8974,29 +8997,51 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-3">
-              {[
-                { name: 'ESP32 Arduino Core', id: 'esp32:esp32', desc: 'Espressif ESP32, ESP32-S2, ESP32-C3, ESP32-S3 boards', installed: true },
-                { name: 'ESP8266 Arduino Core', id: 'esp8266:esp8266', desc: 'NodeMCU, Wemos D1 Mini, ESP-01 boards', installed: true },
-                { name: 'Arduino AVR Boards', id: 'arduino:avr', desc: 'Arduino Uno, Nano, Mega 2560 boards', installed: true },
-                { name: 'STM32 Boards Core', id: 'STMicroelectronics:stm32', desc: 'STM32F1, STM32F4, BluePill boards', installed: false },
-                { name: 'Raspberry Pi RP2040 Core', id: 'rp2040:rp2040', desc: 'Raspberry Pi Pico, Pico W boards', installed: false }
-              ].map((b) => (
-                <div key={b.id} className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'}`}>
+              {packages.boards.map((b: any) => (
+                <div key={b.name} className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'}`}>
                   <div className="space-y-0.5">
-                    <h4 className={`text-xs font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>{b.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className={`text-xs font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>{b.name}</h4>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 font-mono">v{b.version}</span>
+                    </div>
                     <p className="text-[10px] text-slate-400">{b.desc}</p>
                   </div>
                   {b.installed ? (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 flex-shrink-0">
                       <Check className="w-3 h-3" /> Installed
                     </span>
                   ) : (
                     <button
-                      onClick={handleInstallCores}
-                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition cursor-pointer"
+                      disabled={installingLib === b.name}
+                      onClick={async () => {
+                        setInstallingLib(b.name);
+                        const req = (window as any).__electronRequire || (window as any).require;
+                        if (req) {
+                          try {
+                            const coreIdMap: Record<string, string> = {
+                              'MegaCore (ATmega128)': 'MegaCore:avr',
+                              'ESP32 Arduino': 'esp32:esp32',
+                              'Arduino AVR Boards': 'arduino:avr',
+                              'ESP8266 Arduino': 'esp8266:esp8266',
+                              'STM32 Boards': 'STMicroelectronics:stm32',
+                              'Raspberry Pi Pico': 'rp2040:rp2040'
+                            };
+                            const targetCore = coreIdMap[b.name] || b.name;
+                            const res = await req('electron').ipcRenderer.invoke('install-board-core', { coreName: targetCore, url: b.url });
+                            if (res && res.success) {
+                              setPackages((prev: any) => ({
+                                ...prev,
+                                boards: prev.boards.map((item: any) => item.name === b.name ? { ...item, installed: true } : item)
+                              }));
+                            }
+                          } catch (_) {}
+                        }
+                        setInstallingLib(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition cursor-pointer disabled:opacity-50 flex-shrink-0"
                       style={{ background: 'var(--accent-gradient)' }}
                     >
-                      Install
+                      {installingLib === b.name ? 'Installing...' : 'Install'}
                     </button>
                   )}
                 </div>
@@ -9015,7 +9060,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       {/* 12. LIBRARY MANAGER MODAL */}
       {showLibraryManagerModal && (
         <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
-          <div className="glass-panel rounded-2xl p-6 w-[540px] max-h-[540px] flex flex-col shadow-2xl relative overflow-hidden"
+          <div className="glass-panel rounded-2xl p-6 w-[560px] max-h-[560px] flex flex-col shadow-2xl relative overflow-hidden"
           style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
             <div className="flex justify-between items-center pb-3 border-b flex-shrink-0" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-2">
@@ -9027,12 +9072,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               </button>
             </div>
 
-            <div className="py-3 flex-shrink-0">
+            <div className="py-3 space-y-2 flex-shrink-0">
               <input
                 type="text"
                 value={libSearchQuery}
                 onChange={(e) => setLibSearchQuery(e.target.value)}
-                placeholder="Cari library (contoh: SSD1306, DHT, PubSubClient, Servo)..."
+                placeholder="Cari library resmi dari GitHub Index (contoh: SSD1306, DHT, PubSubClient, Servo)..."
                 className="w-full rounded-xl px-3.5 py-2 text-xs focus:outline-none"
                 style={{
                   background: themeMode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
@@ -9040,48 +9085,106 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)'
                 }}
               />
+
+              {/* GitHub Direct URL Install Box */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customGithubUrl}
+                  onChange={(e) => setCustomGithubUrl(e.target.value)}
+                  placeholder="Atau install langsung dari URL GitHub (e.g. https://github.com/username/repository)..."
+                  className="flex-1 rounded-xl px-3 py-1.5 text-[11px] focus:outline-none font-mono"
+                  style={{
+                    background: themeMode === 'light' ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)',
+                    color: themeMode === 'light' ? '#0f172a' : '#f8fafc',
+                    border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)'
+                  }}
+                />
+                <button
+                  disabled={isInstallingGithub || !customGithubUrl.trim()}
+                  onClick={async () => {
+                    if (!customGithubUrl.trim()) return;
+                    setIsInstallingGithub(true);
+                    const req = (window as any).__electronRequire || (window as any).require;
+                    if (req) {
+                      try {
+                        const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', customGithubUrl.trim());
+                        if (res && res.success) {
+                          setCustomGithubUrl('');
+                        }
+                      } catch (_) {}
+                    }
+                    setIsInstallingGithub(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-[10px] font-bold text-white shadow transition cursor-pointer disabled:opacity-50 flex-shrink-0"
+                  style={{ background: 'var(--accent-gradient)' }}
+                >
+                  {isInstallingGithub ? 'Cloning...' : 'Install via GitHub'}
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto py-2 space-y-2.5">
-              {[
-                { name: 'Adafruit SSD1306', author: 'Adafruit', desc: 'Library pendukung layar OLED 0.96 inch I2C / SPI', cat: 'Display' },
-                { name: 'DHT sensor library', author: 'Adafruit', desc: 'Library sensor suhu & kelembaban DHT11, DHT22', cat: 'Sensors' },
-                { name: 'PS3 Controller Host', author: 'JV Pernis', desc: 'Library Bluetooth Controller PS3 / DualShock 3 untuk ESP32', cat: 'Control' },
-                { name: 'PS4Controller', author: 'Juan Pablo Marquez', desc: 'Library Bluetooth Controller PS4 / DualShock 4 untuk ESP32', cat: 'Control' },
-                { name: 'PubSubClient', author: 'Nick O\'Leary', desc: 'MQTT Client untuk koneksi IoT Broker (HiveMQ, ThingsBoard)', cat: 'IoT' },
-                { name: 'Blynk', author: 'Volodymyr Shymanskyy', desc: 'Library resmi Blynk IoT Cloud untuk ESP8266 & ESP32', cat: 'IoT' },
-                { name: 'LiquidCrystal_I2C', author: 'Frank de Brabander', desc: 'Library modul LCD 16x2 / 20x4 I2C Backpack', cat: 'Display' },
-                { name: 'Servo', author: 'Michael Margolis', desc: 'Library kontrol motor Servo SG90, MG996R', cat: 'Actuators' },
-                { name: 'NewPing', author: 'Tim Eckel', desc: 'Library sensor jarak ultrasonic HC-SR04 ultra cepat', cat: 'Sensors' }
-              ].filter(l => l.name.toLowerCase().includes(libSearchQuery.toLowerCase()) || l.desc.toLowerCase().includes(libSearchQuery.toLowerCase()))
-              .map((lib) => (
-                <div key={lib.name} className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'}`}>
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <h4 className={`text-xs font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>{lib.name}</h4>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono">{lib.cat}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400">{lib.desc} &bull; <span className="text-slate-500">by {lib.author}</span></p>
-                  </div>
-                  <button
-                    disabled={installingLib === lib.name}
-                    onClick={async () => {
-                      setInstallingLib(lib.name);
-                      const req = (window as any).__electronRequire || (window as any).require;
-                      if (req) {
-                        try {
-                          await req('electron').ipcRenderer.invoke('install-arduino-lib', lib.name);
-                        } catch (_) {}
-                      }
-                      setInstallingLib(null);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition cursor-pointer flex-shrink-0 disabled:opacity-50"
-                    style={{ background: 'var(--accent-gradient)' }}
-                  >
-                    {installingLib === lib.name ? 'Installing...' : 'Install'}
-                  </button>
+              {isSearchingLibs && (
+                <div className="text-center py-6 text-xs text-slate-400 animate-pulse">
+                  🔍 Mencari pustaka di GitHub &amp; Arduino Index...
                 </div>
-              ))}
+              )}
+              {((liveSearchResults.length > 0 ? liveSearchResults : [
+                { name: 'Adafruit SSD1306', author: 'Adafruit', desc: 'Library pendukung layar OLED 0.96 inch I2C / SPI', cat: 'Display', version: '2.5.7' },
+                { name: 'DHT sensor library', author: 'Adafruit', desc: 'Library sensor suhu & kelembaban DHT11, DHT22', cat: 'Sensors', version: '1.4.4' },
+                { name: 'PS3 Controller Host', author: 'JV Pernis', desc: 'Library Bluetooth Controller PS3 / DualShock 3 untuk ESP32', cat: 'Control', version: '1.1.0' },
+                { name: 'PS4Controller', author: 'Juan Pablo Marquez', desc: 'Library Bluetooth Controller PS4 / DualShock 4 untuk ESP32', cat: 'Control', version: '1.0.6' },
+                { name: 'PubSubClient', author: 'Nick O\'Leary', desc: 'MQTT Client untuk koneksi IoT Broker (HiveMQ, ThingsBoard)', cat: 'IoT', version: '2.8.0' },
+                { name: 'Blynk', author: 'Volodymyr Shymanskyy', desc: 'Library resmi Blynk IoT Cloud untuk ESP8266 & ESP32', cat: 'IoT', version: '1.3.2' },
+                { name: 'LiquidCrystal_I2C', author: 'Frank de Brabander', desc: 'Library modul LCD 16x2 / 20x4 I2C Backpack', cat: 'Display', version: '1.1.2' },
+                { name: 'Servo', author: 'Michael Margolis', desc: 'Library kontrol motor Servo SG90, MG996R', cat: 'Actuators', version: '1.2.1' },
+                { name: 'NewPing', author: 'Tim Eckel', desc: 'Library sensor jarak ultrasonic HC-SR04 ultra cepat', cat: 'Sensors', version: '1.9.7' }
+              ]).filter(l => !libSearchQuery || liveSearchResults.length > 0 || l.name.toLowerCase().includes(libSearchQuery.toLowerCase()) || l.desc.toLowerCase().includes(libSearchQuery.toLowerCase()))
+              ).map((lib) => {
+                const isLibInstalled = packages.arduino.some((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
+                return (
+                  <div key={lib.name} className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'}`}>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h4 className={`text-xs font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>{lib.name}</h4>
+                        {lib.cat && <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono">{lib.cat}</span>}
+                        {lib.version && <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400 font-mono">v{lib.version}</span>}
+                      </div>
+                      <p className="text-[10px] text-slate-400">{lib.desc} &bull; <span className="text-slate-500">by {lib.author}</span></p>
+                    </div>
+                    {isLibInstalled ? (
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 flex-shrink-0">
+                        <Check className="w-3 h-3" /> Installed
+                      </span>
+                    ) : (
+                      <button
+                        disabled={installingLib === lib.name}
+                        onClick={async () => {
+                          setInstallingLib(lib.name);
+                          const req = (window as any).__electronRequire || (window as any).require;
+                          if (req) {
+                            try {
+                              const res = await req('electron').ipcRenderer.invoke('install-arduino-lib', lib.name);
+                              if (res && res.success) {
+                                setPackages((prev: any) => ({
+                                  ...prev,
+                                  arduino: [...prev.arduino.filter((item: any) => item.name !== lib.name), { name: lib.name, desc: lib.desc, version: lib.version || '1.0.0', installed: true }]
+                                }));
+                              }
+                            } catch (_) {}
+                          }
+                          setInstallingLib(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition cursor-pointer flex-shrink-0 disabled:opacity-50"
+                        style={{ background: 'var(--accent-gradient)' }}
+                      >
+                        {installingLib === lib.name ? 'Installing...' : 'Install'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex justify-end pt-3 border-t flex-shrink-0" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>

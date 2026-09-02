@@ -1889,6 +1889,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             >
               <image 
                 href="./Arduino-Fixed.svg" 
+                xlinkHref="./Arduino-Fixed.svg"
                 x="0" 
                 y="0" 
                 width="340" 
@@ -1906,6 +1907,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               {/* 1. Expansion Board (default microbit image) */}
               <image 
                 href="./microbit.svg" 
+                xlinkHref="./microbit.svg"
                 x="0" 
                 y="0" 
                 width="340" 
@@ -1915,6 +1917,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               {/* 2. Micro:bit Board (elearning image) on top of the default image, plugged into the slot */}
               <image 
                 href="./microbit.simplified.svg" 
+                xlinkHref="./microbit.simplified.svg"
                 x="40" 
                 y="-108" 
                 width="260" 
@@ -1943,6 +1946,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             >
               <image 
                 href="./nodemcu.png" 
+                xlinkHref="./nodemcu.png"
                 x="0" 
                 y="0" 
                 width="180" 
@@ -2000,6 +2004,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <g transform="translate(170, 0) rotate(90)">
                 <image 
                   href="./1666364456Esp32_devkitc_v4.svg" 
+                  xlinkHref="./1666364456Esp32_devkitc_v4.svg"
                   x="0" 
                   y="0" 
                   width="345" 
@@ -2085,7 +2090,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               )}
 
               {/* PNG Image */}
-              <image href="./led.png" x="0" y="0" width="200" height="200" />
+              <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
 
               {/* Pin indicator dots */}
               <circle cx="80" cy="185" r="3.5" fill={isLedWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
@@ -2131,7 +2136,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               filter="url(#shadow3d)"
             >
               {/* Servo PNG Image */}
-              <image href="./servo.png" x="0" y="0" width="200" height="200" />
+              <image href="./servo.png" xlinkHref="./servo.png" x="0" y="0" width="200" height="200" />
 
               {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
               <g transform={`translate(100, 95) rotate(${servoAngle - 90}) translate(-100, -95)`}>
@@ -2188,6 +2193,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               {/* Ultrasonic PNG Image */}
               <image
                 href="./sensorUltrasonicDistance4Pin.png"
+                xlinkHref="./sensorUltrasonicDistance4Pin.png"
                 x="0"
                 y="0"
                 width="200"
@@ -2243,7 +2249,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               filter="url(#shadow3d)"
             >
               {/* Potentiometer PNG Image */}
-              <image href="./potentiometer.png" x="0" y="0" width="200" height="200" />
+              <image href="./potentiometer.png" xlinkHref="./potentiometer.png" x="0" y="0" width="200" height="200" />
 
               {/* Pin indicator dots at bottom */}
               <circle cx="50" cy="150" r="3.5" fill={isPotWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
@@ -2312,7 +2318,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               filter="url(#shadow3d)"
             >
               {/* Push Button PNG Image */}
-              <image href="./pushButton.png" x="0" y="0" width="120" height="120" />
+              <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />
 
               {/* Pin indicator dots */}
               <circle cx="35" cy="95" r="3" fill={isButtonWired ? "#eab308" : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
@@ -2389,7 +2395,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               filter="url(#shadow3d)"
             >
               {/* LCD PNG Image */}
-              <image href="./displayLCD16x2I2C.png" x="0" y="0" width="200" height="200" />
+              <image href="./displayLCD16x2I2C.png" xlinkHref="./displayLCD16x2I2C.png" x="0" y="0" width="200" height="200" />
 
               {/* Dynamic LCD Screen Content Overlay */}
               <rect x="52" y="80" width="96" height="34" rx="2" fill="#0f172a" opacity="0.9" />
@@ -2522,7 +2528,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               filter="url(#shadow3d)"
             >
               {/* DC Motor PNG Image */}
-              <image href="./motorDC.png" x="0" y="0" width="200" height="200" />
+              <image href="./motorDC.png" xlinkHref="./motorDC.png" x="0" y="0" width="200" height="200" />
 
               {/* Spinning Propeller Fan Overlay when Motor is Running */}
               {isRunning && isMotorWired && (

@@ -52,14 +52,6 @@ try {
 
     autoUpdater.on('update-downloaded', (info) => {
       sendUpdateStatus('downloaded', { version: info.version, info });
-      // Restart and install automatically after 2.5 seconds (gives UI time to render status)
-      setTimeout(() => {
-        try {
-          autoUpdater.quitAndInstall(false, true);
-        } catch (err) {
-          console.error('[RoboLab AutoUpdater] quitAndInstall failed:', err);
-        }
-      }, 2500);
     });
 
     autoUpdater.on('error', (err) => {
@@ -855,6 +847,8 @@ ipcMain.handle('arduino-upload', async (event, payload = {}) => {
       fqbn = 'rp2040:rp2040:rp2040';
     } else if (bLower.includes('stm32')) {
       fqbn = 'STMicroelectronics:stm32:Nucleo_64';
+    } else if (bLower.includes('atmega128') || bLower.includes('atmega 128') || bLower.includes('megacore')) {
+      fqbn = 'MegaCore:avr:128';
     } else {
       safeSend(event, 'arduino-log', { text: `Unsupported board: ${board}`, type: 'error' });
       return { success: false, error: 'Unsupported board' };
@@ -1175,6 +1169,8 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
             boardUrl = 'https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json';
           } else if (coreToInstall.includes('stm32')) {
             boardUrl = 'https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json';
+          } else if (coreToInstall.toLowerCase().includes('megacore')) {
+            boardUrl = 'https://mcudude.github.io/MegaCore/package_MCUdude_MegaCore_index.json';
           }
 
           const urlArgs = boardUrl ? ['--additional-urls', boardUrl] : [];
@@ -1436,6 +1432,86 @@ ipcMain.handle('install-arduino-lib', async (event, libName) => {
   }
 });
 
+// IPC Handler: Live search Arduino libraries from official Arduino/GitHub index using arduino-cli lib search --format json
+ipcMain.handle('search-arduino-lib', async (event, searchQuery) => {
+  return new Promise((resolve) => {
+    if (!searchQuery || !searchQuery.trim()) {
+      return resolve([]);
+    }
+    const { execFile } = require('child_process');
+    const cliPath = findArduinoCLI();
+    const localAppDataForConfig = process.env.LOCALAPPDATA || '';
+    const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
+    const args = ['lib', 'search', searchQuery.trim(), '--format', 'json'];
+    if (fs.existsSync(arduino15ConfigPath)) {
+      args.push('--config-file', arduino15ConfigPath);
+    }
+    execFile(cliPath, args, { maxBuffer: 20 * 1024 * 1024, timeout: 30000 }, (error, stdout) => {
+      if (error) {
+        console.warn('[RoboLab] lib search notice:', error.message);
+        return resolve([]);
+      }
+      try {
+        const data = JSON.parse(stdout);
+        const libraries = Array.isArray(data.libraries) ? data.libraries.slice(0, 30).map(lib => ({
+          name: lib.name,
+          author: lib.author || 'Community',
+          desc: lib.sentence || lib.paragraph || 'Arduino Library from GitHub Index',
+          cat: lib.category || 'General',
+          version: lib.latest ? lib.latest.version : (lib.version || 'latest')
+        })) : [];
+        resolve(libraries);
+      } catch (e) {
+        console.warn('[RoboLab] lib search JSON parse warning:', e.message);
+        resolve([]);
+      }
+    });
+  });
+});
+
+// IPC Handler: Install Arduino library directly from GitHub Git URL
+ipcMain.handle('install-lib-from-github', async (event, githubUrl) => {
+  try {
+    const trimmedUrl = (githubUrl || '').trim();
+    if (!trimmedUrl) {
+      safeSend(event, 'arduino-log', { text: 'URL GitHub tidak boleh kosong.', type: 'error' });
+      return { success: false, error: 'Empty URL' };
+    }
+    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library dari GitHub: ${trimmedUrl}...`, type: 'info' });
+    const localAppDataForConfig = process.env.LOCALAPPDATA || '';
+    const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
+    const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
+
+    const success = await runArduinoCLI(['lib', 'install', '--git-url', trimmedUrl, ...configArgs], event, 300000);
+    if (success) {
+      safeSend(event, 'arduino-log', { text: `✅ Pustaka berhasil diinstal dari GitHub!`, type: 'success' });
+      return { success: true };
+    } else {
+      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal dari GitHub. Memencoba cara kloning repositori...`, type: 'error' });
+      const userDocsDir = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
+      if (!fs.existsSync(userDocsDir)) fs.mkdirSync(userDocsDir, { recursive: true });
+      const repoName = path.basename(trimmedUrl, '.git');
+      const targetPath = path.join(userDocsDir, repoName);
+      const { spawn } = require('child_process');
+      return new Promise((res) => {
+        const gitProc = spawn('git', ['clone', trimmedUrl, targetPath]);
+        gitProc.on('close', (code) => {
+          if (code === 0) {
+            safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil dikloning dari GitHub ke Arduino/libraries!`, type: 'success' });
+            res({ success: true });
+          } else {
+            safeSend(event, 'arduino-log', { text: `❌ Gagal kloning repositori GitHub. Pastikan URL valid.`, type: 'error' });
+            res({ success: false, error: 'git clone failed' });
+          }
+        });
+      });
+    }
+  } catch (err) {
+    safeSend(event, 'arduino-log', { text: `Error: ${err.message}`, type: 'error' });
+    return { success: false, error: err.message };
+  }
+});
+
 // IPC Handler: Real Python package installation via pip
 ipcMain.handle('install-python-pkg', async (event, pkgName) => {
   return new Promise((resolve) => {
@@ -1460,6 +1536,13 @@ ipcMain.handle('install-board-core', async (event, { coreName, url }) => {
     const localAppDataForConfig = process.env.LOCALAPPDATA || '';
     const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
     const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
+
+    // If core has custom package index URL (e.g. MegaCore, ESP32, ESP8266, STM32, RP2040)
+    if (url) {
+      safeSend(event, 'arduino-log', { text: `Menambahkan URL index board: ${url}`, type: 'info' });
+      await runArduinoCLI(['config', 'set', 'board_manager.additional_urls', url, ...configArgs], event, 30000).catch(() => {});
+    }
+
     const urlArgs = url ? ['--additional-urls', url] : [];
 
     safeSend(event, 'arduino-log', { text: `Memperbarui index platform core (butuh internet)...`, type: 'info' });
@@ -1988,9 +2071,33 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('install-update-now', () => {
-  if (autoUpdater) {
-    autoUpdater.quitAndInstall();
-  }
+  console.log('[RoboLab AutoUpdater] Installing update now...');
+  try {
+    const { execSync } = require('child_process');
+    if (activeSerialProcess) {
+      try {
+        if (process.platform === 'win32' && activeSerialProcess.pid) {
+          execSync(`taskkill /pid ${activeSerialProcess.pid} /T /F`);
+        } else {
+          activeSerialProcess.kill('SIGKILL');
+        }
+      } catch (_) {}
+      activeSerialProcess = null;
+    }
+  } catch (_) {}
+
+  setImmediate(() => {
+    try {
+      if (autoUpdater) {
+        autoUpdater.quitAndInstall(false, true);
+      } else {
+        app.quit();
+      }
+    } catch (err) {
+      console.error('[RoboLab AutoUpdater] quitAndInstall error:', err);
+      app.quit();
+    }
+  });
 });
 
 app.whenReady().then(() => {

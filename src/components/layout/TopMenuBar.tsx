@@ -366,6 +366,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               <option value="Arduino Uno" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>Arduino Uno</option>
               <option value="Arduino Nano" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>Arduino Nano</option>
               <option value="Arduino Mega" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>Arduino Mega</option>
+              <option value="ATmega128 (MegaCore)" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>ATmega128 (MegaCore)</option>
               <option value="Raspberry Pi Pico" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>Raspberry Pi Pico</option>
               <option value="STM32 Boards" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>STM32 Boards</option>
               <option value="BBC micro:bit" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>BBC micro:bit</option>
