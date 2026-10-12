@@ -126,11 +126,11 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[1];
 
   return (
-    <div className={`flex flex-col select-none flex-shrink-0 relative z-30 border-b ${
+    <div className={`flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
       isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
-      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-hidden flex-shrink-0">
+      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-visible flex-shrink-0">
         
         {/* Left: Branding + Main Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink">
@@ -233,8 +233,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               </button>
 
               {showMoreMenu && (
-                <div className={`absolute top-full left-0 mt-1 w-48 rounded-xl shadow-2xl border py-1 z-50 text-xs ${
-                  isDark ? 'bg-[#0f1118] border-white/10 text-slate-200' : 'bg-white border-slate-200 text-slate-800'
+                <div className={`absolute top-full left-0 mt-1.5 w-52 rounded-xl shadow-2xl border py-1.5 z-[300] text-xs ${
+                  isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/80' : 'bg-white border-slate-200 text-slate-800 shadow-slate-300/80'
                 }`}>
                   <button
                     onClick={() => { setShowMoreMenu(false); onOpenBoardManager?.(); }}
@@ -458,8 +458,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             </button>
 
             {showLangMenu && (
-              <div className={`absolute top-full right-0 mt-1 w-52 rounded-xl shadow-2xl border py-1.5 z-50 text-xs ${
-                isDark ? 'bg-[#0f1118] border-white/10 text-slate-200' : 'bg-white border-slate-200 text-slate-800'
+              <div className={`absolute top-full right-0 mt-1.5 w-52 rounded-xl shadow-2xl border py-1.5 z-[300] text-xs ${
+                isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/80' : 'bg-white border-slate-200 text-slate-800 shadow-slate-300/80'
               }`}>
                 {/* Dropdown header */}
                 <div className={`px-3 pb-1.5 mb-1 border-b text-[10px] font-bold uppercase tracking-widest ${

@@ -1,0 +1,79 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1200 800] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1050 >>
+stream
+1 1 1 rg
+0 0 1200 800 re f
+0.91 0.94 0.97 RG 1 w
+0 66 m 1200 66 l S
+0 132 m 1200 132 l S
+0 198 m 1200 198 l S
+0 264 m 1200 264 l S
+0 330 m 1200 330 l S
+0 396 m 1200 396 l S
+0 462 m 1200 462 l S
+0 528 m 1200 528 l S
+0 594 m 1200 594 l S
+0 660 m 1200 660 l S
+0 726 m 1200 726 l S
+66 0 m 66 800 l S
+132 0 m 132 800 l S
+198 0 m 198 800 l S
+264 0 m 264 800 l S
+330 0 m 330 800 l S
+396 0 m 396 800 l S
+462 0 m 462 800 l S
+528 0 m 528 800 l S
+594 0 m 594 800 l S
+660 0 m 660 800 l S
+726 0 m 726 800 l S
+792 0 m 792 800 l S
+858 0 m 858 800 l S
+924 0 m 924 800 l S
+990 0 m 990 800 l S
+1056 0 m 1056 800 l S
+1122 0 m 1122 800 l S
+0.85 0.80 0.98 rg
+160 110 90 90 re f
+0.72 0.95 0.85 rg
+940 580 90 90 re f
+0.05 0.05 0.08 RG 18 w 1 J 1 j
+205 155 m
+205 620 l
+580 620 l
+580 390 l
+985 390 l
+985 625 l
+S
+140 420 m 270 420 l S
+510 500 m 650 500 l S
+BT /F1 18 Tf 0.35 0.25 0.65 rg 175 85 Td (START) Tj ET
+BT /F1 18 Tf 0.06 0.55 0.38 rg 955 680 Td (FINISH) Tj ET
+BT /F1 20 Tf 0.15 0.20 0.30 rg 40 755 Td (ROBOLAB STUDIO - TRACK 1: BASIC LINE FOLLOWER & CHECKPOINT) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000242 00000 n 
+0000001344 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1419
+%%EOF

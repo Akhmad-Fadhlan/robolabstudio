@@ -2,12 +2,248 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
 import { Play, Square, RotateCcw, Trash2, Blocks } from 'lucide-react';
+import {
+  type RobotHardwareConfig,
+  type RobotPlan,
+  type RobotPlanItem,
+  type ActiveExecutionHighlight,
+  type SensorCount,
+  type PlanActionType,
+  type PlanTriggerMode,
+  type PlanLogicOp,
+  type PlanDurationUnit,
+  type PlanLineColor,
+  type StopHereStage,
+  createDefaultRobotHardwareConfig,
+  normalizeSensorPattern,
+  getDefaultSensorPattern,
+  getBoardPinOptions,
+  generateRobotPlanArduinoCode,
+  generateRobotPlanPythonCode,
+} from '../types/robotSimulator';
+
+// Live hardware config reference used by dynamic Blockly dropdowns & pattern validators
+let activeRobotHwConfig: RobotHardwareConfig = createDefaultRobotHardwareConfig();
+
+const registerRobotPlanBlocks = () => {
+  const getDurationUnitOptions = (): [string, string][] => {
+    if (activeRobotHwConfig.hasEncoder) {
+      return [
+        ['⏱️ ms', 'ms'],
+        ['⚙️ Encoder L', 'enc_l'],
+        ['⚙️ Encoder R', 'enc_r'],
+      ];
+    }
+    return [['⏱️ ms', 'ms']];
+  };
+
+  // 1. Block Setup Hardware & Pin Robot (PWM, Multiplexer 4067/4051, Encoder, RPM)
+  Blockly.Blocks['robot_hw_setup'] = {
+    init: function (this: Blockly.Block) {
+      const pins = getBoardPinOptions(activeRobotHwConfig.mcu);
+      const pwmOpts: [string, string][] = pins.pwmPins.map((p) => [p, p]);
+      const adcOpts: [string, string][] = pins.analogPins.map((p) => [p, p]);
+      const intOpts: [string, string][] = pins.interruptPins.map((p) => [p, p]);
+
+      this.appendDummyInput()
+        .appendField('⚙️ Setup Robot │ Motor PWM L')
+        .appendField(new Blockly.FieldDropdown(pwmOpts), 'PWM_L')
+        .appendField('PWM R')
+        .appendField(new Blockly.FieldDropdown(pwmOpts), 'PWM_R')
+        .appendField('│ RPM Motor')
+        .appendField(new Blockly.FieldNumber(activeRobotHwConfig.motorRpm, 50, 3000, 10), 'MOTOR_RPM');
+      this.appendDummyInput()
+        .appendField('🔍 Sensor')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['2 Sensor', '2'],
+            ['4 Sensor', '4'],
+            ['5 Sensor', '5'],
+            ['6 Sensor', '6'],
+            ['8 Sensor', '8'],
+            ['12 Sensor', '12'],
+          ]),
+          'SENSOR_COUNT'
+        )
+        .appendField('Mode')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['Multiplexer 4067 (16-Ch)', 'mux_4067'],
+            ['Multiplexer 4051 (8-Ch)', 'mux_4051'],
+            ['Direct Pin', 'direct'],
+          ]),
+          'SENSOR_MODE'
+        )
+        .appendField('Mux SIG')
+        .appendField(new Blockly.FieldDropdown(adcOpts), 'MUX_SIG')
+        .appendField('│ Encoder')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['✅ Aktif (ms/Enc L/Enc R)', 'YES'],
+            ['❌ Tidak Ada (Hanya ms)', 'NO'],
+          ]),
+          'HAS_ENCODER'
+        )
+        .appendField('Pin Enc L/R')
+        .appendField(new Blockly.FieldDropdown(intOpts), 'ENC_L')
+        .appendField(new Blockly.FieldDropdown(intOpts), 'ENC_R');
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#0ea5e9');
+      this.setTooltip(
+        'Otomatis mengatur pin PWM motor, sensor multiplexer, interrupt encoder, dan RPM motor ke kode .ino & .py'
+      );
+    },
+  };
+
+  // 2. Block Container: Buat Plan 1 s/d 10
+  Blockly.Blocks['robot_plan_container'] = {
+    init: function (this: Blockly.Block) {
+      const planOpts: [string, string][] = Array.from({ length: 10 }, (_, i) => [
+        `Plan ${i + 1}`,
+        String(i + 1),
+      ]);
+      this.appendDummyInput()
+        .appendField('📋 Buat')
+        .appendField(new Blockly.FieldDropdown(planOpts), 'PLAN_ID')
+        .appendField('— Susun Urutan Index Step Robot');
+      this.appendStatementInput('STEPS').setCheck(null).appendField('Langkah');
+      this.setColour('#f97316');
+      this.setTooltip('Wadah Plan 1 sampai 10 berisi urutan Index Step robot dan Stop Disini');
+    },
+  };
+
+  // 3. Block: Jalankan Plan 1 s/d 10
+  Blockly.Blocks['robot_run_plan'] = {
+    init: function (this: Blockly.Block) {
+      const planOpts: [string, string][] = Array.from({ length: 10 }, (_, i) => [
+        `Plan ${i + 1}`,
+        String(i + 1),
+      ]);
+      this.appendDummyInput()
+        .appendField('🚀 Jalankan')
+        .appendField(new Blockly.FieldDropdown(planOpts), 'PLAN_ID');
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#10b981');
+      this.setTooltip('Menjalankan Plan 1 s/d 10 yang sudah disusun');
+    },
+  };
+
+  // 4. Block: Step Index (Rumus Lengkap: Index, Aksi, Jika Motion/Poin Sensor 00xx00 Op, Break, Speed L/R, ms/Enc, PID 1-5, Lanjut Speed A, Timer, Garis)
+  Blockly.Blocks['robot_plan_step'] = {
+    init: function (this: Blockly.Block) {
+      const defaultPat = getDefaultSensorPattern(activeRobotHwConfig.sensorCount);
+      const patternField = new Blockly.FieldTextInput(defaultPat, (newVal: string) => {
+        return normalizeSensorPattern(newVal, activeRobotHwConfig.sensorCount);
+      });
+
+      this.appendDummyInput()
+        .appendField('🔢 Index')
+        .appendField(new Blockly.FieldNumber(0, 0, 99, 1), 'INDEX')
+        .appendField('│ Aksi')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['⬆️ Maju', 'MAJU'],
+            ['⬇️ Mundur', 'MUNDUR'],
+            ['↩️ Left (Kiri)', 'LEFT'],
+            ['↪️ Right (Kanan)', 'RIGHT'],
+            ['⏸️ Pause', 'PAUSE'],
+          ]),
+          'ACTION'
+        )
+        .appendField('│ Jika')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['🎯 Poin Sensor', 'SENSOR'],
+            ['⚡ Motion (Tanpa Sensor)', 'MOTION'],
+          ]),
+          'TRIG_MODE'
+        )
+        .appendField(patternField, 'PATTERN')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['EQUAL', 'EQUAL'],
+            ['AND', 'AND'],
+            ['OR', 'OR'],
+            ['XOR', 'XOR'],
+          ]),
+          'LOGIC_OP'
+        )
+        .appendField('│ Break')
+        .appendField(new Blockly.FieldNumber(0, 0, 1000, 5), 'BRAKE');
+
+      this.appendDummyInput()
+        .appendField('   ⚙️ Speed L')
+        .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_L')
+        .appendField('Speed R')
+        .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_R')
+        .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
+        .appendField('│ Kontrol')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['PID 1 (Halus)', '1'],
+            ['PID 2 (Standar)', '2'],
+            ['PID 3 (Tikungan)', '3'],
+            ['PID 4 (Cepat)', '4'],
+            ['PID 5 (Presisi)', '5'],
+            ['Tanpa PID', '0'],
+          ]),
+          'PID_ID'
+        )
+        .appendField('│ ➡️ Lanjut Speed A')
+        .appendField(new Blockly.FieldNumber(120, -255, 255, 5), 'SPEED_A')
+        .appendField('Timer')
+        .appendField(new Blockly.FieldNumber(120, 0, 10000, 10), 'TIMER_VAL')
+        .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TIMER_UNIT')
+        .appendField('│ Garis')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['⬛ Hitam', 'HITAM'],
+            ['⬜ Putih', 'PUTIH'],
+          ]),
+          'LINE_COLOR'
+        );
+
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#3b82f6');
+      this.setTooltip(
+        "Step Index Robot: Poin sensor hanya menggunakan '0' (membaca sensor) dan 'x' (tidak membaca sensor)"
+      );
+    },
+  };
+
+  // 5. Block: Stop Disini (Interrupt pada Tahap Action / Speed A)
+  Blockly.Blocks['robot_plan_stop'] = {
+    init: function (this: Blockly.Block) {
+      this.appendDummyInput()
+        .appendField('🛑 Stop Disini (Interrupt Robot) │ Berhenti pada Tahap:')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['Tahap Action (Sebelum Speed A)', 'ACTION'],
+            ['Tahap Speed A (Setelah Timer Speed A)', 'SPEED_A'],
+          ]),
+          'STOP_STAGE'
+        );
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour('#ef4444');
+      this.setTooltip(
+        'Menginterupsi dan menghentikan robot tepat pada Index di atasnya (pada Tahap Action atau Tahap Speed A)'
+      );
+    },
+  };
+};
+
+registerRobotPlanBlocks();
 
 const PLUS_ELSEIF_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='65' height='20' viewBox='0 0 65 20'><rect x='0' y='0' width='65' height='20' rx='10' fill='%2322c55e'/><path d='M7 10h6M10 7v6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='18' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>+ else if</text></svg>";
 
 const PLUS_ELSE_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='55' height='20' viewBox='0 0 55 20'><rect x='0' y='0' width='55' height='20' rx='10' fill='%233b82f6'/><path d='M7 10h6M10 7v6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='18' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>+ else</text></svg>";
 
 const MINUS_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='55' height='20' viewBox='0 0 55 20'><rect x='0' y='0' width='55' height='20' rx='10' fill='%23ef4444'/><path d='M7 10h6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='17' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>hapus</text></svg>";
+
 
 // Custom controls_if block with direct + else if, + else, and hapus buttons
 Blockly.Blocks['controls_if'] = {
@@ -1430,6 +1666,13 @@ interface BlocklyEditorProps {
   themeMode?: 'dark' | 'light';
   onMicrobitPreview?: (frames: string[]) => void;
   compact?: boolean;
+  robotHardwareConfig?: RobotHardwareConfig;
+  activeRobotHighlight?: ActiveExecutionHighlight;
+  onRobotPlansExtracted?: (
+    plans: RobotPlan[],
+    activePlanId: number,
+    hwPatch?: Partial<RobotHardwareConfig>
+  ) => void;
 }
 
 const getBlockTypesForLibrary = (libName: string): string[] => {
@@ -1519,6 +1762,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   themeMode = 'dark',
   onMicrobitPreview,
   compact = false,
+  robotHardwareConfig,
+  activeRobotHighlight,
+  onRobotPlansExtracted,
 }) => {
   const onWorkspaceChangeRef = useRef(onWorkspaceChange);
   onWorkspaceChangeRef.current = onWorkspaceChange;
@@ -1528,6 +1774,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   const onMicrobitPreviewRef = useRef(onMicrobitPreview);
   onMicrobitPreviewRef.current = onMicrobitPreview;
+
+  const onRobotPlansExtractedRef = useRef(onRobotPlansExtracted);
+  onRobotPlansExtractedRef.current = onRobotPlansExtracted;
+
+  const robotHwRef = useRef<RobotHardwareConfig>(
+    robotHardwareConfig || createDefaultRobotHardwareConfig()
+  );
+  if (robotHardwareConfig) {
+    robotHwRef.current = robotHardwareConfig;
+    activeRobotHwConfig = robotHardwareConfig;
+  }
 
   const isSyncWithBlocksRef = useRef(isSyncWithBlocks);
   isSyncWithBlocksRef.current = isSyncWithBlocks;
@@ -1547,7 +1804,119 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   const [searchQuery, setSearchQuery] = React.useState("");
 
+  // Inject CSS for Live Glowing Block Animation when Robot Simulator runs
+  useEffect(() => {
+    if (!document.getElementById('robolab-running-block-glow-css')) {
+      const style = document.createElement('style');
+      style.id = 'robolab-running-block-glow-css';
+      style.textContent = `
+        @keyframes robolabBlockPulseGlow {
+          0%, 100% {
+            filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.95)) drop-shadow(0 0 22px rgba(56, 189, 248, 0.85)) brightness(1.18);
+          }
+          50% {
+            filter: drop-shadow(0 0 18px rgba(250, 204, 21, 1)) drop-shadow(0 0 32px rgba(34, 197, 94, 0.95)) brightness(1.32);
+          }
+        }
+        @keyframes robolabBlockStopGlow {
+          0%, 100% {
+            filter: drop-shadow(0 0 12px rgba(239, 68, 68, 1)) drop-shadow(0 0 26px rgba(249, 115, 22, 0.9)) brightness(1.22);
+          }
+          50% {
+            filter: drop-shadow(0 0 20px rgba(244, 63, 94, 1)) drop-shadow(0 0 34px rgba(239, 68, 68, 1)) brightness(1.38);
+          }
+        }
+        .robolab-block-running-active > .blocklyPath {
+          stroke: #fde047 !important;
+          stroke-width: 4px !important;
+        }
+        .robolab-block-running-active {
+          animation: robolabBlockPulseGlow 0.85s ease-in-out infinite !important;
+        }
+        .robolab-block-stopped-active > .blocklyPath {
+          stroke: #f87171 !important;
+          stroke-width: 4px !important;
+        }
+        .robolab-block-stopped-active {
+          animation: robolabBlockStopGlow 0.75s ease-in-out infinite !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
+  // Apply / update live glowing highlight on the currently executing Robot Plan Step block
+  useEffect(() => {
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    const allBlocks = ws.getAllBlocks(false);
+    allBlocks.forEach((b) => {
+      const svg = b.getSvgRoot();
+      if (svg) {
+        svg.classList.remove('robolab-block-running-active', 'robolab-block-stopped-active');
+      }
+    });
+
+    if (!activeRobotHighlight || !activeRobotHighlight.running) return;
+
+    let targetBlock: Blockly.Block | null = null;
+    if (activeRobotHighlight.blockId) {
+      targetBlock = ws.getBlockById(activeRobotHighlight.blockId);
+    }
+    if (!targetBlock && activeRobotHighlight.stepIndex !== null) {
+      targetBlock =
+        allBlocks.find(
+          (b) =>
+            b.type === 'robot_plan_step' &&
+            Number(b.getFieldValue('INDEX')) === activeRobotHighlight.stepIndex
+        ) || null;
+    }
+
+    if (targetBlock) {
+      const svg = targetBlock.getSvgRoot();
+      if (svg) {
+        svg.classList.add(
+          activeRobotHighlight.stoppedByInterrupt
+            ? 'robolab-block-stopped-active'
+            : 'robolab-block-running-active'
+        );
+      }
+    }
+  }, [activeRobotHighlight]);
+
+  // Normalize sensor pattern length on existing robot_plan_step blocks when sensorCount changes
+  useEffect(() => {
+    if (!robotHardwareConfig) return;
+    activeRobotHwConfig = robotHardwareConfig;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    const stepBlocks = ws.getBlocksByType('robot_plan_step', false);
+    stepBlocks.forEach((b) => {
+      const curPat = b.getFieldValue('PATTERN') || '';
+      const norm = normalizeSensorPattern(curPat, robotHardwareConfig.sensorCount);
+      if (curPat !== norm) {
+        b.setFieldValue(norm, 'PATTERN');
+      }
+      if (!robotHardwareConfig.hasEncoder) {
+        if (b.getFieldValue('TRIG_UNIT') !== 'ms') b.setFieldValue('ms', 'TRIG_UNIT');
+        if (b.getFieldValue('TIMER_UNIT') !== 'ms') b.setFieldValue('ms', 'TIMER_UNIT');
+      }
+    });
+    if (isSyncWithBlocksRef.current && updateCodeRef.current) {
+      updateCodeRef.current();
+    }
+  }, [
+    robotHardwareConfig?.sensorCount,
+    robotHardwareConfig?.hasEncoder,
+    robotHardwareConfig?.motorRpm,
+    robotHardwareConfig?.mcu,
+    robotHardwareConfig?.sensorMode,
+    JSON.stringify(robotHardwareConfig?.pids),
+    JSON.stringify(robotHardwareConfig?.pins),
+  ]);
+
   const CAT_ICON_CONFIG: Record<string, { color: string; rgb: string; section: string; svg: string }> = {
+    'cat-robot-plan': { color: '#f97316', rgb: '249, 115, 22', section: 'ROBOTICS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><rect x="4" y="8" width="16" height="12" rx="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>` },
     'cat-logic':      { color: '#4c97ff', rgb: '76, 151, 255', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>` },
     'cat-loop':       { color: '#ffab19', rgb: '255, 171, 25', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>` },
     'cat-math':       { color: '#40bf4a', rgb: '64, 191, 74', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>` },
@@ -1586,6 +1955,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   const getCatKey = (lowerText: string): string => {
     const t = lowerText.toLowerCase().trim();
+    if (t.includes('robot plan') || t.includes('plan')) return 'cat-robot-plan';
     if (t.includes('logic')) return 'cat-logic';
     if (t.includes('loop')) return 'cat-loop';
     if (t.includes('math')) return 'cat-math';
@@ -1943,6 +2313,132 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const generateCodeForLang = useCallback((lang: 'arduino' | 'python', boardType?: string): string => {
     if (!workspaceRef.current) return '';
     const workspace = workspaceRef.current;
+    const allBlocks = workspace.getAllBlocks(false);
+    const hasRobotPlanBlocks = allBlocks.some((b: any) =>
+      b.type === 'robot_plan_container' ||
+      b.type === 'robot_plan_step' ||
+      b.type === 'robot_plan_stop' ||
+      b.type === 'robot_hw_setup' ||
+      b.type === 'robot_run_plan'
+    );
+
+    if (hasRobotPlanBlocks) {
+      let hw: RobotHardwareConfig = {
+        ...activeRobotHwConfig,
+        pins: { ...activeRobotHwConfig.pins },
+      };
+
+      const hwBlock = workspace.getBlocksByType('robot_hw_setup')[0];
+      let hwPatch: Partial<RobotHardwareConfig> | undefined;
+      if (hwBlock) {
+        const pwmL = hwBlock.getFieldValue('PWM_L') || hw.pins.pwmL;
+        const pwmR = hwBlock.getFieldValue('PWM_R') || hw.pins.pwmR;
+        const sensorCount = (Number(hwBlock.getFieldValue('SENSOR_COUNT') || hw.sensorCount) as SensorCount);
+        const sensorMode = (hwBlock.getFieldValue('SENSOR_MODE') || hw.sensorMode) as 'direct' | 'mux_4051' | 'mux_4067';
+        const muxSig = hwBlock.getFieldValue('MUX_SIG') || hw.pins.muxSig;
+        const hasEncoder = (hwBlock.getFieldValue('HAS_ENCODER') || (hw.hasEncoder ? 'YES' : 'NO')) === 'YES';
+        const encLA = hwBlock.getFieldValue('ENC_L') || hw.pins.encLA;
+        const encRA = hwBlock.getFieldValue('ENC_R') || hw.pins.encRA;
+        const motorRpm = Number(hwBlock.getFieldValue('MOTOR_RPM') || hw.motorRpm);
+
+        hw = {
+          ...hw,
+          sensorCount,
+          sensorMode,
+          hasEncoder,
+          motorRpm,
+          pins: {
+            ...hw.pins,
+            pwmL,
+            pwmR,
+            muxSig,
+            encLA,
+            encRA,
+          },
+        };
+        hwPatch = { sensorCount, sensorMode, hasEncoder, motorRpm, pins: hw.pins };
+      }
+
+      const readChainItems = (startBlock: any): RobotPlanItem[] => {
+        const items: RobotPlanItem[] = [];
+        let cur = startBlock;
+        let autoIndex = 0;
+        while (cur) {
+          if (cur.type === 'robot_plan_step') {
+            const rawIdx = Number(cur.getFieldValue('INDEX'));
+            const idxVal = Number.isFinite(rawIdx) ? rawIdx : autoIndex;
+            items.push({
+              type: 'step',
+              blockId: cur.id,
+              index: idxVal,
+              action: (cur.getFieldValue('ACTION') || 'MAJU') as PlanActionType,
+              triggerMode: (cur.getFieldValue('TRIG_MODE') || 'SENSOR') as PlanTriggerMode,
+              sensorPattern: normalizeSensorPattern(cur.getFieldValue('PATTERN') || '', hw.sensorCount),
+              logicOp: (cur.getFieldValue('LOGIC_OP') || 'OR') as PlanLogicOp,
+              brake: Number(cur.getFieldValue('BRAKE') ?? 0),
+              speedL: Number(cur.getFieldValue('SPEED_L') ?? 160),
+              speedR: Number(cur.getFieldValue('SPEED_R') ?? 160),
+              triggerUnit: (cur.getFieldValue('TRIG_UNIT') || 'ms') as PlanDurationUnit,
+              pidId: (Number(cur.getFieldValue('PID_ID') ?? 2) as 0 | 1 | 2 | 3 | 4 | 5),
+              speedA: Number(cur.getFieldValue('SPEED_A') ?? 120),
+              timerValue: Number(cur.getFieldValue('TIMER_VAL') ?? 120),
+              timerUnit: (cur.getFieldValue('TIMER_UNIT') || 'ms') as PlanDurationUnit,
+              lineColor: (cur.getFieldValue('LINE_COLOR') || 'HITAM') as PlanLineColor,
+            });
+            autoIndex = idxVal + 1;
+          } else if (cur.type === 'robot_plan_stop') {
+            items.push({
+              type: 'stop_here',
+              blockId: cur.id,
+              stage: (cur.getFieldValue('STOP_STAGE') || 'SPEED_A') as StopHereStage,
+            });
+          }
+          cur = cur.getNextBlock();
+        }
+        return items;
+      };
+
+      const containerBlocks = workspace.getBlocksByType('robot_plan_container');
+      const extractedPlans: RobotPlan[] = [];
+
+      if (containerBlocks.length > 0) {
+        containerBlocks.forEach((cb: any) => {
+          const planId = Math.max(1, Math.min(10, Number(cb.getFieldValue('PLAN_ID') || 1)));
+          const firstStep = cb.getInputTargetBlock('STEPS');
+          const items = readChainItems(firstStep);
+          extractedPlans.push({
+            planId,
+            blockId: cb.id,
+            items,
+          });
+        });
+      } else {
+        // Fallback if user placed top-level robot_plan_step blocks without container
+        const topStepBlocks = workspace
+          .getTopBlocks(true)
+          .filter((b: any) => b.type === 'robot_plan_step' || b.type === 'robot_plan_stop');
+        if (topStepBlocks.length > 0) {
+          extractedPlans.push({
+            planId: 1,
+            items: readChainItems(topStepBlocks[0]),
+          });
+        }
+      }
+
+      const runPlanBlock = workspace.getBlocksByType('robot_run_plan')[0];
+      const activePlanId = runPlanBlock
+        ? Number(runPlanBlock.getFieldValue('PLAN_ID') || 1)
+        : extractedPlans[0]?.planId || 1;
+
+      if (lang === 'arduino' && extractedPlans.length > 0) {
+        onRobotPlansExtractedRef.current?.(extractedPlans, activePlanId, hwPatch);
+      }
+
+      return lang === 'arduino'
+        ? generateRobotPlanArduinoCode(hw, extractedPlans, activePlanId)
+        : generateRobotPlanPythonCode(hw, extractedPlans, activePlanId);
+    }
+
     const topBlocks = workspace.getTopBlocks(false);
     const activeBoard = boardType ?? board;
     let generatedCode = '';
@@ -2611,6 +3107,52 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     }
     let xml = `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+      <category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
+        <block type="robot_hw_setup"></block>
+        <block type="robot_plan_container">
+          <field name="PLAN_ID">1</field>
+          <statement name="STEPS">
+            <block type="robot_plan_step">
+              <field name="INDEX">0</field>
+              <field name="ACTION">MAJU</field>
+              <field name="TRIG_MODE">SENSOR</field>
+              <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
+              <field name="LOGIC_OP">OR</field>
+              <field name="BRAKE">0</field>
+              <field name="SPEED_L">160</field>
+              <field name="SPEED_R">160</field>
+              <field name="TRIG_UNIT">ms</field>
+              <field name="PID_ID">2</field>
+              <field name="SPEED_A">140</field>
+              <field name="TIMER_VAL">250</field>
+              <field name="TIMER_UNIT">ms</field>
+              <field name="LINE_COLOR">HITAM</field>
+            </block>
+          </statement>
+        </block>
+        <block type="robot_plan_step">
+          <field name="INDEX">0</field>
+          <field name="ACTION">MAJU</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
+          <field name="LOGIC_OP">OR</field>
+          <field name="BRAKE">0</field>
+          <field name="SPEED_L">160</field>
+          <field name="SPEED_R">160</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="PID_ID">2</field>
+          <field name="SPEED_A">140</field>
+          <field name="TIMER_VAL">250</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <block type="robot_plan_stop">
+          <field name="STOP_STAGE">SPEED_A</field>
+        </block>
+        <block type="robot_run_plan">
+          <field name="PLAN_ID">1</field>
+        </block>
+      </category>
       <category name="Logic" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
         <block type="controls_if"></block>
         <block type="robolab_logic_compare"></block>

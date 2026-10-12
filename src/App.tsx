@@ -28,6 +28,16 @@ const CodeEditor = (props: React.ComponentProps<typeof CodeEditorType>) => <Susp
 
 const Simulator = (props: React.ComponentProps<typeof SimulatorType>) => <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-emerald-300 font-mono text-sm bg-slate-900/50">Memuat Simulator...</div>}><SimulatorLazy {...props} /></Suspense>;
 import type { Wire } from './components/Simulator';
+import {
+  type RobotHardwareConfig,
+  type RobotPlan,
+  type ActiveExecutionHighlight,
+  createDefaultRobotHardwareConfig,
+  createDefaultRobotPlans,
+  generateRobotPlanArduinoCode,
+  generateRobotPlanPythonCode,
+  buildRobotPlanBlocklyXml,
+} from './types/robotSimulator';
 import './App.css';
 import { arduinoToBlocklyXml } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
@@ -3420,53 +3430,34 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [learningLessonLoadedCount, setLearningLessonLoadedCount] = useState(0);
 
   // ==========================================================================
-  // DEDICATED & ISOLATED SIMULATOR WORKSPACE STATE (Decoupled from Real Device)
+  // DEDICATED & ISOLATED SIMULATOR WORKSPACE STATE (3D Robot + Circuit)
   // ==========================================================================
+  const initialRobotSetup = useMemo(() => {
+    const hw = createDefaultRobotHardwareConfig();
+    const rawPlans = createDefaultRobotPlans(hw.sensorCount);
+    const { xml, plansWithBlockIds } = buildRobotPlanBlocklyXml(hw, rawPlans, 1);
+    const ino = generateRobotPlanArduinoCode(hw, plansWithBlockIds, 1);
+    const py = generateRobotPlanPythonCode(hw, plansWithBlockIds, 1);
+    return { hw, plans: plansWithBlockIds, xml, ino, py };
+  }, []);
+
   const DEFAULT_SIM_FILES: { [filename: string]: string } = {
-    'firmware/main.ino': `// RoboLab Studio — Dedicated Simulator Workspace (C++ / Arduino)
-// Kode di halaman Simulator ini terpisah penuh dari Workspace Real Device!
-
-const int LED_PIN = 2;
-
-void setup() {
-  Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
-  Serial.println("Simulator Workspace Ready!");
-}
-
-void loop() {
-  digitalWrite(LED_PIN, HIGH);
-  Serial.println("LED ON (HIGH)");
-  delay(500);
-  digitalWrite(LED_PIN, LOW);
-  Serial.println("LED OFF (LOW)");
-  delay(500);
-}
-`,
-    'python/main.py': `# RoboLab Studio — Dedicated Simulator Workspace (MicroPython)
-# Kode di halaman Simulator ini terpisah penuh dari Workspace Real Device!
-from machine import Pin
-import time
-
-led = Pin(2, Pin.OUT)
-print("Simulator MicroPython Ready!")
-
-while True:
-    led.value(1)
-    print("LED ON")
-    time.sleep(0.5)
-    led.value(0)
-    print("LED OFF")
-    time.sleep(0.5)
-`
+    'firmware/main.ino': initialRobotSetup.ino,
+    'python/main.py': initialRobotSetup.py,
   };
+
+  const [simulatorMode, setSimulatorMode] = useState<'robot' | 'circuit'>('robot');
+  const [robotHardwareConfig, setRobotHardwareConfig] = useState<RobotHardwareConfig>(() => initialRobotSetup.hw);
+  const [robotPlans, setRobotPlans] = useState<RobotPlan[]>(() => initialRobotSetup.plans);
+  const [activeRobotPlanId, setActiveRobotPlanId] = useState<number>(1);
+  const [activeRobotHighlight, setActiveRobotHighlight] = useState<ActiveExecutionHighlight | null>(null);
 
   const [simBoard, setSimBoard] = useState<string>(() => {
     return localStorage.getItem('robolab_sim_board') || 'ESP32 DevKit V1';
   });
   const [simFiles, setSimFiles] = useState<{ [filename: string]: string }>(() => {
     try {
-      const saved = localStorage.getItem('robolab_sim_files');
+      const saved = localStorage.getItem('robolab_sim_files_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && parsed['firmware/main.ino']) return parsed;
@@ -3480,20 +3471,59 @@ while True:
     return 'firmware/main.ino';
   });
   const [simSyncStatuses, setSimSyncStatuses] = useState<{ [filename: string]: boolean }>({
-    'firmware/main.ino': false,
-    'python/main.py': false
+    'firmware/main.ino': true,
+    'python/main.py': true
   });
   const [simWorkspaceXmls, setSimWorkspaceXmls] = useState<{ [filename: string]: string }>(() => {
     try {
-      const saved = localStorage.getItem('robolab_sim_workspaceXmls');
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
+      const saved = localStorage.getItem('robolab_sim_workspaceXmls_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed['firmware/main.ino']) return parsed;
+      }
+    } catch (e) {}
+    return {
+      'firmware/main.ino': initialRobotSetup.xml,
+      'python/main.py': initialRobotSetup.xml,
+    };
   });
   const [simViewMode, setSimViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
-  const [simShowConsole, setSimShowConsole] = useState<boolean>(true);
+  const [simShowConsole, setSimShowConsole] = useState<boolean>(false);
   const [simResetKey, setSimResetKey] = useState<number>(0);
+
+  const syncRobotToSimulatorWorkspace = useCallback(
+    (
+      nextHw: RobotHardwareConfig,
+      nextPlans: RobotPlan[],
+      nextActiveId: number,
+      rebuildBlocklyXml = false
+    ) => {
+      const { xml, plansWithBlockIds } = buildRobotPlanBlocklyXml(nextHw, nextPlans, nextActiveId);
+      const inoCode = generateRobotPlanArduinoCode(nextHw, plansWithBlockIds, nextActiveId);
+      const pyCode = generateRobotPlanPythonCode(nextHw, plansWithBlockIds, nextActiveId);
+
+      setRobotHardwareConfig(nextHw);
+      setRobotPlans(plansWithBlockIds);
+      setActiveRobotPlanId(nextActiveId);
+      setSimBoard(nextHw.mcu);
+      setSimFiles({
+        'firmware/main.ino': inoCode,
+        'python/main.py': pyCode,
+      });
+      setSimSyncStatuses({
+        'firmware/main.ino': true,
+        'python/main.py': true,
+      });
+      if (rebuildBlocklyXml) {
+        setSimWorkspaceXmls({
+          'firmware/main.ino': xml,
+          'python/main.py': xml,
+        });
+        setSimResetKey((prev) => prev + 1);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     localStorage.setItem('robolab_sim_board', simBoard);
@@ -3501,7 +3531,7 @@ while True:
 
   useEffect(() => {
     if (Object.keys(simFiles).length > 0) {
-      localStorage.setItem('robolab_sim_files', JSON.stringify(simFiles));
+      localStorage.setItem('robolab_sim_files_v2', JSON.stringify(simFiles));
     }
   }, [simFiles]);
 
@@ -3511,7 +3541,7 @@ while True:
 
   useEffect(() => {
     if (Object.keys(simWorkspaceXmls).length > 0) {
-      localStorage.setItem('robolab_sim_workspaceXmls', JSON.stringify(simWorkspaceXmls));
+      localStorage.setItem('robolab_sim_workspaceXmls_v2', JSON.stringify(simWorkspaceXmls));
     }
   }, [simWorkspaceXmls]);
 
@@ -8387,7 +8417,7 @@ while True:
             <div className={`absolute inset-0 p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
               {/* Simulator Dedicated Toolbar */}
               <div className={`flex flex-wrap items-center justify-between gap-2 pb-2.5 select-none border-b mb-2.5 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
                     <Monitor className={`w-5 h-5 ${themeMode === 'light' ? 'text-cyan-600' : 'text-cyan-400'}`} />
                     <div>
@@ -8403,6 +8433,39 @@ while True:
                         Kode di halaman ini terpisah penuh dari kode Real Device (IDE).
                       </p>
                     </div>
+                  </div>
+
+                  {/* TOP PROMINENT SIMULATOR MODE SWITCHER: Robot 3D vs Rangkaian */}
+                  <div className={`flex items-center p-1 rounded-xl border shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-300' : 'bg-slate-900/95 border-slate-700/80'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatorMode('robot')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        simulatorMode === 'robot'
+                          ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/30'
+                          : themeMode === 'light'
+                          ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <span>🤖 Simulator Robot 3D</span>
+                      <span className="px-1.5 py-0.5 text-[9px] rounded bg-black/25 text-white font-bold">
+                        Track PDF + PID 1-5
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatorMode('circuit')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        simulatorMode === 'circuit'
+                          ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30'
+                          : themeMode === 'light'
+                          ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <span>🔌 Simulator Rangkaian</span>
+                    </button>
                   </div>
                 </div>
 
@@ -8529,10 +8592,13 @@ while True:
                   <button
                     onClick={() => {
                       handleStopCode();
-                      setSimFiles(DEFAULT_SIM_FILES);
-                      setSimWorkspaceXmls({});
-                      setSimSyncStatuses({ 'firmware/main.ino': true, 'python/main.py': true });
-                      setSimResetKey(prev => prev + 1);
+                      setActiveRobotHighlight(null);
+                      syncRobotToSimulatorWorkspace(
+                        initialRobotSetup.hw,
+                        initialRobotSetup.plans,
+                        1,
+                        true
+                      );
                     }}
                     title="Reset Kode Simulator ke Default"
                     className={`p-1.5 rounded-xl border transition cursor-pointer ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
@@ -8617,8 +8683,27 @@ while True:
                               handleRunCode(code);
                             }
                           }}
-                          onStopSimulator={handleStopCode}
+                          onStopSimulator={() => {
+                            handleStopCode();
+                            setActiveRobotHighlight(null);
+                          }}
                           themeMode={themeMode}
+                          robotHardwareConfig={robotHardwareConfig}
+                          activeRobotHighlight={activeRobotHighlight}
+                          onRobotPlansExtracted={(extractedPlans, extractedActiveId, hwPatch) => {
+                            setRobotPlans(extractedPlans);
+                            setActiveRobotPlanId(extractedActiveId);
+                            if (hwPatch) {
+                              setRobotHardwareConfig((prev) => ({
+                                ...prev,
+                                ...hwPatch,
+                                pins: {
+                                  ...prev.pins,
+                                  ...(hwPatch.pins || {}),
+                                },
+                              }));
+                            }
+                          }}
                         />
                       </div>
                     )}
@@ -8715,7 +8800,10 @@ while True:
                               handleRunCode(codeToRun);
                             }
                           }}
-                          onStopSimulator={handleStopCode}
+                          onStopSimulator={() => {
+                            handleStopCode();
+                            setActiveRobotHighlight(null);
+                          }}
                           themeMode={themeMode}
                         />
                       </div>
@@ -8723,7 +8811,7 @@ while True:
                   </div>
                 )}
 
-                {/* RIGHT PANE: Hardware Circuit Simulator + Collapsible Virtual Serial Console */}
+                {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
                 <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
                   <div className={`flex-1 min-w-0 min-h-0 relative rounded-2xl overflow-hidden border shadow-2xl ${themeMode === 'light' ? 'border-slate-200/90 bg-slate-50' : 'border-slate-800 bg-slate-950'}`}>
                     <Simulator
@@ -8759,6 +8847,39 @@ while True:
                       onWifiPasswordChange={setWifiPassword}
                       onSensorDataChange={(newData) => setSensorData(prev => ({ ...prev, ...newData }))}
                       themeMode={themeMode}
+                      simulatorMode={simulatorMode}
+                      onSimulatorModeChange={setSimulatorMode}
+                      robotHardwareConfig={robotHardwareConfig}
+                      onRobotHardwareChange={(nextHw) => {
+                        syncRobotToSimulatorWorkspace(nextHw, robotPlans, activeRobotPlanId, false);
+                      }}
+                      robotPlans={robotPlans}
+                      activePlanId={activeRobotPlanId}
+                      onRobotPlansChange={(nextPlans, nextActiveId) => {
+                        syncRobotToSimulatorWorkspace(
+                          robotHardwareConfig,
+                          nextPlans,
+                          nextActiveId ?? activeRobotPlanId,
+                          false
+                        );
+                      }}
+                      onSyncRobotToCodeAndBlocks={(hw, nextPlans, nextActiveId) => {
+                        syncRobotToSimulatorWorkspace(hw, nextPlans, nextActiveId, true);
+                      }}
+                      onRobotHighlightChange={setActiveRobotHighlight}
+                      onToggleRun={() => {
+                        if (isRunning) {
+                          handleStopCode();
+                          setActiveRobotHighlight(null);
+                        } else {
+                          const codeToRun = simFiles[simActiveFile] || '';
+                          if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                            handleRunPython(codeToRun);
+                          } else {
+                            handleRunCode(codeToRun);
+                          }
+                        }
+                      }}
                     />
                   </div>
 

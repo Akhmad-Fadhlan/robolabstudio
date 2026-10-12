@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, ChevronDown, Lock, Palette, Check } from 'lucide-react';
+import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, ChevronDown, Lock, Palette, Check, Bot } from 'lucide-react';
+import { RobotArena3D } from './RobotArena3D';
+import {
+  type RobotHardwareConfig,
+  type RobotPlan,
+  type ActiveExecutionHighlight,
+  createDefaultRobotHardwareConfig,
+  createDefaultRobotPlans,
+} from '../types/robotSimulator';
 
 interface ProgramPinConfig {
   ledPin?: string;
@@ -171,6 +179,18 @@ interface SimulatorProps {
   wifiPassword?: string;
   onWifiPasswordChange?: (password: string) => void;
   themeMode?: 'dark' | 'light';
+
+  // 3D Robot Simulator props
+  simulatorMode?: 'robot' | 'circuit';
+  onSimulatorModeChange?: (mode: 'robot' | 'circuit') => void;
+  robotHardwareConfig?: RobotHardwareConfig;
+  onRobotHardwareChange?: (hw: RobotHardwareConfig) => void;
+  robotPlans?: RobotPlan[];
+  activePlanId?: number;
+  onRobotPlansChange?: (plans: RobotPlan[], activePlanId?: number) => void;
+  onSyncRobotToCodeAndBlocks?: (hw: RobotHardwareConfig, plans: RobotPlan[], activePlanId: number) => void;
+  onRobotHighlightChange?: (highlight: ActiveExecutionHighlight) => void;
+  onToggleRun?: () => void;
 }
 
 interface Pin {
@@ -213,9 +233,47 @@ export const Simulator: React.FC<SimulatorProps> = ({
   onSelectedWifiChange,
   wifiPassword: wifiPasswordProp,
   onWifiPasswordChange,
-  themeMode = 'dark'
+  themeMode = 'dark',
+  simulatorMode: simulatorModeProp,
+  onSimulatorModeChange,
+  robotHardwareConfig: robotHwProp,
+  onRobotHardwareChange,
+  robotPlans: robotPlansProp,
+  activePlanId: activePlanIdProp,
+  onRobotPlansChange,
+  onSyncRobotToCodeAndBlocks,
+  onRobotHighlightChange,
+  onToggleRun,
 }) => {
   const isLight = themeMode === 'light';
+  const [localSimMode, setLocalSimMode] = useState<'robot' | 'circuit'>('robot');
+  const activeSimMode = simulatorModeProp ?? localSimMode;
+  const setSimMode = (m: 'robot' | 'circuit') => {
+    if (onSimulatorModeChange) onSimulatorModeChange(m);
+    else setLocalSimMode(m);
+  };
+
+  const [localRobotHw, setLocalRobotHw] = useState<RobotHardwareConfig>(() => createDefaultRobotHardwareConfig());
+  const robotHw = robotHwProp ?? localRobotHw;
+  const setRobotHw = (next: RobotHardwareConfig) => {
+    if (onRobotHardwareChange) onRobotHardwareChange(next);
+    else setLocalRobotHw(next);
+  };
+
+  const [localRobotPlans, setLocalRobotPlans] = useState<RobotPlan[]>(() =>
+    createDefaultRobotPlans(robotHw.sensorCount)
+  );
+  const [localActivePlanId, setLocalActivePlanId] = useState<number>(1);
+  const robotPlans = robotPlansProp ?? localRobotPlans;
+  const activePlanId = activePlanIdProp ?? localActivePlanId;
+  const handleRobotPlansChange = (nextPlans: RobotPlan[], nextActiveId?: number) => {
+    if (onRobotPlansChange) {
+      onRobotPlansChange(nextPlans, nextActiveId);
+    } else {
+      setLocalRobotPlans(nextPlans);
+      if (nextActiveId !== undefined) setLocalActivePlanId(nextActiveId);
+    }
+  };
   const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
 
   // Wifi Simulator State
@@ -1691,9 +1749,95 @@ export const Simulator: React.FC<SimulatorProps> = ({
     return ledElements;
   };
 
+  const modeSwitcherHeader = (
+    <div
+      className={`flex items-center justify-between gap-2 px-3 py-1.5 border-b shrink-0 ${
+        isLight
+          ? 'bg-white/95 border-slate-200 text-slate-800'
+          : 'bg-[#0b0f1c] border-slate-800/90 text-slate-100'
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setSimMode('robot')}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+            activeSimMode === 'robot'
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
+              : isLight
+              ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" />
+          <span>🤖 Simulator Robot 3D</span>
+          <span className="px-1.5 py-0.2 text-[9px] rounded bg-black/20 text-white font-bold">
+            Track PDF • PID 1-5
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSimMode('circuit')}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+            activeSimMode === 'circuit'
+              ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/25'
+              : isLight
+              ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          <span>🔌 Simulator Rangkaian</span>
+        </button>
+      </div>
+      <div className="hidden sm:flex items-center gap-2 text-[10px] font-semibold opacity-75">
+        {activeSimMode === 'robot' ? (
+          <span>
+            Sensor: <b>{robotHw.sensorCount} Titik (0/X)</b> • Motor: <b>{robotHw.motorRpm} RPM</b> •{' '}
+            <b>{robotHw.hasEncoder ? 'Encoder L/R Aktif' : 'Timer ms'}</b>
+          </span>
+        ) : (
+          <span>Board: <b>{board}</b></span>
+        )}
+      </div>
+    </div>
+  );
+
+  if (activeSimMode === 'robot') {
+    return (
+      <div
+        className={`w-full h-full flex flex-col ${
+          isLight ? 'bg-slate-100 text-slate-800' : 'bg-[#08090f] text-slate-200'
+        } overflow-hidden rounded-2xl select-none transition-colors`}
+      >
+        {modeSwitcherHeader}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <RobotArena3D
+            isRunning={isRunning}
+            onToggleRun={onToggleRun}
+            hardwareConfig={robotHw}
+            onChangeHardwareConfig={setRobotHw}
+            plans={robotPlans}
+            activePlanId={activePlanId}
+            onChangePlans={handleRobotPlansChange}
+            onSyncToCodeAndBlocks={(hw, nextPlans, nextActiveId) => {
+              setRobotHw(hw);
+              handleRobotPlansChange(nextPlans, nextActiveId);
+              onSyncRobotToCodeAndBlocks?.(hw, nextPlans, nextActiveId);
+            }}
+            onHighlightChange={onRobotHighlightChange}
+            code={activeCode}
+            theme={themeMode}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`w-full h-full flex flex-col ${isExpanded ? 'lg:flex-row' : ''} gap-3 ${isLight ? 'bg-slate-100/80 text-slate-800' : 'bg-[#08090f] text-slate-200'} p-2 lg:p-3 overflow-hidden rounded-2xl select-none transition-colors`}>
-      
+    <div className={`w-full h-full flex flex-col ${isLight ? 'bg-slate-100/80 text-slate-800' : 'bg-[#08090f] text-slate-200'} overflow-hidden rounded-2xl select-none transition-colors`}>
+      {modeSwitcherHeader}
+      <div className={`flex-1 min-h-0 w-full flex flex-col ${isExpanded ? 'lg:flex-row' : ''} gap-3 p-2 lg:p-3 overflow-hidden`}>
       {/* ── 1. MAIN HERO CANVAS (SVG 3D) ── */}
       <div className={`flex-1 min-h-[400px] ${isExpanded ? 'lg:min-h-full order-2 lg:order-1' : 'order-1'} ${isLight ? 'bg-white border-slate-200/90 shadow-sm' : 'bg-[#0b0d14] border-slate-800/80 shadow-inner'} border rounded-xl relative overflow-hidden flex items-center justify-center group transition-colors`}>
         
@@ -3068,6 +3212,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           </div>
         )}
 
+      </div>
       </div>
 
     </div>
