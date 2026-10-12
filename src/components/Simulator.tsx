@@ -1810,7 +1810,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           isLight ? 'bg-slate-100 text-slate-800' : 'bg-[#08090f] text-slate-200'
         } overflow-hidden rounded-2xl select-none transition-colors`}
       >
-        {modeSwitcherHeader}
+        {simulatorMode === undefined && modeSwitcherHeader}
         <div className="flex-1 min-h-0 overflow-hidden">
           <RobotArena3D
             isRunning={isRunning}
@@ -1836,7 +1836,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   return (
     <div className={`w-full h-full flex flex-col ${isLight ? 'bg-slate-100/80 text-slate-800' : 'bg-[#08090f] text-slate-200'} overflow-hidden rounded-2xl select-none transition-colors`}>
-      {modeSwitcherHeader}
+      {simulatorMode === undefined && modeSwitcherHeader}
       <div className={`flex-1 min-h-0 w-full flex flex-col ${isExpanded ? 'lg:flex-row' : ''} gap-3 p-2 lg:p-3 overflow-hidden`}>
       {/* ── 1. MAIN HERO CANVAS (SVG 3D) ── */}
       <div className={`flex-1 min-h-[400px] ${isExpanded ? 'lg:min-h-full order-2 lg:order-1' : 'order-1'} ${isLight ? 'bg-white border-slate-200/90 shadow-sm' : 'bg-[#0b0d14] border-slate-800/80 shadow-inner'} border rounded-xl relative overflow-hidden flex items-center justify-center group transition-colors`}>

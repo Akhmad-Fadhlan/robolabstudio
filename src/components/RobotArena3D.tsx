@@ -422,21 +422,19 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       const results: boolean[] = Array(count).fill(false);
       if (!img) return results;
 
-      const scale = hardwareConfig.robotScale || 1.0;
-      const sensorForwardDist = 30 * scale;
-      const arrayWidth = Math.min(54, Math.max(22, count * 6.5)) * scale;
+      const rScale = (hardwareConfig.robotScale || 1.0) * 1.18;
+      const sensorWingWidth = Math.max(33, Math.min(44, 24 + count * 1.6));
+      const sSpan = (sensorWingWidth - 5) * 2;
 
       const cosT = Math.cos(rTheta);
       const sinT = Math.sin(rTheta);
-      // Perpendicular vector (left to right from robot's perspective)
-      const perpX = -sinT;
-      const perpY = cosT;
 
       for (let i = 0; i < count; i++) {
         const frac = count === 1 ? 0 : i / (count - 1) - 0.5;
-        const offsetLat = frac * arrayWidth;
-        const sx = Math.round(rx + cosT * sensorForwardDist + perpX * offsetLat);
-        const sy = Math.round(ry + sinT * sensorForwardDist + perpY * offsetLat);
+        const ly = frac * sSpan;
+        const lx = 35 - Math.abs(frac) * 5;
+        const sx = Math.round(rx + (lx * cosT - ly * sinT) * rScale);
+        const sy = Math.round(ry + (lx * sinT + ly * cosT) * rScale);
 
         if (sx >= 0 && sx < TRACK_W && sy >= 0 && sy < TRACK_H) {
           const idx = (sy * TRACK_W + sx) * 4;
@@ -945,7 +943,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           };
         }
 
-        // Default: 3D Perspective Orbit (like the uploaded reference screenshot!)
+        // Default: 3D Perspective Orbit (centered with generous margin so track is never clipped)
         const cx = wx - TRACK_W / 2;
         const cy = wy - TRACK_H / 2;
         const cosY = Math.cos(camYaw);
@@ -953,10 +951,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         const rx = cx * cosY - cy * sinY;
         const ry = cx * sinY + cy * cosY;
 
-        const baseScale = Math.min(cw / 1480, ch / 920) * camZoom;
+        const baseScale = Math.min(cw / 1420, ch / 860) * camZoom;
         const persp = 1 / Math.max(0.45, 1 + (ry / 2200) * Math.sin(camPitch));
-        const sx = cw * 0.54 + rx * baseScale * persp;
-        const sy = ch * 0.53 + ry * Math.cos(camPitch) * baseScale * persp - wz * baseScale * persp;
+        const sx = cw * 0.50 + rx * baseScale * persp;
+        const sy = ch * 0.50 + ry * Math.cos(camPitch) * baseScale * persp - wz * baseScale * persp;
         return { sx, sy, scale: baseScale * persp };
       };
 
@@ -1100,98 +1098,393 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       ctx.stroke();
       ctx.restore();
 
-      // Draw 3D Robot Body, Wheels, and Live LED Sensor Bar
-      const rScale = hardwareConfig.robotScale || 1.0;
-      const halfL = 28 * rScale;
-      const halfW = 22 * rScale;
-      const chassisH = 18 * rScale;
+      // ============================================================================
+      // REALISTIC 3D LINE FOLLOWER ROBOT RENDERER (T-Hammerhead Competition Chassis)
+      // ============================================================================
+      const rScale = (hardwareConfig.robotScale || 1.0) * 1.18;
 
       const localToWorld = (lx: number, ly: number) => ({
-        wx: s.x + lx * Math.cos(s.theta) - ly * Math.sin(s.theta),
-        wy: s.y + lx * Math.sin(s.theta) + ly * Math.cos(s.theta),
+        wx: s.x + lx * rScale * Math.cos(s.theta) - ly * rScale * Math.sin(s.theta),
+        wy: s.y + lx * rScale * Math.sin(s.theta) + ly * rScale * Math.cos(s.theta),
       });
 
-      const botCornersWorld = [
-        localToWorld(halfL, -halfW),
-        localToWorld(halfL, halfW),
-        localToWorld(-halfL, halfW),
-        localToWorld(-halfL, -halfW),
-      ];
-      const botBase2D = botCornersWorld.map((p) => project3D(p.wx, p.wy, 2));
-      const botTop2D = botCornersWorld.map((p) => project3D(p.wx, p.wy, 2 + chassisH));
+      // Helper to render any 3D extruded polygon in robot local coordinates (lx, ly)
+      const drawExtrudedLocalPoly = (
+        localPts: Array<[number, number]>,
+        zBase: number,
+        zTop: number,
+        topFill: string,
+        sideFillA: string,
+        sideFillB: string,
+        strokeColor?: string,
+        strokeWidth = 1.2
+      ) => {
+        const worldPts = localPts.map(([lx, ly]) => localToWorld(lx, ly));
+        const base2D = worldPts.map((p) => project3D(p.wx, p.wy, zBase * rScale));
+        const top2D = worldPts.map((p) => project3D(p.wx, p.wy, zTop * rScale));
 
-      // Robot shadow
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
-      ctx.beginPath();
-      botBase2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 4) : ctx.lineTo(pt.sx, pt.sy + 4)));
-      ctx.closePath();
-      ctx.fill();
+        // Side faces
+        for (let i = 0; i < localPts.length; i++) {
+          const next = (i + 1) % localPts.length;
+          ctx.fillStyle = i % 2 === 0 ? sideFillA : sideFillB;
+          ctx.beginPath();
+          ctx.moveTo(base2D[i].sx, base2D[i].sy);
+          ctx.lineTo(base2D[next].sx, base2D[next].sy);
+          ctx.lineTo(top2D[next].sx, top2D[next].sy);
+          ctx.lineTo(top2D[i].sx, top2D[i].sy);
+          ctx.closePath();
+          ctx.fill();
+        }
 
-      // Robot 3D side walls (Vibrant Orange/Teal Kids-Friendly Robotics theme matching screenshot)
-      for (let i = 0; i < 4; i++) {
-        const next = (i + 1) % 4;
-        ctx.fillStyle = i === 0 ? '#ea580c' : '#c2410c';
+        // Top face
+        ctx.fillStyle = topFill;
         ctx.beginPath();
-        ctx.moveTo(botBase2D[i].sx, botBase2D[i].sy);
-        ctx.lineTo(botBase2D[next].sx, botBase2D[next].sy);
-        ctx.lineTo(botTop2D[next].sx, botTop2D[next].sy);
-        ctx.lineTo(botTop2D[i].sx, botTop2D[i].sy);
+        top2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
         ctx.closePath();
         ctx.fill();
+        if (strokeColor) {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = strokeWidth;
+          ctx.stroke();
+        }
+        return { base2D, top2D };
+      };
+
+      // 1. Soft Robot Ground Shadow (T-Hammerhead silhouette)
+      const shadowOutline: Array<[number, number]> = [
+        [44, -18],
+        [36, -34],
+        [24, -34],
+        [21, -13],
+        [8, -13],
+        [8, -30],
+        [-28, -30],
+        [-34, -22],
+        [-34, 22],
+        [-28, 30],
+        [8, 30],
+        [8, 13],
+        [21, 13],
+        [24, 34],
+        [36, 34],
+        [44, 18],
+      ];
+      const shadow2D = shadowOutline.map(([lx, ly]) => {
+        const wp = localToWorld(lx, ly);
+        return project3D(wp.wx, wp.wy, 0.5);
+      });
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.38)';
+      ctx.beginPath();
+      shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
+      ctx.closePath();
+      ctx.fill();
+
+      // 2. Left & Right 3D Rubber Tires + Yellow DC Gearbox Motors
+      const wheelSides = [-1, 1]; // -1 = Left, +1 = Right
+      for (const side of wheelSides) {
+        const yInner = side * 22;
+        const yOuter = side * 32;
+
+        // Yellow DC Gearbox Motor block (inside wheel)
+        const gearInner = side * 11;
+        const gearOuter = side * 22;
+        drawExtrudedLocalPoly(
+          [
+            [-4, gearInner],
+            [-4, gearOuter],
+            [-23, gearOuter],
+            [-23, gearInner],
+          ],
+          4,
+          14,
+          '#facc15',
+          '#ca8a04',
+          '#eab308',
+          '#fef08a',
+          1
+        );
+
+        // Slotted Optical Encoder Disc (if hasEncoder is enabled)
+        if (hardwareConfig.hasEncoder) {
+          const encY = side * 20.5;
+          drawExtrudedLocalPoly(
+            [
+              [-6, encY - side * 1.2],
+              [-6, encY + side * 1.2],
+              [-20, encY + side * 1.2],
+              [-20, encY - side * 1.2],
+            ],
+            5,
+            18,
+            '#38bdf8',
+            '#0284c7',
+            '#0369a1',
+            '#e0f2fe',
+            0.8
+          );
+        }
+
+        // Main Black Rubber Tire with Wide Grip Profile
+        drawExtrudedLocalPoly(
+          [
+            [6, yInner],
+            [6, yOuter],
+            [-24, yOuter],
+            [-24, yInner],
+          ],
+          1,
+          20,
+          '#111827',
+          '#090d16',
+          '#1e293b',
+          '#475569',
+          1.2
+        );
+
+        // Sport Yellow Wheel Rim Hub on the outer side of the tire
+        drawExtrudedLocalPoly(
+          [
+            [2, yOuter - side * 1.5],
+            [2, yOuter + side * 0.5],
+            [-20, yOuter + side * 0.5],
+            [-20, yOuter - side * 1.5],
+          ],
+          5,
+          16,
+          '#f59e0b',
+          '#d97706',
+          '#b45309',
+          '#fef3c7',
+          0.9
+        );
+
+        // Animated Rotating Tire Tread Grooves across top of tire
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.4;
+        const treadPhase = ((s.wheelAngle * 6) % 6 + 6) % 6;
+        for (let tx = -21 + treadPhase; tx <= 4; tx += 6) {
+          const pA = localToWorld(tx, yInner + side * 1.2);
+          const pB = localToWorld(tx, yOuter - side * 1.2);
+          const sA = project3D(pA.wx, pA.wy, 20.4 * rScale);
+          const sB = project3D(pB.wx, pB.wy, 20.4 * rScale);
+          ctx.beginPath();
+          ctx.moveTo(sA.sx, sA.sy);
+          ctx.lineTo(sB.sx, sB.sy);
+          ctx.stroke();
+        }
       }
 
-      // Robot Top Deck
-      ctx.fillStyle = '#f97316';
-      ctx.strokeStyle = '#ffedd5';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      botTop2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Microcontroller Board visual on top of robot
-      const mcuCorners = [
-        localToWorld(halfL * 0.45, -halfW * 0.55),
-        localToWorld(halfL * 0.45, halfW * 0.55),
-        localToWorld(-halfL * 0.55, halfW * 0.55),
-        localToWorld(-halfL * 0.55, -halfW * 0.55),
-      ].map((p) => project3D(p.wx, p.wy, 4 + chassisH));
-      ctx.fillStyle = '#0d9488';
-      ctx.beginPath();
-      mcuCorners.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
-      ctx.closePath();
-      ctx.fill();
-
-      // Draw Left & Right Wheels
-      const wheelPositions = [
-        localToWorld(0, -halfW * 1.12),
-        localToWorld(0, halfW * 1.12),
+      // 3. Main Line Follower T-Hammerhead PCB Chassis (Rear Deck + Neck Bridge + Wide Front Sensor Wing)
+      // 3a. Rear & Center Chassis Deck (Vibrant Robotics Orange/Carbon)
+      const mainDeckPts: Array<[number, number]> = [
+        [25, -12],
+        [25, 12],
+        [10, 14],
+        [6, 22],
+        [-27, 22],
+        [-33, 16],
+        [-33, -16],
+        [-27, -22],
+        [6, -22],
+        [10, -14],
       ];
-      for (const wp of wheelPositions) {
-        const w2d = project3D(wp.wx, wp.wy, 8 * rScale);
-        ctx.fillStyle = '#0f172a';
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
+      drawExtrudedLocalPoly(
+        mainDeckPts,
+        5,
+        13,
+        '#f97316',
+        '#c2410c',
+        '#ea580c',
+        '#ffedd5',
+        1.5
+      );
+
+      // Gold PCB Traces on the Neck Bridge connecting MCU to Front Sensor Bar
+      for (const traceY of [-6, -2, 2, 6]) {
+        const tStart = localToWorld(6, traceY);
+        const tEnd = localToWorld(27, traceY * 1.4);
+        const pStart = project3D(tStart.wx, tStart.wy, 13.4 * rScale);
+        const pEnd = project3D(tEnd.wx, tEnd.wy, 13.4 * rScale);
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 1.1;
         ctx.beginPath();
-        ctx.arc(w2d.sx, w2d.sy, Math.max(4, 10 * w2d.scale * rScale), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(pStart.sx, pStart.sy);
+        ctx.lineTo(pEnd.sx, pEnd.sy);
         ctx.stroke();
       }
 
-      // Draw Front Sensor Array LEDs ('0' / 'X' visual feedback)
+      // 3b. Wide Curved/Angled Front Sensor Array Wing Bar (Iconic Line Follower Nose)
+      const sensorWingWidth = Math.max(33, Math.min(44, 24 + hardwareConfig.sensorCount * 1.6));
+      const frontWingPts: Array<[number, number]> = [
+        [44, -sensorWingWidth * 0.48],
+        [37, -sensorWingWidth],
+        [25, -sensorWingWidth],
+        [23, -13],
+        [23, 13],
+        [25, sensorWingWidth],
+        [37, sensorWingWidth],
+        [44, sensorWingWidth * 0.48],
+      ];
+      drawExtrudedLocalPoly(
+        frontWingPts,
+        3,
+        11,
+        '#0f172a',
+        '#020617',
+        '#1e293b',
+        '#38bdf8',
+        1.6
+      );
+
+      // 4. On-Board Electronics: LiPo Battery + MCU Board + Mini OLED + Push Buttons
+      // 4a. Rear 2S LiPo Battery Pack (Cobalt Blue with Yellow Label)
+      drawExtrudedLocalPoly(
+        [
+          [-16, -15],
+          [-16, 15],
+          [-30, 15],
+          [-30, -15],
+        ],
+        13,
+        20,
+        '#2563eb',
+        '#1d4ed8',
+        '#1e40af',
+        '#93c5fd',
+        1
+      );
+      // Yellow LiPo strap
+      drawExtrudedLocalPoly(
+        [
+          [-21, -15.3],
+          [-21, 15.3],
+          [-25, 15.3],
+          [-25, -15.3],
+        ],
+        13.2,
+        20.4,
+        '#facc15',
+        '#ca8a04',
+        '#eab308'
+      );
+
+      // 4b. Microcontroller Board (Teal/Emerald PCB in Center)
+      drawExtrudedLocalPoly(
+        [
+          [11, -13],
+          [11, 13],
+          [-14, 13],
+          [-14, -13],
+        ],
+        13,
+        18,
+        '#0d9488',
+        '#0f766e',
+        '#115e59',
+        '#5eead4',
+        1
+      );
+
+      // 4c. Glowing Cyan Mini OLED Screen on top of MCU
+      drawExtrudedLocalPoly(
+        [
+          [7, -8],
+          [7, 8],
+          [-7, 8],
+          [-7, -8],
+        ],
+        18,
+        20,
+        '#083344',
+        '#06b6d4',
+        '#0891b2',
+        '#22d3ee',
+        1.2
+      );
+      // Glowing telemetry bars on Mini OLED
+      const oledCenter = localToWorld(0, 0);
+      const oled2D = project3D(oledCenter.wx, oledCenter.wy, 20.5 * rScale);
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.arc(oled2D.sx, oled2D.sy, Math.max(2, 3.2 * oled2D.scale), 0, Math.PI * 2);
+      ctx.fill();
+
+      // 4d. Ultrasonic Sensor HC-SR04 ("Mata Robot") if enabled
+      if (hardwareConfig.ultrasonicMode !== 'none') {
+        drawExtrudedLocalPoly(
+          [
+            [24, -10],
+            [24, 10],
+            [18, 10],
+            [18, -10],
+          ],
+          13,
+          24,
+          '#0284c7',
+          '#0369a1',
+          '#075985',
+          '#7dd3fc',
+          1
+        );
+        // Two silver acoustic cylinders on front of HC-SR04
+        for (const eyeY of [-5.5, 5.5]) {
+          const eyeW = localToWorld(25.5, eyeY);
+          const eye2D = project3D(eyeW.wx, eyeW.wy, 19 * rScale);
+          ctx.fillStyle = '#e2e8f0';
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(eye2D.sx, eye2D.sy, Math.max(2.5, 4 * eye2D.scale * rScale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+      // 5. Forward Direction Arrow on Robot Nose Bridge
+      const arrowPts = [
+        localToWorld(23, 0),
+        localToWorld(14, -5.5),
+        localToWorld(14, 5.5),
+      ].map((p) => project3D(p.wx, p.wy, 14.5 * rScale));
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      arrowPts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
+      ctx.closePath();
+      ctx.fill();
+
+      // 6. Front Sensor Array LEDs ('0' = Green Glow on Line, 'X' = Red Off Line)
       const sCount = hardwareConfig.sensorCount;
-      const sensorForward = 30 * rScale;
-      const sWidth = Math.min(54, Math.max(22, sCount * 6.5)) * rScale;
+      const sSpan = (sensorWingWidth - 5) * 2;
       for (let i = 0; i < sCount; i++) {
         const frac = sCount === 1 ? 0 : i / (sCount - 1) - 0.5;
-        const spWorld = localToWorld(sensorForward, frac * sWidth);
-        const sp2d = project3D(spWorld.wx, spWorld.wy, 5 * rScale);
+        // Slight arc along the front wing nose
+        const ly = frac * sSpan;
+        const lx = 35 - Math.abs(frac) * 5;
+        const spWorld = localToWorld(lx, ly);
         const isOnLine = sensorReadings[i];
-        ctx.fillStyle = isOnLine ? '#22c55e' : '#ef4444';
+
+        // Floor projection beam dot
+        const floor2d = project3D(spWorld.wx, spWorld.wy, 1);
+        ctx.fillStyle = isOnLine ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.22)';
         ctx.beginPath();
-        ctx.arc(sp2d.sx, sp2d.sy, Math.max(2.5, 4.2 * sp2d.scale), 0, Math.PI * 2);
+        ctx.arc(floor2d.sx, floor2d.sy, Math.max(2.5, 4.5 * floor2d.scale * rScale), 0, Math.PI * 2);
         ctx.fill();
+
+        // Top PCB LED indicator with bright halo when detecting line ('0')
+        const sp2d = project3D(spWorld.wx, spWorld.wy, 11.8 * rScale);
+        if (isOnLine) {
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.45)';
+          ctx.beginPath();
+          ctx.arc(sp2d.sx, sp2d.sy, Math.max(4.5, 7.5 * sp2d.scale * rScale), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = isOnLine ? '#22c55e' : '#ef4444';
+        ctx.strokeStyle = isOnLine ? '#dcfce7' : '#fecaca';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(sp2d.sx, sp2d.sy, Math.max(2.8, 4.4 * sp2d.scale * rScale), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
     };
 
@@ -1261,7 +1554,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   };
 
   const boardPins = getBoardPinOptions(hardwareConfig.mcu);
-  const currentPatternPreview = sensorReadings.map((on) => (on ? '0' : 'X')).join('');
 
   return (
     <div
@@ -1278,14 +1570,14 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         className="hidden"
       />
 
-      {/* ── ROW 1: Arena / PDF Track Selector + Hardware/PID Quick Buttons ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#0b1526] border-b border-slate-800/90 text-xs">
+      {/* ── COMPACT KIDS-FRIENDLY TOP TOOLBAR (Row 1: Track + Robot Setup + PID + Sync) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1.5 bg-[#0b1526] border-b border-slate-800/90 text-xs shrink-0">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-bold text-sky-400 mr-1">Pilih Arena:</span>
+          <span className="text-[11px] font-extrabold text-sky-400">🗺️ Arena:</span>
           <select
             value={selectedTrackId}
             onChange={(e) => handleSelectTrack(e.target.value)}
-            className="bg-[#111e34] text-slate-100 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold outline-none hover:border-sky-400 cursor-pointer"
+            className="bg-[#111e34] text-slate-100 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold outline-none hover:border-sky-400 cursor-pointer"
           >
             {tracks.map((t) => (
               <option key={t.id} value={t.id}>
@@ -1297,18 +1589,22 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <button
             type="button"
             onClick={() => pdfInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold text-[11px] cursor-pointer transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold text-[11px] cursor-pointer transition-all"
             title="Upload file PDF lintasan untuk dijadikan track simulasi"
           >
-            <Upload className="w-3.5 h-3.5" /> Tambah Arena PDF
+            <Upload className="w-3.5 h-3.5" /> Upload PDF
           </button>
 
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'pdf_samples' ? 'none' : 'pdf_samples')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-bold text-[11px] cursor-pointer transition-all"
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+              activeDrawer === 'pdf_samples'
+                ? 'bg-emerald-500 text-slate-950 border-emerald-300'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+            }`}
           >
-            <Download className="w-3.5 h-3.5" /> Contoh PDF Track
+            <Download className="w-3.5 h-3.5" /> Contoh PDF
           </button>
 
           {selectedTrackId.startsWith('pdf_') && (
@@ -1318,62 +1614,58 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 setTracks((prev) => prev.filter((t) => t.id !== selectedTrackId));
                 handleSelectTrack('maze');
               }}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold text-[11px] cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold text-[11px] cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Hapus Arena Ini
+              <Trash2 className="w-3.5 h-3.5" /> Hapus
             </button>
           )}
         </div>
 
-        {/* Right side: Kids-Friendly Hardware, Pinout & Multi-PID Drawers */}
+        {/* Right side: Kids-Friendly Hardware, Pinout & Multi-PID Popover Triggers */}
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
               activeDrawer === 'hardware'
-                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md'
                 : 'bg-[#132238] hover:bg-[#1a2e4a] text-amber-300 border-amber-500/30'
             }`}
           >
-            <Cpu className="w-3.5 h-3.5" /> Komponen, Motor ({hardwareConfig.motorRpm} RPM) & Pin
+            <Cpu className="w-3.5 h-3.5" /> ⚙️ Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
           </button>
 
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
               activeDrawer === 'pid'
-                ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-md'
+                ? 'bg-fuchsia-500 text-white border-fuchsia-300 shadow-md'
                 : 'bg-[#132238] hover:bg-[#1a2e4a] text-fuchsia-300 border-fuchsia-500/30'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5" /> Setting PID 1–5 (Auto)
+            <Sliders className="w-3.5 h-3.5" /> 🎛️ PID 1–5
           </button>
 
           <button
             type="button"
             onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-[11px] shadow-md cursor-pointer transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-[11px] shadow-md cursor-pointer transition-all"
             title="Sinkronkan konfigurasi robot, pinout PWM/Mux/Encoder, dan PID ke Block & Kode (.ino / .py)"
           >
-            <Sparkles className="w-3.5 h-3.5" /> Kirim ke Code-Block (.ino & .py)
+            <Sparkles className="w-3.5 h-3.5" /> Sync ke Blok & Kode
           </button>
         </div>
       </div>
 
-      {/* ── ROW 2: 3D Perspective Switcher, Start/Finish Placement & Robot Controls ── */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1.5 bg-[#091220] border-b border-slate-800/80 text-[11px]">
+      {/* ── COMPACT ROW 2: Camera View, Start/Finish & Robot Pose Controls + Fullscreen ── */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1 bg-[#091220] border-b border-slate-800/80 text-[11px] shrink-0">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-bold text-emerald-400 flex items-center gap-1">
-            🤖 Uji Robotmu:
-          </span>
-
           {/* 3D Camera Perspective Selector */}
           <select
             value={cameraMode}
             onChange={(e) => setCameraMode(e.target.value as CameraViewMode)}
-            className="bg-[#111e34] text-sky-200 border border-slate-700 rounded-md px-2 py-1 font-bold outline-none cursor-pointer"
+            className="bg-[#111e34] text-sky-200 border border-slate-700 rounded-lg px-2 py-0.5 font-bold outline-none cursor-pointer"
           >
             <option value="3d_persp">🎥 3D Perspektif (Orbit)</option>
             <option value="2d_top">🗺️ 2D Atas (Top-Down)</option>
@@ -1384,7 +1676,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <button
             type="button"
             onClick={() => setCamYaw((y) => y + 0.35)}
-            className="px-2 py-1 rounded-md bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            className="px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            title="Putar sudut pandang 3D"
           >
             ↻ Putar
           </button>
@@ -1396,51 +1689,118 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               setCamPitch(0.78);
               setCamZoom(1.0);
             }}
-            className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            title="Reset Kamera"
           >
-            <Camera className="w-3 h-3" /> Kamera
+            <Camera className="w-3 h-3" /> Reset View
           </button>
 
           <button
             type="button"
             onClick={() => {
-              const scales = [0.8, 1.0, 1.25];
+              const scales = [0.85, 1.0, 1.25, 1.45];
               const nextScale = scales[(scales.indexOf(hardwareConfig.robotScale) + 1) % scales.length] || 1.0;
               updateHardware({ robotScale: nextScale });
             }}
-            className="px-2 py-1 rounded-md bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            className="px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold cursor-pointer"
           >
-            Ukuran Robot ({hardwareConfig.robotScale}x)
+            🔍 Robot {hardwareConfig.robotScale}x
           </button>
+
+          <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
 
           <button
             type="button"
             onClick={() => setPlacementTool(placementTool === 'start' ? 'none' : 'start')}
-            className={`px-2 py-1 rounded-md border font-semibold cursor-pointer ${
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'start'
                 ? 'bg-purple-600 text-white border-purple-400'
                 : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-purple-300'
             }`}
           >
-            Posisi Start
+            🏁 Set Start
           </button>
 
           <button
             type="button"
             onClick={() => setPlacementTool(placementTool === 'finish' ? 'none' : 'finish')}
-            className={`px-2 py-1 rounded-md border font-semibold cursor-pointer ${
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'finish'
                 ? 'bg-emerald-600 text-white border-emerald-400'
                 : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-emerald-300'
             }`}
           >
-            Posisi Finis
+            🎯 Set Finis
           </button>
 
           <button
             type="button"
+            onClick={() => setPlacementTool(placementTool === 'robot' ? 'none' : 'robot')}
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+              placementTool === 'robot'
+                ? 'bg-orange-500 text-slate-950 border-orange-300'
+                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
+            }`}
+          >
+            📍 Pindah Robot
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedTrackId('empty');
+              setLastDrawPoint(null);
+              setPlacementTool(placementTool === 'draw_line' ? 'none' : 'draw_line');
+            }}
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+              placementTool === 'draw_line'
+                ? 'bg-sky-600 text-white border-sky-400'
+                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
+            }`}
+          >
+            ✏️ Gambar Jalur
+          </button>
+
+          <div className="flex items-center gap-1 bg-[#111e34] border border-slate-700 rounded-lg px-2 py-0.5">
+            <span className="text-slate-400">Arah:</span>
+            <input
+              type="number"
+              value={initialHeadingDeg}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 0;
+                setInitialHeadingDeg(val);
+                resetRobotToStart(startPos.x, startPos.y, val);
+              }}
+              className="w-11 bg-transparent text-amber-300 font-mono font-bold text-center outline-none"
+            />
+            <span className="text-slate-400">°</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => resetRobotToStart()}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" /> Reset Posisi
+          </button>
+
+          {selectedTrackId === 'empty' && customSegments.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCustomSegments([])}
+              className="px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold cursor-pointer"
+            >
+              Hapus Jalur
+            </button>
+          )}
+        </div>
+
+        {/* Right: Auto-Finish & Fullscreen Button (Now in toolbar so it never covers the track!) */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
             onClick={() => setAutoFinish((v) => !v)}
-            className={`px-2 py-1 rounded-md border font-semibold cursor-pointer ${
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               autoFinish
                 ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
                 : 'bg-[#111e34] text-slate-400 border-slate-700'
@@ -1451,480 +1811,441 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
           <button
             type="button"
-            onClick={() => {
-              setSelectedTrackId('empty');
-              setLastDrawPoint(null);
-              setPlacementTool(placementTool === 'draw_line' ? 'none' : 'draw_line');
-            }}
-            className={`px-2 py-1 rounded-md border font-semibold cursor-pointer ${
-              placementTool === 'draw_line'
-                ? 'bg-sky-600 text-white border-sky-400'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
-            }`}
+            onClick={() => setIsFullscreen((f) => !f)}
+            className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold cursor-pointer transition-transform active:scale-95"
           >
-            ✏️ Jalur
+            {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            {isFullscreen ? 'Perkecil' : 'Perbesar'}
           </button>
-
-          <button
-            type="button"
-            onClick={() => setPlacementTool(placementTool === 'robot' ? 'none' : 'robot')}
-            className={`px-2 py-1 rounded-md border font-semibold cursor-pointer ${
-              placementTool === 'robot'
-                ? 'bg-orange-500 text-slate-950 border-orange-300'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
-            }`}
-          >
-            📍 Robot
-          </button>
-
-          <div className="flex items-center gap-1 bg-[#111e34] border border-slate-700 rounded-md px-2 py-0.5">
-            <span className="text-slate-400">Arah:</span>
-            <input
-              type="number"
-              value={initialHeadingDeg}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10) || 0;
-                setInitialHeadingDeg(val);
-                resetRobotToStart(startPos.x, startPos.y, val);
-              }}
-              className="w-12 bg-transparent text-amber-300 font-mono font-bold text-center outline-none"
-            />
-            <span className="text-slate-400">°</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => resetRobotToStart()}
-            className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold cursor-pointer"
-          >
-            <RotateCcw className="w-3 h-3" /> Reset
-          </button>
-
-          {selectedTrackId === 'empty' && customSegments.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setCustomSegments((prev) => prev.slice(0, -1))}
-                className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer"
-              >
-                Hapus Segmen Terakhir
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomSegments([])}
-                className="px-2 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 cursor-pointer"
-              >
-                Hapus Jalur
-              </button>
-            </>
-          )}
         </div>
       </div>
 
-      {/* ── DRAWER 1: Sample PDF Tracks Download & Quick Load ── */}
-      {activeDrawer === 'pdf_samples' && (
-        <div className="px-4 py-3 bg-[#0e1b30] border-b border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div>
-            <div className="font-bold text-emerald-300">📄 Paket Contoh File PDF Track Siap Pakai</div>
-            <div className="text-slate-400 text-[11px]">
-              Unduh file PDF berikut untuk diuji dengan tombol &quot;Tambah Arena PDF&quot;, atau klik Gunakan Langsung.
+      {/* ── MAIN 3D ARENA VIEWPORT (100% Unobstructed Track!) ── */}
+      <div className="relative flex-1 w-full min-h-[340px] overflow-hidden">
+        {/* Floating Collapsible Drawers with Close Button */}
+        {activeDrawer === 'pdf_samples' && (
+          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#0e1b30]/95 backdrop-blur-md border border-emerald-500/40 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div>
+              <div className="font-bold text-emerald-300">📄 Paket Contoh File PDF Track Siap Pakai</div>
+              <div className="text-slate-400 text-[11px]">
+                Klik nama track untuk langsung mencoba di arena, atau unduh file PDF-nya.
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { id: 'oval', label: 'Track 1: Basic Oval', href: '/tracks/track-basic-oval.pdf' },
+                { id: 'maze', label: 'Track 2: Perempatan Maze', href: '/tracks/track-perempatan-maze.pdf' },
+                { id: 'pro', label: 'Track 3: Lomba Pro', href: '/tracks/track-lomba-pro.pdf' },
+              ].map((sample) => (
+                <div
+                  key={sample.id}
+                  className="flex items-center gap-1.5 bg-[#091220] border border-slate-700 rounded-lg px-2.5 py-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectTrack(sample.id);
+                      setActiveDrawer('none');
+                    }}
+                    className="text-sky-300 hover:text-sky-200 font-bold cursor-pointer"
+                  >
+                    {sample.label}
+                  </button>
+                  <a
+                    href={sample.href}
+                    download
+                    className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[10px]"
+                  >
+                    ⬇ PDF
+                  </a>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setActiveDrawer('none')}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+              >
+                ✕ Tutup
+              </button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: 'oval', label: 'Track 1: Basic Oval (.pdf)', href: '/tracks/track-basic-oval.pdf' },
-              {
-                id: 'maze',
-                label: 'Track 2: Perempatan Maze (.pdf)',
-                href: '/tracks/track-perempatan-maze.pdf',
-              },
-              { id: 'pro', label: 'Track 3: Lomba Pro (.pdf)', href: '/tracks/track-lomba-pro.pdf' },
-            ].map((sample) => (
-              <div
-                key={sample.id}
-                className="flex items-center gap-1.5 bg-[#091220] border border-slate-700 rounded-lg px-2.5 py-1.5"
-              >
+        )}
+
+        {activeDrawer === 'hardware' && (
+          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#0e1b30]/95 backdrop-blur-md border border-amber-500/40 shadow-2xl space-y-3 text-xs max-h-[85%] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="font-extrabold text-amber-300 flex items-center gap-2">
+                <Settings className="w-4 h-4" /> ⚙️ Konfigurasi Robot Real, Motor RPM & Smart Auto-Pinout
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleSelectTrack(sample.id)}
-                  className="text-sky-300 hover:text-sky-200 font-bold cursor-pointer"
+                  onClick={() => updateHardware({}, true, true)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] cursor-pointer"
                 >
-                  {sample.label}
+                  ✨ Estimasi Pin & PID Otomatis
                 </button>
-                <a
-                  href={sample.href}
-                  download
-                  className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[10px]"
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
                 >
-                  ⬇ Unduh PDF
-                </a>
+                  ✕ Tutup
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── DRAWER 2: Hardware, Motor RPM & Smart Pinout (PWM, Multiplexer, Encoder) ── */}
-      {activeDrawer === 'hardware' && (
-        <div className="px-4 py-3 bg-[#0e1b30] border-b border-amber-500/30 space-y-3 text-xs max-h-[290px] overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <div className="font-extrabold text-amber-300 flex items-center gap-2">
-              <Settings className="w-4 h-4" /> Konfigurasi Robot Real, Motor RPM & Smart Auto-Pinout
-            </div>
-            <button
-              type="button"
-              onClick={() => updateHardware({}, true, true)}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] cursor-pointer"
-            >
-              ✨ Estimasi Pin & PID Otomatis
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-            {/* Robot Preset */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Robot</label>
-              <select
-                value={hardwareConfig.preset}
-                onChange={(e) => {
-                  const preset = e.target.value as RobotHardwareConfig['preset'];
-                  const name =
-                    preset === 'line_follower'
-                      ? 'Robot Line Follower'
-                      : preset === 'maze_solver'
-                        ? 'Maze Solver Pro'
-                        : 'Robot Bebas';
-                  updateHardware({ preset, robotName: name });
-                }}
-                className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
-              >
-                <option value="line_follower">🏎️ Line Follower</option>
-                <option value="maze_solver">🧩 Maze Solver Pro</option>
-                <option value="free_robot">🤖 Robot Bebas (Custom)</option>
-              </select>
             </div>
 
-            {/* Microcontroller */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mikrokontroler</label>
-              <select
-                value={hardwareConfig.mcu}
-                onChange={(e) =>
-                  updateHardware({ mcu: e.target.value as RobotMcuId }, true, false)
-                }
-                className="w-full bg-[#111e34] text-sky-300 border border-slate-700 rounded px-2 py-1 font-bold"
-              >
-                <option value="Arduino Uno">Arduino Uno</option>
-                <option value="Arduino Nano">Arduino Nano</option>
-                <option value="Arduino Mega">Arduino Mega</option>
-                <option value="ESP32 DevKit V1">ESP32 DevKit V1</option>
-                <option value="NodeMCU / ESP8266">NodeMCU / ESP8266</option>
-              </select>
-            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              {/* Robot Preset */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Robot</label>
+                <select
+                  value={hardwareConfig.preset}
+                  onChange={(e) => {
+                    const preset = e.target.value as RobotHardwareConfig['preset'];
+                    const name =
+                      preset === 'line_follower'
+                        ? 'Robot Line Follower'
+                        : preset === 'maze_solver'
+                          ? 'Maze Solver Pro'
+                          : 'Robot Bebas';
+                    updateHardware({ preset, robotName: name });
+                  }}
+                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                >
+                  <option value="line_follower">🏎️ Line Follower</option>
+                  <option value="maze_solver">🧩 Maze Solver Pro</option>
+                  <option value="free_robot">🤖 Robot Bebas (Custom)</option>
+                </select>
+              </div>
 
-            {/* Jumlah Sensor Garis */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Jumlah Sensor Garis (0 / X)
-              </label>
-              <select
-                value={hardwareConfig.sensorCount}
-                onChange={(e) => {
-                  const sc = parseInt(e.target.value, 10) as SensorCount;
-                  const mode: SensorReadMode =
-                    sc >= 6 ? 'mux_4067' : hardwareConfig.sensorMode;
-                  updateHardware({ sensorCount: sc, sensorMode: mode }, true, true);
-                }}
-                className="w-full bg-[#111e34] text-emerald-300 border border-slate-700 rounded px-2 py-1 font-bold"
-              >
-                {[2, 4, 5, 6, 8, 12].map((n) => (
-                  <option key={n} value={n}>
-                    {n} Sensor (Pola: {'0'.repeat(Math.min(2, n)) + 'x'.repeat(Math.max(0, n - 4)) + (n > 2 ? '0'.repeat(Math.min(2, n - 2)) : '')})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Mode Pembacaan Sensor (Direct vs Multiplexer) */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Mode Baca Sensor / Mux
-              </label>
-              <select
-                value={hardwareConfig.sensorMode}
-                onChange={(e) =>
-                  updateHardware({ sensorMode: e.target.value as SensorReadMode }, true, false)
-                }
-                className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
-              >
-                <option value="mux_4067">Multiplexer CD74HC4067 (S0..S3 + SIG)</option>
-                <option value="mux_4051">Multiplexer 74HC4051 (S0..S2 + SIG)</option>
-                <option value="direct">Pin Sensor Langsung (Direct ADC/Digital)</option>
-              </select>
-            </div>
-
-            {/* Jenis Motor & RPM */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Motor DC</label>
-              <select
-                value={hardwareConfig.motorPreset}
-                onChange={(e) => {
-                  const mp = e.target.value as MotorPresetId;
-                  const info = MOTOR_PRESETS[mp];
-                  updateHardware(
-                    {
-                      motorPreset: mp,
-                      motorRpm: info.rpm,
-                      wheelDiameterMm: info.wheelMm,
-                    },
-                    false,
-                    true
-                  );
-                }}
-                className="w-full bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-bold"
-              >
-                {Object.entries(MOTOR_PRESETS).map(([id, m]) => (
-                  <option key={id} value={id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Input RPM Motor Manual */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Kecepatan Motor (RPM) & Ø Roda
-              </label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={50}
-                  max={3000}
-                  value={hardwareConfig.motorRpm}
+              {/* Microcontroller */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mikrokontroler</label>
+                <select
+                  value={hardwareConfig.mcu}
                   onChange={(e) =>
+                    updateHardware({ mcu: e.target.value as RobotMcuId }, true, false)
+                  }
+                  className="w-full bg-[#111e34] text-sky-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                >
+                  <option value="Arduino Uno">Arduino Uno</option>
+                  <option value="Arduino Nano">Arduino Nano</option>
+                  <option value="Arduino Mega">Arduino Mega</option>
+                  <option value="ESP32 DevKit V1">ESP32 DevKit V1</option>
+                  <option value="NodeMCU / ESP8266">NodeMCU / ESP8266</option>
+                </select>
+              </div>
+
+              {/* Jumlah Sensor Garis */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Jumlah Sensor Garis (0 / X)
+                </label>
+                <select
+                  value={hardwareConfig.sensorCount}
+                  onChange={(e) => {
+                    const sc = parseInt(e.target.value, 10) as SensorCount;
+                    const mode: SensorReadMode =
+                      sc >= 6 ? 'mux_4067' : hardwareConfig.sensorMode;
+                    updateHardware({ sensorCount: sc, sensorMode: mode }, true, true);
+                  }}
+                  className="w-full bg-[#111e34] text-emerald-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                >
+                  {[2, 4, 5, 6, 8, 12].map((n) => (
+                    <option key={n} value={n}>
+                      {n} Sensor (Pola: {'0'.repeat(Math.min(2, n)) + 'x'.repeat(Math.max(0, n - 4)) + (n > 2 ? '0'.repeat(Math.min(2, n - 2)) : '')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mode Pembacaan Sensor (Direct vs Multiplexer) */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Mode Baca Sensor / Mux
+                </label>
+                <select
+                  value={hardwareConfig.sensorMode}
+                  onChange={(e) =>
+                    updateHardware({ sensorMode: e.target.value as SensorReadMode }, true, false)
+                  }
+                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                >
+                  <option value="mux_4067">Multiplexer CD74HC4067 (S0..S3 + SIG)</option>
+                  <option value="mux_4051">Multiplexer 74HC4051 (S0..S2 + SIG)</option>
+                  <option value="direct">Pin Sensor Langsung (Direct ADC/Digital)</option>
+                </select>
+              </div>
+
+              {/* Jenis Motor & RPM */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Motor DC</label>
+                <select
+                  value={hardwareConfig.motorPreset}
+                  onChange={(e) => {
+                    const mp = e.target.value as MotorPresetId;
+                    const info = MOTOR_PRESETS[mp];
                     updateHardware(
                       {
-                        motorPreset: 'custom',
-                        motorRpm: Math.max(50, parseInt(e.target.value, 10) || 300),
+                        motorPreset: mp,
+                        motorRpm: info.rpm,
+                        wheelDiameterMm: info.wheelMm,
                       },
                       false,
                       true
-                    )
-                  }
-                  className="w-20 bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-mono font-bold"
-                />
-                <span className="text-[10px] text-slate-400">RPM</span>
-                <input
-                  type="number"
-                  min={20}
-                  max={120}
-                  value={hardwareConfig.wheelDiameterMm}
-                  onChange={(e) =>
-                    updateHardware({
-                      wheelDiameterMm: Math.max(20, parseInt(e.target.value, 10) || 34),
-                    })
-                  }
-                  className="w-14 bg-[#111e34] text-slate-200 border border-slate-700 rounded px-1.5 py-1 font-mono"
-                />
-                <span className="text-[10px] text-slate-400">mm</span>
+                    );
+                  }}
+                  className="w-full bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                >
+                  {Object.entries(MOTOR_PRESETS).map(([id, m]) => (
+                    <option key={id} value={id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
 
-            {/* Wheel Encoder Toggle */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Encoder Roda (L & R)
-              </label>
-              <select
-                value={hardwareConfig.hasEncoder ? 'yes' : 'no'}
-                onChange={(e) => updateHardware({ hasEncoder: e.target.value === 'yes' })}
-                className="w-full bg-[#111e34] text-cyan-300 border border-slate-700 rounded px-2 py-1 font-bold"
-              >
-                <option value="yes">✅ Ada Encoder (ms / Enc L / Enc R)</option>
-                <option value="no">❌ Tidak Ada Encoder (Hanya ms)</option>
-              </select>
-            </div>
-
-            {/* Ultrasonic Sensor Toggle */}
-            <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                Sensor Ultrasonic
-              </label>
-              <select
-                value={hardwareConfig.ultrasonicMode}
-                onChange={(e) =>
-                  updateHardware({ ultrasonicMode: e.target.value as UltrasonicMode })
-                }
-                className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
-              >
-                <option value="none">Tidak Pakai Ultrasonic</option>
-                <option value="front">1 Ultrasonic (Depan)</option>
-                <option value="three">3 Ultrasonic (Depan, Kiri, Kanan)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Pin Selector Row (PWM, Multiplexer S0..S3/SIG, Encoder Interrupt) */}
-          <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800 text-[11px]">
-            <span className="font-bold text-sky-400">🔌 Pilihan Pin Otomatis ({hardwareConfig.mcu}):</span>
-            <label className="flex items-center gap-1">
-              <span className="text-slate-400">PWM L:</span>
-              <select
-                value={hardwareConfig.pins.pwmL}
-                onChange={(e) =>
-                  updateHardware({ pins: { ...hardwareConfig.pins, pwmL: e.target.value } })
-                }
-                className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
-              >
-                {boardPins.pwmPins.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
-              <span className="text-slate-400">PWM R:</span>
-              <select
-                value={hardwareConfig.pins.pwmR}
-                onChange={(e) =>
-                  updateHardware({ pins: { ...hardwareConfig.pins, pwmR: e.target.value } })
-                }
-                className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
-              >
-                {boardPins.pwmPins.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </label>
-
-            {hardwareConfig.sensorMode !== 'direct' && (
-              <>
-                <span className="text-emerald-300 font-mono">
-                  Mux S0..S3: [{hardwareConfig.pins.muxS0}, {hardwareConfig.pins.muxS1}, {hardwareConfig.pins.muxS2}
-                  {hardwareConfig.sensorMode === 'mux_4067' ? `, ${hardwareConfig.pins.muxS3}` : ''}]
-                </span>
-                <label className="flex items-center gap-1">
-                  <span className="text-slate-400">Mux SIG:</span>
-                  <select
-                    value={hardwareConfig.pins.muxSig}
-                    onChange={(e) =>
-                      updateHardware({ pins: { ...hardwareConfig.pins, muxSig: e.target.value } })
-                    }
-                    className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono"
-                  >
-                    {boardPins.analogPins.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
+              {/* Input RPM Motor Manual */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Kecepatan Motor (RPM) & Ø Roda
                 </label>
-              </>
-            )}
-
-            {hardwareConfig.hasEncoder && (
-              <span className="text-cyan-300 font-mono">
-                Interrupt Enc L/R: [{hardwareConfig.pins.encLA}, {hardwareConfig.pins.encRA}]
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── DRAWER 3: Multi-PID 1..5 Configuration (Kp, Ki, Kd, dt) + Auto Combination ── */}
-      {activeDrawer === 'pid' && (
-        <div className="px-4 py-3 bg-[#12112a] border-b border-fuchsia-500/30 space-y-2.5 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="font-extrabold text-fuchsia-300">
-                🎛️ Kombinasi PID 1 – 5 (Menyesuaikan Motor {hardwareConfig.motorRpm} RPM & {hardwareConfig.sensorCount} Sensor)
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                updateHardware({
-                  pids: computeAutoPidProfiles(hardwareConfig.motorRpm, hardwareConfig.sensorCount),
-                })
-              }
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border border-fuchsia-500/40 font-bold text-[11px] cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5" /> Reset Kombinasi Auto PID 1–5
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-            {hardwareConfig.pids.map((pid, idx) => (
-              <div
-                key={pid.id}
-                className="bg-[#090d1a] border border-slate-800 rounded-lg p-2 space-y-1.5"
-              >
-                <div className="font-bold text-fuchsia-300 text-[11px] truncate">{pid.label}</div>
-                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                  <label className="flex flex-col">
-                    <span className="text-slate-400">Kp</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={pid.kp}
-                      onChange={(e) => {
-                        const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
-                        nextPids[idx] = { ...pid, kp: parseFloat(e.target.value) || 0 };
-                        updateHardware({ pids: nextPids });
-                      }}
-                      className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono font-bold"
-                    />
-                  </label>
-                  <label className="flex flex-col">
-                    <span className="text-slate-400">Ki</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={pid.ki}
-                      onChange={(e) => {
-                        const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
-                        nextPids[idx] = { ...pid, ki: parseFloat(e.target.value) || 0 };
-                        updateHardware({ pids: nextPids });
-                      }}
-                      className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono font-bold"
-                    />
-                  </label>
-                  <label className="flex flex-col">
-                    <span className="text-slate-400">Kd</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={pid.kd}
-                      onChange={(e) => {
-                        const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
-                        nextPids[idx] = { ...pid, kd: parseFloat(e.target.value) || 0 };
-                        updateHardware({ pids: nextPids });
-                      }}
-                      className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-sky-300 font-mono font-bold"
-                    />
-                  </label>
-                  <label className="flex flex-col">
-                    <span className="text-slate-400">dt (ms)</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={pid.dt}
-                      onChange={(e) => {
-                        const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
-                        nextPids[idx] = { ...pid, dt: Math.max(1, parseInt(e.target.value, 10) || 10) };
-                        updateHardware({ pids: nextPids });
-                      }}
-                      className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-purple-300 font-mono font-bold"
-                    />
-                  </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={50}
+                    max={3000}
+                    value={hardwareConfig.motorRpm}
+                    onChange={(e) =>
+                      updateHardware(
+                        {
+                          motorPreset: 'custom',
+                          motorRpm: Math.max(50, parseInt(e.target.value, 10) || 300),
+                        },
+                        false,
+                        true
+                      )
+                    }
+                    className="w-20 bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-400">RPM</span>
+                  <input
+                    type="number"
+                    min={20}
+                    max={120}
+                    value={hardwareConfig.wheelDiameterMm}
+                    onChange={(e) =>
+                      updateHardware({
+                        wheelDiameterMm: Math.max(20, parseInt(e.target.value, 10) || 34),
+                      })
+                    }
+                    className="w-14 bg-[#111e34] text-slate-200 border border-slate-700 rounded px-1.5 py-1 font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400">mm</span>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* ── MAIN 3D ARENA VIEWPORT ── */}
-      <div className="relative flex-1 w-full h-full min-h-[380px] overflow-hidden">
+              {/* Wheel Encoder Toggle */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Encoder Roda (L & R)
+                </label>
+                <select
+                  value={hardwareConfig.hasEncoder ? 'yes' : 'no'}
+                  onChange={(e) => updateHardware({ hasEncoder: e.target.value === 'yes' })}
+                  className="w-full bg-[#111e34] text-cyan-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                >
+                  <option value="yes">✅ Ada Encoder (ms / Enc L / Enc R)</option>
+                  <option value="no">❌ Tidak Ada Encoder (Hanya ms)</option>
+                </select>
+              </div>
+
+              {/* Ultrasonic Sensor Toggle */}
+              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Sensor Ultrasonic
+                </label>
+                <select
+                  value={hardwareConfig.ultrasonicMode}
+                  onChange={(e) =>
+                    updateHardware({ ultrasonicMode: e.target.value as UltrasonicMode })
+                  }
+                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                >
+                  <option value="none">Tidak Pakai Ultrasonic</option>
+                  <option value="front">1 Ultrasonic (Depan)</option>
+                  <option value="three">3 Ultrasonic (Depan, Kiri, Kanan)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Pin Selector Row (PWM, Multiplexer S0..S3/SIG, Encoder Interrupt) */}
+            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800 text-[11px]">
+              <span className="font-bold text-sky-400">🔌 Pilihan Pin Otomatis ({hardwareConfig.mcu}):</span>
+              <label className="flex items-center gap-1">
+                <span className="text-slate-400">PWM L:</span>
+                <select
+                  value={hardwareConfig.pins.pwmL}
+                  onChange={(e) =>
+                    updateHardware({ pins: { ...hardwareConfig.pins, pwmL: e.target.value } })
+                  }
+                  className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
+                >
+                  {boardPins.pwmPins.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-slate-400">PWM R:</span>
+                <select
+                  value={hardwareConfig.pins.pwmR}
+                  onChange={(e) =>
+                    updateHardware({ pins: { ...hardwareConfig.pins, pwmR: e.target.value } })
+                  }
+                  className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
+                >
+                  {boardPins.pwmPins.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
+
+              {hardwareConfig.sensorMode !== 'direct' && (
+                <>
+                  <span className="text-emerald-300 font-mono">
+                    Mux S0..S3: [{hardwareConfig.pins.muxS0}, {hardwareConfig.pins.muxS1}, {hardwareConfig.pins.muxS2}
+                    {hardwareConfig.sensorMode === 'mux_4067' ? `, ${hardwareConfig.pins.muxS3}` : ''}]
+                  </span>
+                  <label className="flex items-center gap-1">
+                    <span className="text-slate-400">Mux SIG:</span>
+                    <select
+                      value={hardwareConfig.pins.muxSig}
+                      onChange={(e) =>
+                        updateHardware({ pins: { ...hardwareConfig.pins, muxSig: e.target.value } })
+                      }
+                      className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono"
+                    >
+                      {boardPins.analogPins.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+
+              {hardwareConfig.hasEncoder && (
+                <span className="text-cyan-300 font-mono">
+                  Interrupt Enc L/R: [{hardwareConfig.pins.encLA}, {hardwareConfig.pins.encRA}]
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeDrawer === 'pid' && (
+          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#12112a]/95 backdrop-blur-md border border-fuchsia-500/40 shadow-2xl space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-extrabold text-fuchsia-300">
+                  🎛️ Kombinasi PID 1 – 5 (Menyesuaikan Motor {hardwareConfig.motorRpm} RPM & {hardwareConfig.sensorCount} Sensor)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateHardware({
+                      pids: computeAutoPidProfiles(hardwareConfig.motorRpm, hardwareConfig.sensorCount),
+                    })
+                  }
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border border-fuchsia-500/40 font-bold text-[11px] cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5" /> Reset Kombinasi Auto PID 1–5
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
+                >
+                  ✕ Tutup
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              {hardwareConfig.pids.map((pid, idx) => (
+                <div
+                  key={pid.id}
+                  className="bg-[#090d1a] border border-slate-800 rounded-lg p-2 space-y-1.5"
+                >
+                  <div className="font-bold text-fuchsia-300 text-[11px] truncate">{pid.label}</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                    <label className="flex flex-col">
+                      <span className="text-slate-400">Kp</span>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={pid.kp}
+                        onChange={(e) => {
+                          const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
+                          nextPids[idx] = { ...pid, kp: parseFloat(e.target.value) || 0 };
+                          updateHardware({ pids: nextPids });
+                        }}
+                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono font-bold"
+                      />
+                    </label>
+                    <label className="flex flex-col">
+                      <span className="text-slate-400">Ki</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={pid.ki}
+                        onChange={(e) => {
+                          const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
+                          nextPids[idx] = { ...pid, ki: parseFloat(e.target.value) || 0 };
+                          updateHardware({ pids: nextPids });
+                        }}
+                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono font-bold"
+                      />
+                    </label>
+                    <label className="flex flex-col">
+                      <span className="text-slate-400">Kd</span>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={pid.kd}
+                        onChange={(e) => {
+                          const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
+                          nextPids[idx] = { ...pid, kd: parseFloat(e.target.value) || 0 };
+                          updateHardware({ pids: nextPids });
+                        }}
+                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-sky-300 font-mono font-bold"
+                      />
+                    </label>
+                    <label className="flex flex-col">
+                      <span className="text-slate-400">dt (ms)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={pid.dt}
+                        onChange={(e) => {
+                          const nextPids = [...hardwareConfig.pids] as RobotHardwareConfig['pids'];
+                          nextPids[idx] = { ...pid, dt: Math.max(1, parseInt(e.target.value, 10) || 10) };
+                          updateHardware({ pids: nextPids });
+                        }}
+                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-purple-300 font-mono font-bold"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <canvas
           ref={viewportCanvasRef}
           width={1280}
@@ -1954,90 +2275,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           }`}
         />
 
-        {/* Top-Left Live Timer & Robot Model Card (Matches Reference Image!) */}
-        <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-slate-900/90 border border-slate-700/80 text-xs font-mono shadow-lg w-fit">
-            <span className="text-slate-400 font-bold">JEDA</span>
-            <span className="text-white font-extrabold text-sm">{simElapsedSec.toFixed(2)} s</span>
-            <span className="text-[10px] text-amber-400 border-l border-slate-700 pl-2">
-              {hardwareConfig.motorRpm} RPM
-            </span>
-          </div>
-
-          <div className="px-4 py-3 rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800/90 shadow-xl max-w-[330px]">
-            <div className="text-base font-extrabold text-white tracking-tight">
-              {hardwareConfig.robotName}
-            </div>
-            <div className="text-xs font-semibold text-amber-400 mt-0.5">
-              Model aktif · {hardwareConfig.sensorCount} sensor garis ·{' '}
-              {cameraMode === '2d_top' ? '2D' : '3D'}
-            </div>
-
-            {/* Live Sensor Bar ('0' = mendeteksi garis / dibaca, 'X' = tidak mendeteksi) */}
-            <div className="mt-2.5 flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-slate-400">Sensor:</span>
-              <div className="flex items-center gap-1">
-                {sensorReadings.map((active, i) => (
-                  <span
-                    key={i}
-                    className={`w-5 h-5 rounded flex items-center justify-center font-mono text-[11px] font-extrabold border ${
-                      active
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    {active ? '0' : 'X'}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Telemetry (Speed L/R, Encoder L/R, Ultrasonic) */}
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-slate-300">
-              <span>PWM L/R: {liveSpeeds.l} / {liveSpeeds.r}</span>
-              {hardwareConfig.hasEncoder && (
-                <span className="text-cyan-300">Enc L/R: {encoderLeft} / {encoderRight}</span>
-              )}
-              {hardwareConfig.ultrasonicMode !== 'none' && (
-                <span className="text-sky-300">Ultra: {ultrasonicCm} cm</span>
-              )}
-            </div>
-          </div>
-
-          {/* Active Running Step Index Banner */}
-          <div
-            className={`px-3.5 py-2 rounded-xl border text-xs font-bold shadow-lg flex items-center gap-2 transition-all ${
-              execStatus.stoppedByInterrupt
-                ? 'bg-rose-950/90 border-rose-500 text-rose-200 animate-pulse'
-                : isRunning
-                  ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
-                  : 'bg-slate-900/80 border-slate-800 text-slate-300'
-            }`}
-          >
-            {execStatus.stoppedByInterrupt ? (
-              <OctagonAlert className="w-4 h-4 text-rose-400 shrink-0" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            )}
-            <span>{execStatus.message}</span>
-          </div>
-        </div>
-
-        {/* Top-Right Fullscreen Button (Matches Reference Screenshot "Perbesar") */}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsFullscreen((f) => !f)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg cursor-pointer transition-transform active:scale-95"
-          >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            {isFullscreen ? 'Perkecil' : 'Perbesar'}
-          </button>
-        </div>
-
         {/* Placement Mode Helper Toast */}
         {placementTool !== 'none' && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-amber-500 text-slate-950 font-extrabold text-xs shadow-xl flex items-center gap-2">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-amber-500 text-slate-950 font-extrabold text-xs shadow-xl flex items-center gap-2">
             <span>
               {placementTool === 'start' && 'Klik pada lantai arena untuk memindahkan titik START'}
               {placementTool === 'finish' && 'Klik pada lantai arena untuk memindahkan titik FINIS'}
@@ -2053,6 +2293,75 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             </button>
           </div>
         )}
+      </div>
+
+      {/* ── KIDS-FRIENDLY BOTTOM TELEMETRY & SENSOR STATUS DOCK (Never covers the Arena Track!) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#0a1324] border-t border-slate-800/90 text-xs shrink-0">
+        {/* Left: Timer, RPM & Motor Speeds */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700/80 font-mono">
+            <span className="text-[10px] font-bold text-amber-400">⏱️ WAKTU</span>
+            <span className="text-white font-extrabold text-xs">{simElapsedSec.toFixed(2)}s</span>
+          </div>
+
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-300">
+            <span className="text-amber-300 font-bold">⚡ {hardwareConfig.motorRpm} RPM</span>
+            <span className="text-slate-600">|</span>
+            <span>PWM L/R: <b className="text-white">{liveSpeeds.l}</b> / <b className="text-white">{liveSpeeds.r}</b></span>
+            {hardwareConfig.hasEncoder && (
+              <>
+                <span className="text-slate-600">|</span>
+                <span className="text-cyan-300">Enc: <b>{encoderLeft}</b>/<b>{encoderRight}</b></span>
+              </>
+            )}
+            {hardwareConfig.ultrasonicMode !== 'none' && (
+              <>
+                <span className="text-slate-600">|</span>
+                <span className="text-sky-300">Ultra: <b>{ultrasonicCm}cm</b></span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Center: Kids-Friendly Live Sensor Array ('0' = Garis, 'X' = Luar Garis) */}
+        <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-3 py-1 rounded-xl">
+          <span className="text-[10px] font-extrabold text-sky-300 uppercase tracking-wide">
+            👀 Sensor ({hardwareConfig.sensorCount}):
+          </span>
+          <div className="flex items-center gap-1">
+            {sensorReadings.map((active, i) => (
+              <span
+                key={i}
+                title={active ? `Sensor ${i + 1}: 0 (Membaca Garis)` : `Sensor ${i + 1}: X (Tidak Membaca Garis)`}
+                className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[11px] font-extrabold border transition-all ${
+                  active
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-[0_0_8px_rgba(34,197,94,0.85)] scale-105'
+                    : 'bg-slate-800 text-rose-400 border-slate-700'
+                }`}
+              >
+                {active ? '0' : 'X'}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Active Running Block / Step Index Status */}
+        <div
+          className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold flex items-center gap-1.5 transition-all ${
+            execStatus.stoppedByInterrupt
+              ? 'bg-rose-950/90 border-rose-500 text-rose-200 animate-pulse'
+              : isRunning
+                ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
+                : 'bg-slate-900 border-slate-800 text-slate-300'
+          }`}
+        >
+          {execStatus.stoppedByInterrupt ? (
+            <OctagonAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          )}
+          <span className="truncate max-w-[340px]">{execStatus.message}</span>
+        </div>
       </div>
     </div>
   );

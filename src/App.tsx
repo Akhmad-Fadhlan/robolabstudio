@@ -8415,32 +8415,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
             <div className={`absolute inset-0 p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
-              {/* Simulator Dedicated Toolbar */}
-              <div className={`flex flex-wrap items-center justify-between gap-2 pb-2.5 select-none border-b mb-2.5 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Monitor className={`w-5 h-5 ${themeMode === 'light' ? 'text-cyan-600' : 'text-cyan-400'}`} />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`} style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
-                          {t(language, 'simulator', 'title')}
-                        </h2>
-                        <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                          Workspace Simulator Mandiri
-                        </span>
-                      </div>
-                      <p className={`text-[10px] ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
-                        Kode di halaman ini terpisah penuh dari kode Real Device (IDE).
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* TOP PROMINENT SIMULATOR MODE SWITCHER: Robot 3D vs Rangkaian */}
+              {/* Simulator Dedicated Toolbar (Single Compact Kids-Friendly Bar) */}
+              <div className={`flex flex-wrap items-center justify-between gap-2 pb-2 select-none border-b mb-2 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
+                <div className="flex items-center gap-2">
+                  {/* PROMINENT SIMULATOR MODE SWITCHER: Robot 3D vs Rangkaian */}
                   <div className={`flex items-center p-1 rounded-xl border shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-300' : 'bg-slate-900/95 border-slate-700/80'}`}>
                     <button
                       type="button"
                       onClick={() => setSimulatorMode('robot')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                         simulatorMode === 'robot'
                           ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/30'
                           : themeMode === 'light'
@@ -8448,15 +8431,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`}
                     >
-                      <span>🤖 Simulator Robot 3D</span>
-                      <span className="px-1.5 py-0.5 text-[9px] rounded bg-black/25 text-white font-bold">
-                        Track PDF + PID 1-5
+                      <span>🤖 Arena Robot 3D</span>
+                      <span className="px-1.5 py-0.5 text-[9px] rounded bg-black/25 text-white font-bold hidden xl:inline">
+                        Line Follower • PID 1-5
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setSimulatorMode('circuit')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                         simulatorMode === 'circuit'
                           ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30'
                           : themeMode === 'light'
@@ -8464,21 +8447,92 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`}
                     >
-                      <span>🔌 Simulator Rangkaian</span>
+                      <span>🔌 Rangkaian Sirkuit</span>
+                    </button>
+                  </div>
+
+                  {/* Layout Mode Switcher */}
+                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
+                    <button
+                      onClick={() => setSimViewMode('blockly')}
+                      title="Tampilkan Visual Blockly + Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'blockly'
+                          ? 'bg-purple-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Blocks className="w-3.5 h-3.5" /> 🧩 Blok + Sim
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('split')}
+                      title="Tampilkan Blok + Kode + Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'split'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Code className="w-3.5 h-3.5" /> Split
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('code')}
+                      title="Tampilkan Code Editor + Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'code'
+                          ? 'bg-sky-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Kode + Sim
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('circuit')}
+                      title="Layar Penuh Arena / Rangkaian Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'circuit'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Monitor className="w-3.5 h-3.5" /> Full Arena
                     </button>
                   </div>
                 </div>
 
-                {/* Controls: Simulator Board, Language File, View Mode, Run/Stop, Reset */}
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Right Controls: Language File, Board, Run/Stop, Reset */}
+                <div className="flex items-center gap-2">
+                  {/* Simulator File / Language Switcher */}
+                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
+                    <button
+                      onClick={() => setSimActiveFile('firmware/main.ino')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        simActiveFile === 'firmware/main.ino'
+                          ? 'bg-cyan-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ⚡ C++ (.ino)
+                    </button>
+                    <button
+                      onClick={() => setSimActiveFile('python/main.py')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        simActiveFile === 'python/main.py'
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🐍 Python (.py)
+                    </button>
+                  </div>
+
                   {/* Simulator Virtual Board Selector */}
-                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs ${themeMode === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900/90 border-slate-700/80 text-slate-200'}`}>
+                  <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs ${themeMode === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900/90 border-slate-700/80 text-slate-200'}`}>
                     <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="text-[10px] font-semibold text-slate-400">Board Sim:</span>
                     <select
                       value={simBoard}
                       onChange={(e) => setSimBoard(e.target.value)}
-                      className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer"
+                      className="bg-transparent text-[11px] font-bold focus:outline-none cursor-pointer"
                     >
                       <option value="ESP32 DevKit V1" className="bg-slate-900 text-white">ESP32 DevKit V1</option>
                       <option value="ESP32-CAM" className="bg-slate-900 text-white">ESP32-CAM</option>
@@ -8492,85 +8546,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     </select>
                   </div>
 
-                  {/* Simulator File / Language Switcher */}
-                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
-                    <button
-                      onClick={() => setSimActiveFile('firmware/main.ino')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                        simActiveFile === 'firmware/main.ino'
-                          ? 'bg-cyan-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      ⚡ C++ (main.ino)
-                    </button>
-                    <button
-                      onClick={() => setSimActiveFile('python/main.py')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                        simActiveFile === 'python/main.py'
-                          ? 'bg-amber-500 text-slate-950 shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      🐍 Python (main.py)
-                    </button>
-                  </div>
-
-                  {/* Layout Mode Switcher */}
-                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
-                    <button
-                      onClick={() => setSimViewMode('split')}
-                      title="Tampilkan Editor Kode/Blok + Rangkaian Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'split'
-                          ? 'bg-indigo-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Code className="w-3 h-3" /> Split Kode + Sim
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('blockly')}
-                      title="Tampilkan Visual Blockly + Rangkaian Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'blockly'
-                          ? 'bg-purple-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Blocks className="w-3 h-3" /> Blok + Sim
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('code')}
-                      title="Tampilkan Monaco Code Editor + Rangkaian Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'code'
-                          ? 'bg-sky-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <FileText className="w-3 h-3" /> Editor + Sim
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('circuit')}
-                      title="Layar Penuh Rangkaian Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'circuit'
-                          ? 'bg-emerald-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Monitor className="w-3 h-3" /> Full Rangkaian
-                    </button>
-                  </div>
-
                   {/* Run / Stop Simulator Button */}
                   {isRunning ? (
                     <button
                       onClick={handleStopCode}
-                      className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      className="px-4 py-1.5 text-xs font-extrabold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
                     >
-                      <Square className="w-3.5 h-3.5 fill-current" /> Hentikan Simulasi
+                      <Square className="w-3.5 h-3.5 fill-current" /> Stop Robot
                     </button>
                   ) : (
                     <button
@@ -8582,9 +8564,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           handleRunCode(codeToRun);
                         }
                       }}
-                      className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      className="px-4 py-1.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" /> Jalankan Simulasi
+                      <Play className="w-3.5 h-3.5 fill-current" /> Jalankan Robot!
                     </button>
                   )}
 
@@ -8600,7 +8582,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         true
                       );
                     }}
-                    title="Reset Kode Simulator ke Default"
+                    title="Reset Kode & Posisi Simulator ke Awal"
                     className={`p-1.5 rounded-xl border transition cursor-pointer ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -8615,7 +8597,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         : themeMode === 'light' ? 'bg-white text-slate-600 border-slate-300' : 'bg-slate-900 text-slate-400 border-slate-700'
                     }`}
                   >
-                    <TerminalIcon className="w-3 h-3" /> Log Simulasi
+                    <TerminalIcon className="w-3 h-3" /> Log
                   </button>
                 </div>
               </div>
@@ -8624,7 +8606,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               <div className="flex-1 min-w-0 min-h-0 flex gap-3 overflow-hidden">
                 {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace */}
                 {simViewMode !== 'circuit' && (
-                  <div className="w-[46%] min-w-[340px] max-w-[680px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
+                  <div className="w-[42%] min-w-[320px] max-w-[600px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
