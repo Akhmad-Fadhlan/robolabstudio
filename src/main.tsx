@@ -248,9 +248,22 @@ function AuthGuard() {
 
 
 // ─── Mount ─────────────────────────────────────────────────────────────────
+if (
+  typeof window !== 'undefined' &&
+  window.opener &&
+  window.name === 'robolab_google_oauth' &&
+  window.location.hash.includes('access_token=')
+) {
+  try {
+    window.opener.postMessage({ type: 'ROBOLAB_OAUTH_HASH', hash: window.location.hash }, '*');
+    window.close();
+  } catch (_) {}
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthGuard />
   </StrictMode>,
 )
+
 

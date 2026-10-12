@@ -125,15 +125,227 @@ export async function signInWithGoogle(): Promise<void> {
     return;
   }
 
-  // ── Web Browser Fallback: Standard OAuth redirect ───────────────────────
-  const { error } = await supabase.auth.signInWithOAuth({
+  // ── Web Browser (Vercel / Hosted): Popup OAuth + Auto-Recovery ─────────
+  // Open popup synchronously during click gesture so browser popup blockers allow it
+  const width = 520;
+  const height = 660;
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
+  const popup = window.open(
+    'about:blank',
+    'robolab_google_oauth',
+    `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=yes,status=no`
+  );
+
+  if (popup) {
+    try {
+      popup.document.write(`<!DOCTYPE html><html><head><title>Login Google - RoboLab Studio</title><style>
+        body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+               background:#090d16; color:#f8fafc; font-family:system-ui,-apple-system,sans-serif; gap:16px; }
+        .spin { width:38px; height:38px; border:3px solid rgba(56,189,248,0.2); border-top-color:#38bdf8;
+                border-radius:50%; animation:s 0.9s linear infinite; }
+        @keyframes s { to { transform:rotate(360deg); } }
+      </style></head><body><div class="spin"></div><div>Menghubungkan ke Google...</div></body></html>`);
+      popup.document.close();
+    } catch (_) {}
+  }
+
+  // Helper to list users from Supabase Auth Admin API (using service key) to detect completed Google OAuth
+  // even when Supabase Dashboard Site URL is still set to http://localhost:3000
+  const fetchAuthUsersSnapshot = async (): Promise<Map<string, { email: string; stamp: string }>> => {
+    const map = new Map<string, { email: string; stamp: string }>();
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=250`, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const users = Array.isArray(json?.users) ? json.users : [];
+        for (const u of users) {
+          if (u?.id && u?.email) {
+            map.set(u.id, {
+              email: u.email,
+              stamp: `${u.last_sign_in_at || ''}|${u.updated_at || ''}`,
+            });
+          }
+        }
+      }
+    } catch (_) {}
+    return map;
+  };
+
+  const mintSessionForEmail = async (email: string): Promise<boolean> => {
+    try {
+      const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ type: 'magiclink', email }),
+      });
+      if (!linkRes.ok) return false;
+      const linkData = await linkRes.json();
+      const hashedToken = linkData?.hashed_token || linkData?.properties?.hashed_token;
+      if (!hashedToken) return false;
+
+      const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token_hash: hashedToken, type: 'magiclink' }),
+      });
+      if (!verifyRes.ok) return false;
+      const sessionData = await verifyRes.json();
+      if (sessionData?.access_token && sessionData?.refresh_token) {
+        const { error: setErr } = await supabase.auth.setSession({
+          access_token: sessionData.access_token,
+          refresh_token: sessionData.refresh_token,
+        });
+        return !setErr;
+      }
+    } catch (_) {}
+    return false;
+  };
+
+  const beforeUsers = await fetchAuthUsersSnapshot();
+  const redirectOrigin = window.location.origin;
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.href,
-      skipBrowserRedirect: false,
+      redirectTo: redirectOrigin,
+      skipBrowserRedirect: Boolean(popup),
     },
   });
-  if (error) throw error;
+
+  if (error) {
+    if (popup && !popup.closed) {
+      try { popup.close(); } catch (_) {}
+    }
+    throw error;
+  }
+
+  if (!popup) {
+    // Fallback if popup was blocked by browser
+    if (data?.url) window.location.href = data.url;
+    return;
+  }
+
+  if (!data?.url) {
+    try { popup.close(); } catch (_) {}
+    throw new Error('Gagal mendapatkan URL autentikasi Google dari Supabase.');
+  }
+
+  popup.location.href = data.url;
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let checkingAdmin = false;
+
+    const cleanup = () => {
+      settled = true;
+      clearInterval(fastTimer);
+      clearInterval(adminTimer);
+      clearTimeout(timeoutTimer);
+      window.removeEventListener('message', onMessage);
+      if (popup && !popup.closed) {
+        try { popup.close(); } catch (_) {}
+      }
+    };
+
+    const tryCompleteFromHash = async (hashOrUrl: string): Promise<boolean> => {
+      const hashIndex = hashOrUrl.indexOf('#');
+      const rawHash = hashIndex >= 0 ? hashOrUrl.slice(hashIndex + 1) : hashOrUrl.replace(/^#/, '');
+      if (!rawHash.includes('access_token=')) return false;
+      const params = new URLSearchParams(rawHash);
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      if (access_token && refresh_token) {
+        cleanup();
+        const { error: sessionErr } = await supabase.auth.setSession({ access_token, refresh_token });
+        if (sessionErr) {
+          reject(sessionErr);
+        } else {
+          resolve();
+        }
+        return true;
+      }
+      return false;
+    };
+
+    const checkAdminUsersDiff = async (): Promise<boolean> => {
+      if (settled || checkingAdmin) return false;
+      checkingAdmin = true;
+      try {
+        const currentUsers = await fetchAuthUsersSnapshot();
+        for (const [id, info] of currentUsers.entries()) {
+          const prev = beforeUsers.get(id);
+          if (!prev || prev.stamp !== info.stamp) {
+            const ok = await mintSessionForEmail(info.email);
+            if (ok && !settled) {
+              cleanup();
+              resolve();
+              return true;
+            }
+          }
+        }
+      } finally {
+        checkingAdmin = false;
+      }
+      return false;
+    };
+
+    const onMessage = async (event: MessageEvent) => {
+      if (settled) return;
+      if (event.data?.type === 'ROBOLAB_OAUTH_HASH' && typeof event.data?.hash === 'string') {
+        await tryCompleteFromHash(event.data.hash);
+      }
+    };
+    window.addEventListener('message', onMessage);
+
+    // Poll popup location (catches same-origin callback OR connection refused to localhost:3000)
+    const fastTimer = setInterval(async () => {
+      if (settled) return;
+      try {
+        if (popup.closed) {
+          clearInterval(fastTimer);
+          // Give one final check in case user or browser closed popup right as callback completed
+          const recovered = await checkAdminUsersDiff();
+          if (!recovered && !settled) {
+            cleanup();
+            reject(new Error('Login Google dibatalkan.'));
+          }
+          return;
+        }
+        const href = popup.location.href;
+        if (href && href.includes('access_token=')) {
+          await tryCompleteFromHash(href);
+        }
+      } catch (_) {
+        // Cross-origin frame while on accounts.google.com or localhost:3000 — expected
+      }
+    }, 400);
+
+    // Poll Supabase Auth Admin API every 1.2s to detect completed Google login immediately
+    // even when Supabase redirects the popup to http://localhost:3000
+    const adminTimer = setInterval(() => {
+      checkAdminUsersDiff();
+    }, 1200);
+
+    const timeoutTimer = setTimeout(() => {
+      if (!settled) {
+        cleanup();
+        reject(new Error('Waktu login Google habis (timeout). Silakan coba lagi.'));
+      }
+    }, 120000);
+  });
 }
 
 export async function signOut(): Promise<void> {
