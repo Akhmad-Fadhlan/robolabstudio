@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *, .theme-dark, .theme-dark *));
 
 
 /* ============================================================
@@ -1919,13 +1920,13 @@ pattern path {
 
 html body.light .blocklyToolboxDiv,
 .theme-light .blocklyToolboxDiv {
-  background-color: #ffffff !important;
+  background-color: #f8fafc !important;
   border-right: 1px solid #e2e8f0 !important;
 }
 
 html body:not(.light) .blocklyToolboxDiv,
 .theme-dark .blocklyToolboxDiv {
-  background-color: #0f172a !important;
+  background-color: #0b1120 !important;
   border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
@@ -1933,6 +1934,67 @@ html body:not(.light) .blocklyToolboxDiv,
   box-sizing: border-box !important;
   padding-top: 6px !important;
   padding-bottom: 32px !important;
+}
+
+/* Kids-friendly Toolbox Header & Search Bar */
+.codekit-toolbox-header {
+  padding: 10px 10px 6px 10px !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+html body.light .codekit-toolbox-header,
+.theme-light .codekit-toolbox-header {
+  background: rgba(248, 250, 252, 0.92) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+}
+
+html body:not(.light) .codekit-toolbox-header,
+.theme-dark .codekit-toolbox-header {
+  background: rgba(11, 17, 32, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.codekit-header-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  color: #6366f1 !important;
+  margin-bottom: 6px !important;
+  padding: 0 2px !important;
+}
+
+.codekit-search-input-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 10px !important;
+  border-radius: 10px !important;
+  background: rgba(148, 163, 184, 0.12) !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+}
+
+.codekit-search-icon {
+  width: 13px !important;
+  height: 13px !important;
+  color: #94a3b8 !important;
+  flex-shrink: 0 !important;
+}
+
+.codekit-search-input {
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
 }
 
 /* Obliterate native Blockly vertical color bars & tree icons */
@@ -1958,81 +2020,61 @@ html body:not(.light) .blocklyToolboxDiv,
   opacity: 0 !important;
 }
 
-.blocklyToolboxDiv .blocklyTreeRow,
-.blocklyToolboxDiv .blocklyToolboxCategory,
-.blocklyToolboxDiv [role="treeitem"],
-.blocklyToolboxDiv .blocklyTreeLabel,
-.blocklyToolboxDiv .blocklyToolboxCategoryLabel {
+/* Reset inner wrapper divs inside [role="treeitem"] so Blockly's 8px border-left never shows */
+.blocklyToolboxDiv [role="treeitem"] > div:not(.codekit-icon-box):not(.cat-active-bar),
+.blocklyToolboxDiv [role="treeitem"] .blocklyTreeRow,
+.blocklyToolboxDiv [role="treeitem"] .blocklyTreeRowContentContainer {
+  border: none !important;
   border-left: none !important;
   border-left-width: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+  transform: none !important;
 }
 
-/* Category Row Layout */
-.blocklyToolboxDiv .blocklyTreeRow,
-.blocklyToolboxDiv .blocklyToolboxCategory,
+/* Kids-Friendly Category Card Layout */
 .blocklyToolboxDiv [role="treeitem"] {
   position: relative !important;
   display: flex !important;
   align-items: center !important;
-  height: 38px !important;
-  min-height: 38px !important;
-  max-height: 38px !important;
-  padding: 0 10px 0 8px !important;
-  margin: 2px 8px !important;
-  border-radius: 8px !important;
-  border: 1px solid transparent !important;
-  background-color: transparent !important;
-  box-shadow: none !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  padding: 0 10px 0 7px !important;
+  margin: 5px 10px !important;
+  border-radius: 12px !important;
   box-sizing: border-box !important;
   cursor: pointer !important;
   user-select: none !important;
-  transition: background-color 0.15s ease, border-color 0.15s ease !important;
-  transform: none !important;
+  transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
-/* Hover state */
-html body.light .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected):hover,
-html body.light .blocklyToolboxDiv .blocklyToolboxCategory:not(.blocklyToolboxCategorySelected):hover {
-  background-color: rgba(0, 0, 0, 0.04) !important;
-  border-color: transparent !important;
+.blocklyToolboxDiv [role="treeitem"]:hover {
+  transform: translateY(-1px) scale(1.015) !important;
+  filter: brightness(1.08) !important;
 }
 
-html body:not(.light) .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected):hover,
-html body:not(.light) .blocklyToolboxDiv .blocklyToolboxCategory:not(.blocklyToolboxCategorySelected):hover {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border-color: transparent !important;
-}
-
-/* Selected Active State */
-.blocklyToolboxDiv .blocklyTreeSelected,
-.blocklyToolboxDiv .blocklyToolboxCategorySelected {
-  background-color: var(--cat-selected-bg, rgba(76, 151, 255, 0.12)) !important;
-  border-color: var(--cat-border, rgba(76, 151, 255, 0.25)) !important;
-}
-
-/* Active Accent Bar */
+/* Active Accent Bar hidden in favor of full colorful card glow */
 .blocklyToolboxDiv .cat-active-bar {
-  display: none;
-}
-
-.blocklyToolboxDiv .blocklyTreeSelected .cat-active-bar,
-.blocklyToolboxDiv .blocklyToolboxCategorySelected .cat-active-bar {
-  display: block !important;
-  position: absolute !important;
-  left: 0 !important;
-  top: 6px !important;
-  bottom: 6px !important;
-  width: 3.5px !important;
-  border-radius: 0 4px 4px 0 !important;
-  background-color: var(--cat-color, #4c97ff) !important;
+  display: none !important;
 }
 
 /* Category Label Typography */
-.blocklyToolboxDiv .blocklyTreeRow .blocklyTreeLabel,
-.blocklyToolboxDiv .blocklyToolboxCategory .blocklyToolboxCategoryLabel {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 500 !important;
+.blocklyToolboxDiv [role="treeitem"] .blocklyTreeLabel,
+.blocklyToolboxDiv [role="treeitem"] .blocklyToolboxCategoryLabel {
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
   line-height: 1.2 !important;
   padding-left: 0 !important;
   flex: 1 !important;
@@ -2041,64 +2083,45 @@ html body:not(.light) .blocklyToolboxDiv .blocklyToolboxCategory:not(.blocklyToo
   text-overflow: ellipsis !important;
   background: transparent !important;
   background-color: transparent !important;
-  transition: color 0.15s ease, font-weight 0.15s ease !important;
-}
-
-html body.light .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected) .blocklyTreeLabel {
-  color: #334155 !important;
-}
-
-html body.light .blocklyToolboxDiv .blocklyTreeSelected .blocklyTreeLabel {
-  color: #0f172a !important;
-  font-weight: 600 !important;
-}
-
-html body:not(.light) .blocklyToolboxDiv .blocklyTreeRow:not(.blocklyTreeSelected) .blocklyTreeLabel {
-  color: #cbd5e1 !important;
-}
-
-html body:not(.light) .blocklyToolboxDiv .blocklyTreeSelected .blocklyTreeLabel {
-  color: #ffffff !important;
-  font-weight: 600 !important;
+  border: none !important;
 }
 
 /* Category Icon Box */
 .codekit-icon-box {
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  border-radius: 6px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  border-radius: 9px !important;
   margin-right: 10px !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
-  transition: transform 0.15s ease !important;
+  transition: transform 0.18s ease !important;
 }
 
-.blocklyTreeSelected .codekit-icon-box,
-.blocklyToolboxCategorySelected .codekit-icon-box {
-  transform: scale(1.02) !important;
+.blocklyToolboxDiv [role="treeitem"]:hover .codekit-icon-box {
+  transform: scale(1.06) rotate(-3deg) !important;
 }
 
 /* Section Header Labels */
 .cat-section-header {
-  font-size: 10.5px !important;
-  font-weight: 700 !important;
+  font-family: 'Outfit', 'Inter', sans-serif !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-  padding: 12px 12px 4px 12px !important;
+  letter-spacing: 0.1em !important;
+  padding: 12px 14px 3px 14px !important;
   user-select: none !important;
   pointer-events: none !important;
 }
 
 html body.light .cat-section-header {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 
 html body:not(.light) .cat-section-header {
-  color: #64748b !important;
+  color: #94a3b8 !important;
 }
 
 /* Scrollbar polish */

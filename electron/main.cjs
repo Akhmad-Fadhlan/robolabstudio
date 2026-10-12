@@ -386,6 +386,20 @@ const safeSend = (event, channel, data) => {
 
 let lastCLISterr = '';
 
+const purgeBuildDirs = () => {
+  try {
+    const tmp = os.tmpdir();
+    const files = fs.readdirSync(tmp);
+    files.forEach(f => {
+      if (f.startsWith('RoboLabBuild_')) {
+        try {
+          fs.rmSync(path.join(tmp, f), { recursive: true, force: true });
+        } catch (_) {}
+      }
+    });
+  } catch (_) {}
+};
+
 const runArduinoCLI = (args, event, timeoutMs) => {
   return new Promise((resolve) => {
     let resolved = false;
@@ -470,7 +484,7 @@ const runArduinoCLI = (args, event, timeoutMs) => {
           if (/Hard resetting|Leaving\.\.\./i.test(line)) {
             triggerSuccess('upload: esptool done');
           }
-          if (/Failed to connect|No serial data/i.test(line)) {
+          if (/Failed to connect|No serial data|A fatal esptool\.py error occurred|Cannot configure port/i.test(line)) {
             if (completionTimer) clearTimeout(completionTimer);
             completionTimer = setTimeout(() => triggerFailure('upload error'), 2000);
           }
@@ -499,6 +513,24 @@ const runArduinoCLI = (args, event, timeoutMs) => {
       const cliEnv = {
         ...process.env,
       };
+      try {
+        const fqbnIdx = args.indexOf('--fqbn');
+        const fqbnArg = fqbnIdx !== -1 && args[fqbnIdx + 1] ? args[fqbnIdx + 1] : '';
+        const vendor = (fqbnArg || '').split(':')[0] || '';
+        const localAppData = process.env.LOCALAPPDATA || '';
+        const candidateDataDirs = [
+          localAppData ? path.join(localAppData, 'Arduino15') : '',
+          path.join(__dirname, '..', 'resources', 'arduino-data'),
+          'C:\\KidsBlock Desktop\\resources\\tools\\Arduino',
+        ].filter(Boolean);
+        for (const d of candidateDataDirs) {
+          if (vendor && fs.existsSync(path.join(d, 'packages', vendor, 'hardware'))) {
+            cliEnv.ARDUINO_DIRECTORIES_DATA = d;
+            cliEnv.ARDUINO_DIRECTORIES_DOWNLOADS = path.join(d, 'staging');
+            break;
+          }
+        }
+      } catch (_) {}
 
       const childProc = spawn(cliPath, args, { windowsHide: true, env: cliEnv });
 
@@ -549,7 +581,9 @@ const runArduinoCLI = (args, event, timeoutMs) => {
         if (stderrLineBuf.trim()) processLine(stderrLineBuf);
 
         if (!resolved) {
-          const success = code === 0;
+          const combinedOut = `${stdoutBuffer}\n${stderrBuffer}`;
+          const hasFatalUploadErr = isUpload && /A fatal esptool\.py error occurred|A fatal error occurred|Cannot configure port|Failed to connect to ESP|Timed out waiting for packet/i.test(combinedOut);
+          const success = code === 0 && !hasFatalUploadErr;
           if (success) {
             safeSend(event, 'arduino-log', { text: '✅ Kompilasi/Proses selesai dengan sukses!', type: 'success' });
           } else {
@@ -840,8 +874,8 @@ ipcMain.handle('arduino-upload', async (event, payload = {}) => {
     } else if (board === 'Arduino Mega' || bLower.includes('mega')) {
       fqbn = 'arduino:avr:mega';
     } else if (board === 'ESP32 DevKit V1' || bLower.includes('esp32')) {
-      fqbn = 'esp32:esp32:esp32:PartitionScheme=huge_app,UploadSpeed=115200';
-    } else if (board.includes('ESP8266') || bLower.includes('nodemcu') || bLower.includes('esp8266')) {
+      fqbn = 'esp32:esp32:esp32:FlashMode=dio,PartitionScheme=huge_app';
+    } else if (board.includes('ESP8266') || bLower.includes('nodemcu') || bLower.includes('esp8266') || bLower.includes('lolin') || bLower.includes('wemos')) {
       fqbn = 'esp8266:esp8266:nodemcuv2';
     } else if (bLower.includes('pico') || bLower.includes('rp2040')) {
       fqbn = 'rp2040:rp2040:rp2040';
@@ -1023,9 +1057,51 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
     const boardModel = (fqbn.split(':')[2] || 'gen').split(':')[0];
     const boardSafe = `${arch}_${boardModel}`.replace(/[^a-zA-Z0-9]/g, '_');
     const buildDir = path.join(os.tmpdir(), `RoboLabBuild_${boardSafe}`);
-    if (!fs.existsSync(buildDir)) {
-      fs.mkdirSync(buildDir, { recursive: true });
-    }
+    const ensureElectronBuildDir = () => {
+      try {
+        if (!fs.existsSync(buildDir)) fs.mkdirSync(buildDir, { recursive: true });
+        const coreSub = path.join(buildDir, 'core');
+        const ldHSub = path.join(buildDir, 'ld_h');
+        const sketchSub = path.join(buildDir, 'sketch');
+        if (!fs.existsSync(coreSub)) fs.mkdirSync(coreSub, { recursive: true });
+        if (!fs.existsSync(ldHSub)) fs.mkdirSync(ldHSub, { recursive: true });
+        if (!fs.existsSync(sketchSub)) fs.mkdirSync(sketchSub, { recursive: true });
+        if (fqbn.includes('esp8266')) {
+          const targetLdH = path.join(ldHSub, 'local.eagle.flash.ld.h');
+          if (!fs.existsSync(targetLdH)) {
+            const candidateDataDirs = [
+              localAppDataForConfig ? path.join(localAppDataForConfig, 'Arduino15') : '',
+              path.join(__dirname, '..', 'resources', 'arduino-data'),
+              'C:\\KidsBlock Desktop\\resources\\tools\\Arduino',
+            ].filter(Boolean);
+            for (const d of candidateDataDirs) {
+              const hwDir = path.join(d, 'packages', 'esp8266', 'hardware', 'esp8266');
+              if (fs.existsSync(hwDir)) {
+                for (const ver of fs.readdirSync(hwDir)) {
+                  const sdkLdDir = path.join(hwDir, ver, 'tools', 'sdk', 'ld');
+                  const c1 = path.join(sdkLdDir, 'eagle.flash.4m2m.ld');
+                  const c2 = path.join(sdkLdDir, 'eagle.flash.4m.ld');
+                  const srcLd = fs.existsSync(c1) ? c1 : fs.existsSync(c2) ? c2 : '';
+                  if (srcLd) {
+                    fs.copyFileSync(srcLd, targetLdH);
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    };
+    ensureElectronBuildDir();
+
+    // Reload hash cache from disk in case Web Compiler updated it
+    try {
+      if (fs.existsSync(_hashCachePath)) {
+        Object.assign(lastCompiledHashes, JSON.parse(fs.readFileSync(_hashCachePath, 'utf-8')));
+      }
+    } catch (_) {}
 
     // Check code changes to see if we can skip compilation
     const codeHash = crypto.createHash('md5').update(finalCode).digest('hex');
@@ -1051,12 +1127,17 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 
     // 1. Compile
     if (shouldCompile) {
-      // Auto-close KidsBlock Desktop background processes on Windows to free RAM and COM port locks
+      // Auto-close KidsBlock Desktop or zombie compiler processes on Windows to free RAM and COM port locks
       if (process.platform === 'win32') {
         try {
           const { execSync } = require('child_process');
           execSync('taskkill /IM "KidsBlock Desktop.exe" /F /T', { stdio: 'ignore' });
           execSync('taskkill /IM "KidsBlock.exe" /F /T', { stdio: 'ignore' });
+        } catch (_) {}
+        try {
+          const { execSync } = require('child_process');
+          execSync('taskkill /IM "cc1plus.exe" /F /T', { stdio: 'ignore' });
+          execSync('taskkill /IM "xtensa-lx106-elf-g++.exe" /F /T', { stdio: 'ignore' });
         } catch (_) {}
       }
 
@@ -1073,6 +1154,7 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
           console.warn('[RoboLab] Failed to clean stale binaries in buildDir:', e.message);
         }
       }
+      ensureElectronBuildDir();
 
       // Log the first 100 characters of the code being compiled to verify what code is actually being built
       const cleanSnippet = finalCode.trim().substring(0, 100).replace(/\r?\n/g, ' ');
@@ -1080,16 +1162,33 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 
       safeSend(event, 'arduino-log', { text: 'Compiling sketch...', type: 'info' });
       const cpuCount = os.cpus().length || 4;
-      const jobCount = Math.min(4, Math.max(2, Math.floor(cpuCount / 2)));
+      const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
+      const hasPrecompiledCore = fs.existsSync(path.join(buildDir, 'core', 'core.a'));
+      let jobCount = Math.min(4, Math.max(2, Math.floor(cpuCount / 2)));
+      if (freeMemMB < 1300) {
+        jobCount = 1;
+      } else if (isESP8266 || freeMemMB < 2400 || !hasPrecompiledCore) {
+        jobCount = Math.min(2, jobCount);
+      }
 
       const compileArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', String(jobCount), '--warnings', 'none', '--verbose', ...configArgs, tempDir];
+      const singleJobArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', '1', '--warnings', 'none', ...configArgs, tempDir];
       let compileSuccess = await runArduinoCLI(compileArgs, event);
 
-      // Auto-retry with single job if first compile failed without a code error (e.g. timeout/hang)
-      if (!compileSuccess && !(lastCLISterr || '').match(/error:/i) && jobCount > 1) {
-        safeSend(event, 'arduino-log', { text: '🔄 Mencoba ulang kompilasi dengan mode single-job...', type: 'info' });
-        const singleJobArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', '1', '--warnings', 'none', ...configArgs, tempDir];
-        compileSuccess = await runArduinoCLI(singleJobArgs, event, 150000);
+      const stderrStr = lastCLISterr || '';
+      const hasSketchSyntaxError = /RoboLabSketch\.ino:\d+:\d+:\s*(?:fatal\s+)?error:/i.test(stderrStr) && !/No such file or directory/i.test(stderrStr);
+      const isOomOrLdError = /out of memory|cannot allocate|virtual memory|errno=1455|ld_h|local\.eagle\.flash\.ld|cp\.py/i.test(stderrStr);
+
+      // Auto-retry with single job if first compile failed due to OOM, ld_h race, or non-syntax issue
+      if (!compileSuccess && (isOomOrLdError || (!hasSketchSyntaxError && jobCount > 1))) {
+        safeSend(event, 'arduino-log', { text: '🔄 Mengoptimalkan penggunaan RAM (mode hemat memori single-job) dan melanjutkan kompilasi...', type: 'info' });
+        ensureElectronBuildDir();
+        compileSuccess = await runArduinoCLI(singleJobArgs, event, 600000);
+        if (!compileSuccess && /out of memory|cannot allocate|virtual memory/i.test(lastCLISterr || '')) {
+          safeSend(event, 'arduino-log', { text: '🔄 Melanjutkan kompilasi objek core yang tersisa (mode hemat memori tahap 2)...', type: 'info' });
+          ensureElectronBuildDir();
+          compileSuccess = await runArduinoCLI(singleJobArgs, event, 600000);
+        }
       }
 
       // Automatic missing library detection & auto-installation
@@ -1148,7 +1247,8 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 
           if (installSuccess) {
             safeSend(event, 'arduino-log', { text: `✅ Library '${libToInstall}' berhasil diinstal! Memulai kompilasi ulang...`, type: 'success' });
-            compileSuccess = await runArduinoCLI(compileArgs, event);
+            ensureElectronBuildDir();
+            compileSuccess = await runArduinoCLI(singleJobArgs, event);
           } else {
             safeSend(event, 'arduino-log', { text: `❌ Gagal install library '${libToInstall}'. Pastikan koneksi internet aktif, lalu klik Upload lagi.`, type: 'error' });
           }
@@ -1182,26 +1282,33 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 
           if (coreInstallSuccess) {
             safeSend(event, 'arduino-log', { text: `✅ Core '${coreToInstall}' berhasil diinstal! Memulai kompilasi ulang...`, type: 'success' });
-            compileSuccess = await runArduinoCLI(compileArgs, event);
+            ensureElectronBuildDir();
+            compileSuccess = await runArduinoCLI(singleJobArgs, event);
           } else {
             safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal core '${coreToInstall}'. Periksa koneksi internet Anda.`, type: 'error' });
           }
         }
 
-        // Auto-recovery for corrupted build dir / linker undefined reference errors
-        if (!compileSuccess && (lastCLISterr || '').match(/undefined reference|ld returned 1 exit status|error during build/i)) {
-          safeSend(event, 'arduino-log', { text: '🔄 Terdeteksi kesalahan cache/linker. Membersihkan build cache & mengompilasi ulang...', type: 'info' });
-          try {
-            fs.rmSync(buildDir, { recursive: true, force: true });
-            fs.mkdirSync(buildDir, { recursive: true });
-          } catch (_) {}
-          compileSuccess = await runArduinoCLI(compileArgs, event);
+        // Auto-recovery ONLY for genuinely corrupted dependency (.d) or archive (.a) files
+        if (!compileSuccess) {
+          const isCacheOrDepErr = (lastCLISterr || '').match(/opening dependency file|\.d:\s*No such file|archive has no index|file format not recognized/i);
+          if (isCacheOrDepErr) {
+            safeSend(event, 'arduino-log', { text: '🔄 Memperbaiki berkas cache dependensi dan mengompilasi ulang dengan mode stabil (1 job)...', type: 'warning' });
+            try {
+              const sketchCache = path.join(buildDir, 'sketch');
+              if (fs.existsSync(sketchCache)) fs.rmSync(sketchCache, { recursive: true, force: true });
+              if (/archive has no index|file format not recognized/i.test(lastCLISterr || '')) {
+                const coreArchive = path.join(buildDir, 'core', 'core.a');
+                if (fs.existsSync(coreArchive)) fs.unlinkSync(coreArchive);
+              }
+              ensureElectronBuildDir();
+            } catch (_) {}
+            compileSuccess = await runArduinoCLI(singleJobArgs, event, 600000);
+          }
         }
       }
 
       if (!compileSuccess) {
-        // Clean buildDir on hard failure so subsequent attempts start fresh
-        try { fs.rmSync(buildDir, { recursive: true, force: true }); } catch (_) {}
         safeSend(event, 'arduino-log', { text: 'Compilation failed!', type: 'error' });
         return { success: false, error: 'Compilation failed' };
       }
@@ -1263,7 +1370,120 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       );
     }
 
-    let uploadSuccess = await runArduinoCLI(uploadArgs, event);
+    const runElectronEsp8266Ch340Upload = () => new Promise((resolve) => {
+      try {
+        const binFile = fs.readdirSync(buildDir).find(f => f.endsWith('.ino.bin'));
+        if (!binFile) return resolve(false);
+        const binPath = path.join(buildDir, binFile);
+
+        const candidateDataDirs = [
+          localAppDataForConfig ? path.join(localAppDataForConfig, 'Arduino15') : '',
+          path.join(__dirname, '..', 'resources', 'arduino-data'),
+          'C:\\KidsBlock Desktop\\resources\\tools\\Arduino',
+        ].filter(Boolean);
+
+        let pythonExe = 'python';
+        let pyserialDir = '';
+        let esptoolDir = '';
+        for (const d of candidateDataDirs) {
+          const pkgDir = path.join(d, 'packages', 'esp8266');
+          const hwDir = path.join(pkgDir, 'hardware', 'esp8266');
+          if (fs.existsSync(hwDir)) {
+            const pyToolsDir = path.join(pkgDir, 'tools', 'python3');
+            if (fs.existsSync(pyToolsDir)) {
+              for (const ver of fs.readdirSync(pyToolsDir)) {
+                const candidate = path.join(pyToolsDir, ver, process.platform === 'win32' ? 'python3.exe' : 'python3');
+                if (fs.existsSync(candidate)) { pythonExe = candidate; break; }
+              }
+            }
+            for (const ver of fs.readdirSync(hwDir)) {
+              const ps = path.join(hwDir, ver, 'tools', 'pyserial');
+              const et = path.join(hwDir, ver, 'tools', 'esptool');
+              if (fs.existsSync(ps) && fs.existsSync(et)) {
+                pyserialDir = ps;
+                esptoolDir = et;
+                break;
+              }
+            }
+            if (pyserialDir && esptoolDir) break;
+          }
+        }
+        if (!pyserialDir || !esptoolDir) return resolve(false);
+
+        const pyScript = [
+          'import sys, time',
+          `sys.path.insert(0, ${JSON.stringify(pyserialDir)})`,
+          `sys.path.insert(0, ${JSON.stringify(esptoolDir)})`,
+          'import serial',
+          '_orig_reconf = serial.Serial._reconfigure_port',
+          'def _safe_reconf(self):',
+          '    try:',
+          '        _orig_reconf(self)',
+          '    except Exception as e:',
+          '        msg = str(e)',
+          '        if "PermissionError" in msg or "Cannot configure port" in msg or "31" in msg:',
+          '            pass',
+          '        else:',
+          '            raise',
+          'serial.Serial._reconfigure_port = _safe_reconf',
+          'import esptool',
+          `esptool.main(['--chip', 'esp8266', '--port', ${JSON.stringify(port)}, '--baud', '115200', '--before', 'default_reset', '--after', 'hard_reset', 'write_flash', '--flash_mode', 'dout', '--flash_size', 'detect', '0x0', ${JSON.stringify(binPath)}])`,
+          'try:',
+          `    s = serial.Serial(${JSON.stringify(port)}, 115200, timeout=0.1)`,
+          '    s.setDTR(False)',
+          '    s.setRTS(True)',
+          '    s.setDTR(False)',
+          '    time.sleep(0.08)',
+          '    s.setRTS(False)',
+          '    s.setDTR(False)',
+          '    s.close()',
+          'except Exception:',
+          '    pass',
+        ].join('\n');
+
+        const child = spawn(pythonExe, ['-u', '-c', pyScript], { windowsHide: true });
+        let outBuf = '';
+        const onChunk = (d, isErr) => {
+          const s = d.toString();
+          outBuf += s;
+          s.split(/\r?\n/).forEach(l => {
+            const t = l.trim();
+            if (!t) return;
+            const isProg = /\d+%|uploading|writing|reading|erasing|bytes|hard resetting|connecting|leaving|chip is|features:|crystal is|mac:|stub|configuring flash|hash of data/i.test(t);
+            safeSend(event, 'arduino-log', { text: t, type: (!isErr || isProg) ? 'stdout' : 'error' });
+          });
+        };
+        child.stdout.on('data', d => onChunk(d, false));
+        child.stderr.on('data', d => onChunk(d, true));
+        child.on('close', code => {
+          const hasFatal = /A fatal esptool\.py error occurred|A fatal error occurred|Cannot configure port|Failed to connect|Timed out waiting for packet/i.test(outBuf);
+          resolve(code === 0 && !hasFatal);
+        });
+        child.on('error', () => resolve(false));
+      } catch (_) {
+        resolve(false);
+      }
+    });
+
+    let uploadSuccess = false;
+    if (isESP8266) {
+      uploadSuccess = await runElectronEsp8266Ch340Upload();
+    }
+
+    if (!uploadSuccess) {
+      uploadSuccess = await runArduinoCLI(uploadArgs, event);
+    }
+
+    // Fallback for ESP8266 Lolin / NodeMCU on CH340/CP2102 if first upload attempt failed
+    if (!uploadSuccess && isESP8266) {
+      safeSend(event, 'arduino-log', { text: '🔄 Mencoba ulang upload ESP8266 Lolin/NodeMCU dengan reset otomatis @ 115200 baud...', type: 'info' });
+      await new Promise(r => setTimeout(r, 600));
+      uploadSuccess = await runElectronEsp8266Ch340Upload();
+      if (!uploadSuccess) {
+        const esp8266FallbackArgs = ['upload', '-p', port, '--fqbn', 'esp8266:esp8266:nodemcuv2:eesz=4M2M,baud=115200', '--build-path', buildDir, '--verbose', ...configArgs, tempDir];
+        uploadSuccess = await runArduinoCLI(esp8266FallbackArgs, event);
+      }
+    }
 
     // Fallback: if 921600 fails on legacy USB-Serial chips (CH340G), retry at 460800 baud
     if (!uploadSuccess && (board === 'ESP32 DevKit V1' || fqbn.includes('esp32'))) {
@@ -1420,6 +1640,7 @@ ipcMain.handle('install-arduino-lib', async (event, libName) => {
     // Install library
     const success = await runArduinoCLI(['lib', 'install', actualLibName, ...configArgs], event, 240000);
     if (success) {
+      purgeBuildDirs();
       safeSend(event, 'arduino-log', { text: `✅ Library '${actualLibName}' berhasil diinstal!`, type: 'success' });
       return { success: true };
     } else {
@@ -1482,32 +1703,157 @@ ipcMain.handle('install-lib-from-github', async (event, githubUrl) => {
     const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
     const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
 
-    const success = await runArduinoCLI(['lib', 'install', '--git-url', trimmedUrl, ...configArgs], event, 300000);
+    let gitUrl = trimmedUrl;
+    if (gitUrl.includes('github.com') && !gitUrl.endsWith('.git') && !gitUrl.endsWith('.zip')) {
+      gitUrl = gitUrl.replace(/\/$/, '') + '.git';
+    }
+
+    const success = await runArduinoCLI(['lib', 'install', '--git-url', gitUrl, ...configArgs], event, 300000);
     if (success) {
+      purgeBuildDirs();
       safeSend(event, 'arduino-log', { text: `✅ Pustaka berhasil diinstal dari GitHub!`, type: 'success' });
       return { success: true };
     } else {
-      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal dari GitHub. Memencoba cara kloning repositori...`, type: 'error' });
+      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal via git-url. Mencoba strategi kloning/ekstraksi ZIP repositori...`, type: 'info' });
       const userDocsDir = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
       if (!fs.existsSync(userDocsDir)) fs.mkdirSync(userDocsDir, { recursive: true });
-      const repoName = path.basename(trimmedUrl, '.git');
+      const repoName = path.basename(trimmedUrl, '.git').replace(/[^a-zA-Z0-9_\-]/g, '');
       const targetPath = path.join(userDocsDir, repoName);
+
+      if (fs.existsSync(targetPath)) {
+        try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
+      }
+
       const { spawn } = require('child_process');
-      return new Promise((res) => {
-        const gitProc = spawn('git', ['clone', trimmedUrl, targetPath]);
-        gitProc.on('close', (code) => {
-          if (code === 0) {
-            safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil dikloning dari GitHub ke Arduino/libraries!`, type: 'success' });
-            res({ success: true });
-          } else {
-            safeSend(event, 'arduino-log', { text: `❌ Gagal kloning repositori GitHub. Pastikan URL valid.`, type: 'error' });
-            res({ success: false, error: 'git clone failed' });
-          }
-        });
+      const cloneSuccess = await new Promise((res) => {
+        const gitProc = spawn('git', ['clone', gitUrl, targetPath], { windowsHide: true });
+        gitProc.on('close', (code) => res(code === 0));
+        gitProc.on('error', () => res(false));
       });
+
+      if (cloneSuccess) {
+        purgeBuildDirs();
+        safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil dikloning ke Arduino/libraries!`, type: 'success' });
+        return { success: true };
+      }
+
+      // If git clone failed, try downloading repository ZIP from GitHub
+      safeSend(event, 'arduino-log', { text: `⚠️ Git clone tidak tersedia atau gagal. Mengunduh arsip ZIP dari GitHub...`, type: 'info' });
+      const cleanRepoUrl = trimmedUrl.replace(/\.git$/i, '').replace(/\/$/, '');
+      const zipUrls = [
+        `${cleanRepoUrl}/archive/refs/heads/main.zip`,
+        `${cleanRepoUrl}/archive/refs/heads/master.zip`
+      ];
+
+      let downloadedZip = null;
+      for (const zipUrl of zipUrls) {
+        try {
+          const https = require('https');
+          const http = require('http');
+          const tempZip = path.join(os.tmpdir(), `gh_lib_${Date.now()}.zip`);
+          const fetchFile = (u) => new Promise((res, rej) => {
+            const client = u.startsWith('https') ? https : http;
+            client.get(u, (response) => {
+              if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                return res(fetchFile(response.headers.location));
+              }
+              if (response.statusCode !== 200) return rej(new Error(`HTTP ${response.statusCode}`));
+              const fileStream = fs.createWriteStream(tempZip);
+              response.pipe(fileStream);
+              fileStream.on('finish', () => { fileStream.close(); res(tempZip); });
+            }).on('error', rej);
+          });
+          downloadedZip = await fetchFile(zipUrl);
+          if (downloadedZip) break;
+        } catch (_) {}
+      }
+
+      if (downloadedZip) {
+        const zipSuccess = await runArduinoCLI(['lib', 'install', '--zip-path', downloadedZip, ...configArgs], event, 300000);
+        try { fs.unlinkSync(downloadedZip); } catch (_) {}
+        if (zipSuccess) {
+          purgeBuildDirs();
+          safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil diunduh dan diinstal dari ZIP GitHub!`, type: 'success' });
+          return { success: true };
+        }
+      }
+
+      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal pustaka dari GitHub. Pastikan URL repositori valid.`, type: 'error' });
+      return { success: false, error: 'GitHub install failed' };
     }
   } catch (err) {
-    safeSend(event, 'arduino-log', { text: `Error: ${err.message}`, type: 'error' });
+    safeSend(event, 'arduino-log', { text: `Error GitHub install: ${err.message}`, type: 'error' });
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC Handler: Install Arduino library directly from local ZIP file
+ipcMain.handle('install-lib-from-zip', async (event, inputFilePath) => {
+  try {
+    let zipPath = inputFilePath;
+    if (!zipPath) {
+      const result = await dialog.showOpenDialog({
+        title: 'Pilih Berkas Library Arduino (.zip)',
+        properties: ['openFile'],
+        filters: [{ name: 'Arduino Library ZIP', extensions: ['zip'] }]
+      });
+      if (result.canceled || result.filePaths.length === 0) return { success: false, error: 'Canceled' };
+      zipPath = result.filePaths[0];
+    }
+
+    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library ZIP: ${path.basename(zipPath)}...`, type: 'info' });
+    const localAppDataForConfig = process.env.LOCALAPPDATA || '';
+    const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
+    const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
+
+    let success = await runArduinoCLI(['lib', 'install', '--zip-path', zipPath, ...configArgs], event, 300000);
+
+    if (!success) {
+      safeSend(event, 'arduino-log', { text: `⚠️ Mengekstrak arsip ZIP secara manual ke folder Arduino/libraries...`, type: 'warning' });
+      const userDocsDir = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
+      if (!fs.existsSync(userDocsDir)) fs.mkdirSync(userDocsDir, { recursive: true });
+      const rawName = path.basename(zipPath, '.zip').replace(/-master|-main/gi, '');
+      const targetPath = path.join(userDocsDir, rawName);
+
+      if (fs.existsSync(targetPath)) {
+        try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
+      }
+
+      if (process.platform === 'win32') {
+        try {
+          const { execSync } = require('child_process');
+          const tempExtractDir = path.join(os.tmpdir(), `zip_extract_${Date.now()}`);
+          fs.mkdirSync(tempExtractDir, { recursive: true });
+          const safeZip = zipPath.replace(/'/g, "''");
+          const safeDest = tempExtractDir.replace(/'/g, "''");
+          execSync(`powershell -command "Expand-Archive -Path '${safeZip}' -DestinationPath '${safeDest}' -Force"`, { stdio: 'ignore' });
+
+          const items = fs.readdirSync(tempExtractDir);
+          let sourceDir = tempExtractDir;
+          if (items.length === 1 && fs.statSync(path.join(tempExtractDir, items[0])).isDirectory()) {
+            sourceDir = path.join(tempExtractDir, items[0]);
+          }
+
+          fs.cpSync(sourceDir, targetPath, { recursive: true });
+          try { fs.rmSync(tempExtractDir, { recursive: true, force: true }); } catch (_) {}
+          success = true;
+        } catch (extErr) {
+          console.error('[RoboLab] Manual zip extraction failed:', extErr.message);
+        }
+      }
+    }
+
+    if (success) {
+      purgeBuildDirs();
+      const libName = path.basename(zipPath, '.zip');
+      safeSend(event, 'arduino-log', { text: `✅ Library '${libName}' dari ZIP berhasil diinstal!`, type: 'success' });
+      return { success: true, libName };
+    } else {
+      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal library dari ZIP.`, type: 'error' });
+      return { success: false, error: 'Failed to extract/install ZIP library' };
+    }
+  } catch (err) {
+    safeSend(event, 'arduino-log', { text: `Error ZIP install: ${err.message}`, type: 'error' });
     return { success: false, error: err.message };
   }
 });
@@ -1629,6 +1975,7 @@ const getSerialPortsViaCLI = () => {
         resolve(null);
       }
     });
+  });
 };
 
 const findDriversDir = () => {

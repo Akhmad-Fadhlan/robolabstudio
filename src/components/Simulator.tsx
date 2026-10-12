@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, ChevronDown, Lock } from 'lucide-react';
+import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, ChevronDown, Lock, Palette, Check } from 'lucide-react';
 
 interface ProgramPinConfig {
   ledPin?: string;
@@ -170,6 +170,7 @@ interface SimulatorProps {
   onSelectedWifiChange?: (ssid: string) => void;
   wifiPassword?: string;
   onWifiPasswordChange?: (password: string) => void;
+  themeMode?: 'dark' | 'light';
 }
 
 interface Pin {
@@ -211,8 +212,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
   selectedWifi: selectedWifiProp,
   onSelectedWifiChange,
   wifiPassword: wifiPasswordProp,
-  onWifiPasswordChange
+  onWifiPasswordChange,
+  themeMode = 'dark'
 }) => {
+  const isLight = themeMode === 'light';
   const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
 
   // Wifi Simulator State
@@ -242,8 +245,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const [isWifiDropdownOpen, setIsWifiDropdownOpen] = useState<boolean>(false);
 
   // Simulator state
-  const [motorL, setMotorL] = useState(0);
-  const [motorR, setMotorR] = useState(0);
   const [activePopup, setActivePopup] = useState<string | null>(null);
   const hasMovedDuringDrag = useRef(false);
 
@@ -1212,36 +1213,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const servoAngle = getServoAngle();
 
-  // Reset motor states when simulation is stopped
-  useEffect(() => {
-    if (!isRunning) {
-      setMotorL(0);
-      setMotorR(0);
-    }
-  }, [isRunning]);
-
-  // Handle movements based on robotCommand & wiring status
-  useEffect(() => {
-    if (!isRunning) return;
-
-    if (robotCommand === 'FORWARD') {
-      setMotorL(200);
-      setMotorR(200);
-    } else if (robotCommand === 'BACKWARD') {
-      setMotorL(-150);
-      setMotorR(-150);
-    } else if (robotCommand === 'LEFT') {
-      setMotorL(-100);
-      setMotorR(200);
-    } else if (robotCommand === 'RIGHT') {
-      setMotorL(200);
-      setMotorR(-100);
-    } else if (robotCommand === 'STOP') {
-      setMotorL(0);
-      setMotorR(0);
-    }
-  }, [robotCommand, isRunning]);
-
   const checkUltrasonicWiring = (): boolean => {
     const trigPin = getConnectedMcuPin('SR04_TRIG');
     const echoPin = getConnectedMcuPin('SR04_ECHO');
@@ -1613,11 +1584,20 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const colors = [
-    { value: '#ef4444', label: 'Red' },
-    { value: '#1e1e24', label: 'Black' },
-    { value: '#3b82f6', label: 'Blue' },
-    { value: '#10b981', label: 'Green' },
-    { value: '#eab308', label: 'Yellow' }
+    { value: '#ef4444', label: 'Red (VCC)' },
+    { value: '#334155', label: 'Black (GND)' },
+    { value: '#3b82f6', label: 'Blue (Signal)' },
+    { value: '#10b981', label: 'Green (Data)' },
+    { value: '#eab308', label: 'Yellow (Clock)' },
+    { value: '#f97316', label: 'Orange (PWM)' },
+    { value: '#a855f7', label: 'Purple (SDA)' },
+    { value: '#06b6d4', label: 'Cyan (SCL)' },
+    { value: '#ec4899', label: 'Pink (Aux)' },
+    { value: '#84cc16', label: 'Lime (GPIO)' },
+    { value: '#f59e0b', label: 'Amber (Analog)' },
+    { value: '#6366f1', label: 'Indigo (TX/RX)' },
+    { value: '#b45309', label: 'Brown (Ground)' },
+    { value: '#f8fafc', label: 'White (Neutral)' }
   ];
 
   // Component wiring states for visual feedback (isLedWired, isServoWired, isUltrasonicWired, isPotWired, and isButtonWired are declared above)
@@ -1712,29 +1692,29 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   return (
-    <div className={`w-full h-full flex flex-col ${isExpanded ? 'lg:flex-row' : ''} gap-3 bg-slate-100/70 dark:bg-slate-950 p-2 lg:p-3 overflow-hidden rounded-2xl select-none text-slate-800 dark:text-slate-200 transition-colors`}>
+    <div className={`w-full h-full flex flex-col ${isExpanded ? 'lg:flex-row' : ''} gap-3 ${isLight ? 'bg-slate-100/80 text-slate-800' : 'bg-[#08090f] text-slate-200'} p-2 lg:p-3 overflow-hidden rounded-2xl select-none transition-colors`}>
       
       {/* ── 1. MAIN HERO CANVAS (SVG 3D) ── */}
-      <div className={`flex-1 min-h-[400px] ${isExpanded ? 'lg:min-h-full order-2 lg:order-1' : 'order-1'} bg-white dark:bg-[#0b0c10] border border-slate-200/90 dark:border-slate-800/80 rounded-xl relative overflow-hidden flex items-center justify-center shadow-sm dark:shadow-inner group transition-colors`}>
+      <div className={`flex-1 min-h-[400px] ${isExpanded ? 'lg:min-h-full order-2 lg:order-1' : 'order-1'} ${isLight ? 'bg-white border-slate-200/90 shadow-sm' : 'bg-[#0b0d14] border-slate-800/80 shadow-inner'} border rounded-xl relative overflow-hidden flex items-center justify-center group transition-colors`}>
         
         {/* ZOOM TOOLBAR (floating top-right) */}
         <div className="absolute top-3 right-3 z-20 flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
           <button
             onClick={handleZoomIn}
-            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white font-bold text-lg flex items-center justify-center shadow-md transition hover:scale-105"
+            className={`w-8 h-8 rounded-lg border font-bold text-lg flex items-center justify-center shadow-md transition hover:scale-105 cursor-pointer ${isLight ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700' : 'bg-[#141824] hover:bg-slate-800 border-slate-700/80 text-slate-100'}`}
             title="Zoom In"
           >+</button>
           <button
             onClick={handleZoomOut}
-            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white font-bold text-lg flex items-center justify-center shadow-md transition hover:scale-105"
+            className={`w-8 h-8 rounded-lg border font-bold text-lg flex items-center justify-center shadow-md transition hover:scale-105 cursor-pointer ${isLight ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700' : 'bg-[#141824] hover:bg-slate-800 border-slate-700/80 text-slate-100'}`}
             title="Zoom Out"
           >−</button>
           <button
             onClick={handleZoomReset}
-            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-900/40 border border-slate-200 dark:border-slate-700 text-sky-600 dark:text-sky-400 font-bold text-[11px] flex items-center justify-center shadow-md transition hover:scale-105 leading-none"
+            className={`w-8 h-8 rounded-lg border font-bold text-[11px] flex items-center justify-center shadow-md transition hover:scale-105 leading-none cursor-pointer ${isLight ? 'bg-white hover:bg-sky-50 border-slate-200 text-sky-600' : 'bg-[#141824] hover:bg-sky-900/40 border-slate-700/80 text-sky-400'}`}
             title="Reset Zoom & Pan"
           >⌂</button>
-          <div className="w-8 h-6 mt-1 rounded-md bg-white/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 text-[9.5px] text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center shadow-sm">
+          <div className={`w-8 h-6 mt-1 rounded-md border text-[9.5px] font-bold flex items-center justify-center shadow-sm ${isLight ? 'bg-white/90 border-slate-200 text-slate-600' : 'bg-[#141824]/95 border-slate-700/80 text-slate-300'}`}>
             {Math.round(zoomLevel * 100)}%
           </div>
         </div>
@@ -1753,7 +1733,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           {/* Static grid background (no zoom) */}
           <defs>
             <pattern id="grid" width="12" height="12" patternUnits="userSpaceOnUse">
-              <path d="M 12 0 L 0 0 0 12" fill="none" stroke="currentColor" className="text-slate-200/80 dark:text-slate-800/60" strokeWidth="0.6"/>
+              <path d="M 12 0 L 0 0 0 12" fill="none" stroke={isLight ? '#e2e8f0' : '#1e293b'} strokeOpacity={isLight ? '0.8' : '0.65'} strokeWidth="0.6"/>
             </pattern>
             {/* ── 3D GRADIENT DEFINITIONS ── */}
             {/* PCB Boards */}
@@ -2834,20 +2814,20 @@ export const Simulator: React.FC<SimulatorProps> = ({
         
         {/* Title */}
         <div className="flex items-center justify-between px-1">
-          <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2 uppercase tracking-widest">
-            <Cpu className="w-4 h-4 text-indigo-500" />
+          <span className={`text-[11px] font-bold flex items-center gap-2 uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+            <Cpu className="w-4 h-4 text-indigo-400" />
             Simulator
           </span>
-          <span className="text-slate-400 dark:text-slate-500 text-[9px] flex items-center gap-1.5 font-semibold bg-slate-200/50 dark:bg-slate-800 px-2 py-1 rounded-md">
-            <Move className="w-3 h-3 text-sky-500" /> DRAG TO MOVE
+          <span className={`text-[9px] flex items-center gap-1.5 font-semibold px-2 py-1 rounded-md border ${isLight ? 'text-slate-500 bg-slate-200/60 border-slate-300/60' : 'text-slate-400 bg-[#131724] border-slate-800'}`}>
+            <Move className="w-3 h-3 text-sky-400" /> DRAG TO MOVE
           </span>
         </div>
 
         {/* WiFi Simulator Panel */}
         {board !== 'Arduino Uno R3' && board !== 'BBC micro:bit' && (
-          <div className="flex flex-col gap-2.5 bg-white dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm">
+          <div className={`flex flex-col gap-2.5 p-3.5 rounded-xl border shadow-sm transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+              <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 <Wifi className={`w-3.5 h-3.5 ${isWifiConnected ? 'text-emerald-500' : 'text-slate-400'}`} />
                 Virtual WiFi
               </div>
@@ -2859,18 +2839,24 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 <button 
                   onClick={() => setIsWifiDropdownOpen(!isWifiDropdownOpen)}
                   disabled={isWifiConnected}
-                  className={`w-full text-left bg-slate-50 dark:bg-slate-900/50 border ${isWifiConnected ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400' : 'border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-indigo-400'} rounded-lg px-3 py-2 text-[11px] font-medium flex items-center justify-between transition-colors`}
+                  className={`w-full text-left border ${
+                    isWifiConnected
+                      ? 'border-emerald-500/40 text-emerald-500 bg-emerald-500/5'
+                      : isLight
+                        ? 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-400'
+                        : 'bg-[#090b12] border-slate-700/80 text-slate-200 hover:border-indigo-500/60'
+                  } rounded-lg px-3 py-2 text-[11px] font-medium flex items-center justify-between transition-colors cursor-pointer`}
                 >
                   <span className="truncate">{isScanningWifi ? 'Scanning networks...' : (selectedWifi || 'Select Network')}</span>
                   {!isWifiConnected && <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                 </button>
                 
                 {isWifiDropdownOpen && !isWifiConnected && wifiNetworks.length > 0 && (
-                  <div className="absolute top-full left-0 mt-1.5 w-full max-h-40 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 py-1">
+                  <div className={`absolute top-full left-0 mt-1.5 w-full max-h-40 overflow-y-auto border rounded-lg shadow-xl z-50 py-1 ${isLight ? 'bg-white border-slate-200' : 'bg-[#141826] border-slate-700'}`}>
                     {wifiNetworks.map(net => (
                       <div 
                         key={net}
-                        className="px-3 py-2 text-[11px] font-medium hover:bg-indigo-50 dark:hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-300 cursor-pointer text-slate-700 dark:text-slate-300 truncate transition-colors"
+                        className={`px-3 py-2 text-[11px] font-medium cursor-pointer truncate transition-colors ${isLight ? 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600' : 'text-slate-200 hover:bg-indigo-500/20 hover:text-indigo-300'}`}
                         onClick={() => { setSelectedWifi(net); setIsWifiDropdownOpen(false); }}
                       >
                         {net}
@@ -2889,13 +2875,21 @@ export const Simulator: React.FC<SimulatorProps> = ({
                     value={wifiPassword}
                     onChange={e => setWifiPassword(e.target.value)}
                     disabled={isWifiConnected}
-                    className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 pl-8 py-2 text-[11px] text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 disabled:opacity-60 transition-colors"
+                    className={`w-full border rounded-lg px-3 pl-8 py-2 text-[11px] focus:outline-none focus:border-indigo-500 disabled:opacity-60 transition-colors ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700 placeholder:text-slate-400' : 'bg-[#090b12] border-slate-700/80 text-slate-200 placeholder:text-slate-500'}`}
                   />
                 </div>
                 
                 <button 
                   onClick={handleWifiConnectToggle}
-                  className={`px-4 py-2 text-[10px] font-bold rounded-lg flex-shrink-0 transition-all shadow-sm ${isWifiConnected ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 dark:text-rose-400 dark:border-rose-500/30' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30'}`}
+                  className={`px-4 py-2 text-[10px] font-bold rounded-lg flex-shrink-0 transition-all shadow-sm cursor-pointer ${
+                    isWifiConnected
+                      ? isLight
+                        ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200'
+                        : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30'
+                      : isLight
+                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200'
+                        : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30'
+                  }`}
                 >
                   {isWifiConnected ? 'DISCONNECT' : 'CONNECT'}
                 </button>
@@ -2905,23 +2899,23 @@ export const Simulator: React.FC<SimulatorProps> = ({
         )}
 
         {/* Wiring & Components Panel */}
-        <div className="bg-white dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm space-y-4">
+        <div className={`p-3.5 rounded-xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
           <div className="flex items-center justify-between">
-             <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-               <Edit3 className="w-3.5 h-3.5" /> Circuit Builder
+             <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+               <Edit3 className="w-3.5 h-3.5 text-indigo-400" /> Circuit Builder
              </div>
              
              {/* Delete Wires & Add Auto-Wire */}
              <div className="flex gap-1.5">
                <button 
                  onClick={handleAutoWire}
-                 className="flex justify-center items-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 dark:text-indigo-400 text-[9px] font-bold cursor-pointer transition-all shadow-sm"
+                 className={`flex justify-center items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold cursor-pointer transition-all shadow-sm border ${isLight ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border-indigo-500/30'}`}
                >
                  <Zap className="w-3 h-3" /> Auto
                </button>
                <button 
                  onClick={handleClearWires}
-                 className="flex justify-center items-center gap-1 px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 dark:bg-slate-900/50 dark:hover:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[9px] font-bold cursor-pointer transition-all shadow-sm"
+                 className={`flex justify-center items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[9px] font-bold cursor-pointer transition-all shadow-sm ${isLight ? 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200' : 'bg-[#161b2c] hover:bg-slate-800 text-slate-300 border-slate-700/80'}`}
                >
                  <RotateCcw className="w-3 h-3" /> Clear
                </button>
@@ -2935,60 +2929,136 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 handleAddComponent(e.target.value);
                 e.target.value = ""; 
               }}
-              className="w-full bg-slate-50 dark:bg-slate-900/50 text-[11px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg pl-3 pr-8 py-2.5 outline-none cursor-pointer hover:border-indigo-400 transition-colors appearance-none shadow-sm"
+              className={`w-full text-[11px] font-bold border rounded-lg pl-3 pr-8 py-2.5 outline-none cursor-pointer hover:border-indigo-400 transition-colors appearance-none shadow-sm ${isLight ? 'bg-slate-50 text-slate-700 border-slate-200' : 'bg-[#090b12] text-slate-200 border-slate-700/80'}`}
             >
-              <option value="" disabled>➕ ADD COMPONENT</option>
-              <option value="led">🔴 Red LED Bulb</option>
-              <option value="servo">⚙️ SG90 Servo Motor</option>
-              <option value="ultrasonic">🔊 HC-SR04 Ultrasonic</option>
-              <option value="pot">🎛️ Rotary Potentiometer</option>
-              <option value="button">🔘 Tactile Push Button</option>
-              <option value="lcd">📺 16x2 OLED LCD Screen</option>
-              <option value="motor">⚡ DC Motor</option>
-              <option value="dht11">🌡️ DHT11 Temp/Humid</option>
+              <option value="" disabled className={isLight ? 'bg-white text-slate-500' : 'bg-[#0f131f] text-slate-400'}>➕ ADD COMPONENT</option>
+              <option value="led" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔴 Red LED Bulb</option>
+              <option value="servo" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>⚙️ SG90 Servo Motor</option>
+              <option value="ultrasonic" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔊 HC-SR04 Ultrasonic</option>
+              <option value="pot" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🎛️ Rotary Potentiometer</option>
+              <option value="button" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔘 Tactile Push Button</option>
+              <option value="lcd" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>📺 16x2 OLED LCD Screen</option>
+              <option value="dht11" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🌡️ DHT11 Temp/Humid</option>
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>
 
-          <div className="border-t border-slate-100 dark:border-slate-700/50" />
+          <div className={`border-t ${isLight ? 'border-slate-100' : 'border-slate-800/80'}`} />
 
-          <div className="flex flex-col gap-2">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Wire Color</span>
-            <div className="flex gap-2.5 items-center flex-wrap">
-              {colors.map(c => (
-                <button
-                  key={c.value}
-                  onClick={() => setSelectedColor(c.value)}
-                  className={`w-5 h-5 rounded-full border-2 transition-all cursor-pointer shadow-sm ${selectedColor === c.value ? 'ring-2 ring-indigo-500/50 border-white dark:border-slate-800 scale-110' : 'border-transparent hover:scale-110'}`}
-                  style={{ backgroundColor: c.value }}
-                  title={`${c.label} wire`}
-                />
-              ))}
+          {/* Rich Wire Color Palette + Custom Color Picker */}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                <Palette className="w-3 h-3 text-indigo-400" />
+                Wire Color Palette
+              </span>
+              <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold border ${isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-[#090b12] border-slate-800 text-slate-300'}`}>
+                <span className="w-2.5 h-2.5 rounded-full shadow-sm border border-white/20" style={{ backgroundColor: selectedColor }} />
+                {colors.find(c => c.value.toLowerCase() === selectedColor.toLowerCase())?.label.split(' ')[0] || selectedColor.toUpperCase()}
+              </span>
+            </div>
+
+            <div className={`p-2 rounded-xl border ${isLight ? 'bg-slate-50/80 border-slate-200/70' : 'bg-[#090b12] border-slate-800/80'}`}>
+              <div className="grid grid-cols-8 gap-2 items-center justify-items-center">
+                {colors.map(c => {
+                  const isSelected = selectedColor.toLowerCase() === c.value.toLowerCase();
+                  return (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setSelectedColor(c.value)}
+                      className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center relative ${
+                        isSelected
+                          ? 'ring-2 ring-indigo-500 border-white scale-110 shadow-md z-10'
+                          : isLight
+                            ? 'border-slate-300/80 hover:scale-110'
+                            : 'border-slate-700/80 hover:scale-110 hover:border-slate-400'
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                      title={`${c.label} (${c.value})`}
+                    >
+                      {isSelected && (
+                        <Check
+                          className={`w-3 h-3 stroke-[3] ${
+                            c.value === '#f8fafc' || c.value === '#eab308' || c.value === '#84cc16'
+                              ? 'text-slate-900'
+                              : 'text-white'
+                          }`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {/* Custom Color Picker Button */}
+                <label
+                  title="Pilih warna kabel kustom dari Color Picker"
+                  className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center relative overflow-hidden shadow-sm hover:scale-110 ${
+                    !colors.some(c => c.value.toLowerCase() === selectedColor.toLowerCase())
+                      ? 'ring-2 ring-indigo-500 border-white scale-110'
+                      : isLight
+                        ? 'border-slate-300'
+                        : 'border-slate-600'
+                  }`}
+                  style={{
+                    background: 'conic-gradient(from 0deg, #ef4444, #f97316, #eab308, #10b981, #06b6d4, #3b82f6, #a855f7, #ec4899, #ef4444)'
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={selectedColor}
+                    onChange={(e) => setSelectedColor(e.target.value)}
+                    className="sr-only"
+                  />
+                  <Palette className="w-3 h-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+                </label>
+              </div>
             </div>
           </div>
         </div>
         
         {/* Wires List Management */}
         {wires.length > 0 && (
-          <div className="bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm flex flex-col gap-2">
-             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest flex items-center justify-between">
+          <div className={`p-3 rounded-xl border shadow-sm flex flex-col gap-2 transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
+             <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center justify-between ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                Connections ({wires.length})
-               <span className="text-[8px] opacity-70 normal-case font-medium">Click trash to delete</span>
+               <span className="text-[8px] opacity-75 normal-case font-medium">Klik warna untuk ubah</span>
              </span>
-             <div className="max-h-[120px] overflow-y-auto space-y-1.5 scrollbar-thin pr-1">
+             <div className="max-h-[140px] overflow-y-auto space-y-1.5 scrollbar-thin pr-1">
                 {wires.map((w, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/40 px-2 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800 hover:border-rose-200 dark:hover:border-rose-950/40 transition-colors">
-                    <span className="flex items-center gap-1.5 text-[9px] font-mono text-slate-600 dark:text-slate-300">
-                      <span className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: w.color }} />
-                      {w.from} ⚡ {w.to}
-                    </span>
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border transition-colors ${
+                      isLight
+                        ? 'bg-slate-50 border-slate-200/80 hover:border-indigo-300'
+                        : 'bg-[#090b12] border-slate-800/90 hover:border-slate-700'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newWires = wires.map((wireItem, i) =>
+                          i === idx ? { ...wireItem, color: selectedColor } : wireItem
+                        );
+                        setWires(newWires);
+                      }}
+                      title={`Klik untuk ubah warna kabel ini ke warna terpilih (${selectedColor})`}
+                      className={`flex items-center gap-2 text-[9.5px] font-mono cursor-pointer transition-opacity hover:opacity-85 ${isLight ? 'text-slate-700' : 'text-slate-200'}`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full shadow-sm border border-white/25 flex-shrink-0 transition-transform hover:scale-125"
+                        style={{ backgroundColor: w.color }}
+                      />
+                      <span>{w.from} ⚡ {w.to}</span>
+                    </button>
                     <button 
                       onClick={() => {
                         const newWires = [...wires];
                         newWires.splice(idx, 1);
-                        if (onWiresChange) onWiresChange(newWires);
+                        setWires(newWires);
                       }}
-                      className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                      className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer p-0.5"
+                      title="Hapus koneksi kabel"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -2997,22 +3067,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
              </div>
           </div>
         )}
-
-        {/* Telemetry / Actuators Bento Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm flex flex-col gap-1 items-center justify-center text-center">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">Left Motor</span>
-            <span className={`text-sm font-black ${typeof motorL !== 'undefined' && motorL !== 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>
-              {activeComponents.includes('motor1') ? `${motorL} RPM` : 'N/A'}
-            </span>
-          </div>
-          <div className="bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm flex flex-col gap-1 items-center justify-center text-center">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">Right Motor</span>
-            <span className={`text-sm font-black ${typeof motorR !== 'undefined' && motorR !== 0 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`}>
-              {activeComponents.includes('motor2') ? `${motorR} RPM` : 'N/A'}
-            </span>
-          </div>
-        </div>
 
       </div>
 

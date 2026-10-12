@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu, Activity, ChevronRight, ChevronLeft, 
   Plus, Search, Smartphone, X, Sliders, Download, 
-  File as FileIcon, Folder, Play,
-  FolderOpen, Check, Save, Upload,
+  File as FileIcon, FileText, Folder, Play, Square, RotateCcw, Blocks, Code,
+  FolderOpen, Check, Save, Upload, Terminal as TerminalIcon,
   HelpCircle, Compass, ArrowRight, Copy, Loader2,
   Info, MessageSquare, Package, Monitor, Lock, Clock, Star
 } from 'lucide-react';
@@ -35,6 +35,17 @@ import { processAiMessage, DEFAULT_KILOCODE_CONFIG } from './services/kilocodeSe
 import type { KiloCodeConfig, ChatMessage } from './services/kilocodeService';
 import { checkTrialStatus } from './services/supabaseClient';
 import type { TrialStatus } from './services/supabaseClient';
+import {
+  isElectronEnv,
+  getWebSerialPorts,
+  requestWebSerialPort,
+  executeWebHardwareAction,
+  startWebSerialMonitor,
+  stopWebSerialMonitor,
+  openFileInBrowser,
+  openFolderInBrowser,
+  downloadFileInBrowser,
+} from './services/webSerialService';
 
 // const DEFAULT_FILES = {};
 
@@ -3286,27 +3297,46 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   // File system
   const [files, setFiles] = useState<{ [filename: string]: string }>(() => {
     try {
-      const projName = localStorage.getItem('robolab_project_name');
-      if (!projName) return {};
       const saved = localStorage.getItem('robolab_files');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          return parsed;
+        }
+      }
     } catch (e) {}
     return {};
   });
   const [savedFiles, setSavedFiles] = useState<{ [filename: string]: string }>(() => {
     try {
-      const projName = localStorage.getItem('robolab_project_name');
-      if (!projName) return {};
       const saved = localStorage.getItem('robolab_savedFiles');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
     } catch (e) {}
     return {};
   }); // tracks last-saved content
-  const [activeFile, setActiveFile] = useState<string>('');
+  const [activeFile, setActiveFile] = useState<string>(() => {
+    try {
+      const savedFilesRaw = localStorage.getItem('robolab_files');
+      const parsedFiles = savedFilesRaw ? JSON.parse(savedFilesRaw) : {};
+      const fileKeys = Object.keys(parsedFiles || {});
+      if (fileKeys.length === 0) return '';
+      const savedActive = localStorage.getItem('robolab_activeFile');
+      if (savedActive && parsedFiles[savedActive] !== undefined) {
+        return savedActive;
+      }
+      return fileKeys.find(f => f.endsWith('.ino') || f.endsWith('.py')) || fileKeys[0] || '';
+    } catch (e) {
+      return '';
+    }
+  });
   const [filePaths, setFilePaths] = useState<{ [filename: string]: string }>({});
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const [newFileName, setNewFileName] = useState('');
+  const [newFileType, setNewFileType] = useState<'ino' | 'py' | 'h' | 'cpp' | 'c' | 'json'>('ino');
   const [showNewFileModal, setShowNewFileModal] = useState(false);
 
   useEffect(() => {
@@ -3316,6 +3346,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       localStorage.removeItem('robolab_files');
     }
   }, [files]);
+
+  useEffect(() => {
+    if (activeFile) {
+      localStorage.setItem('robolab_activeFile', activeFile);
+    } else {
+      localStorage.removeItem('robolab_activeFile');
+    }
+  }, [activeFile]);
 
   useEffect(() => {
     if (Object.keys(savedFiles).length > 0) {
@@ -3331,22 +3369,23 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     
     // Save to Electron disk if in Electron mode
     const absolutePath = filePaths[activeFile];
-    if (absolutePath) {
-      const req = (window as any).__electronRequire || (window as any).require;
-      if (req) {
-        try {
-          const fs = req('fs');
-          fs.writeFileSync(absolutePath, files[activeFile] || '', 'utf-8');
-          
-          // Save XML sidecar file (activeFile + .xml) to retain exact user blocks
-          const currentXml = workspaceXmls[activeFile];
-          if (currentXml) {
-            fs.writeFileSync(absolutePath + '.xml', currentXml, 'utf-8');
-          }
-        } catch (err) {
-          console.error("Electron save error:", err);
+    const req = (window as any).__electronRequire || (window as any).require;
+    if (absolutePath && req) {
+      try {
+        const fs = req('fs');
+        fs.writeFileSync(absolutePath, files[activeFile] || '', 'utf-8');
+        
+        // Save XML sidecar file (activeFile + .xml) to retain exact user blocks
+        const currentXml = workspaceXmls[activeFile];
+        if (currentXml) {
+          fs.writeFileSync(absolutePath + '.xml', currentXml, 'utf-8');
         }
+      } catch (err) {
+        console.error("Electron save error:", err);
       }
+    } else if (!req && activeFile) {
+      // Web Browser Mode: download file to user's computer
+      downloadFileInBrowser(activeFile, files[activeFile] || '');
     }
 
     setTerminalLogs(prev => [...prev, { text: `✓ File '${activeFile}' & struktur blok disimpan.`, type: 'success' }]);
@@ -3359,7 +3398,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [learningCategory, setLearningCategory] = useState<'fundamental' | 'micropython'>('fundamental');
 
-  // Code Synchronization with Blockly statuses
+  // Code Synchronization with Blockly statuses (Real Device Workspace)
   const [syncStatuses, setSyncStatuses] = useState<{ [filename: string]: boolean }>({
     'firmware/main.ino': true,
     'python/main.py': true
@@ -3380,7 +3419,103 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   }, [workspaceXmls]);
   const [learningLessonLoadedCount, setLearningLessonLoadedCount] = useState(0);
 
-  // Board Connection
+  // ==========================================================================
+  // DEDICATED & ISOLATED SIMULATOR WORKSPACE STATE (Decoupled from Real Device)
+  // ==========================================================================
+  const DEFAULT_SIM_FILES: { [filename: string]: string } = {
+    'firmware/main.ino': `// RoboLab Studio — Dedicated Simulator Workspace (C++ / Arduino)
+// Kode di halaman Simulator ini terpisah penuh dari Workspace Real Device!
+
+const int LED_PIN = 2;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  Serial.println("Simulator Workspace Ready!");
+}
+
+void loop() {
+  digitalWrite(LED_PIN, HIGH);
+  Serial.println("LED ON (HIGH)");
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
+  Serial.println("LED OFF (LOW)");
+  delay(500);
+}
+`,
+    'python/main.py': `# RoboLab Studio — Dedicated Simulator Workspace (MicroPython)
+# Kode di halaman Simulator ini terpisah penuh dari Workspace Real Device!
+from machine import Pin
+import time
+
+led = Pin(2, Pin.OUT)
+print("Simulator MicroPython Ready!")
+
+while True:
+    led.value(1)
+    print("LED ON")
+    time.sleep(0.5)
+    led.value(0)
+    print("LED OFF")
+    time.sleep(0.5)
+`
+  };
+
+  const [simBoard, setSimBoard] = useState<string>(() => {
+    return localStorage.getItem('robolab_sim_board') || 'ESP32 DevKit V1';
+  });
+  const [simFiles, setSimFiles] = useState<{ [filename: string]: string }>(() => {
+    try {
+      const saved = localStorage.getItem('robolab_sim_files');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed['firmware/main.ino']) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_SIM_FILES;
+  });
+  const [simActiveFile, setSimActiveFile] = useState<string>(() => {
+    const saved = localStorage.getItem('robolab_sim_activeFile');
+    if (saved === 'firmware/main.ino' || saved === 'python/main.py') return saved;
+    return 'firmware/main.ino';
+  });
+  const [simSyncStatuses, setSimSyncStatuses] = useState<{ [filename: string]: boolean }>({
+    'firmware/main.ino': false,
+    'python/main.py': false
+  });
+  const [simWorkspaceXmls, setSimWorkspaceXmls] = useState<{ [filename: string]: string }>(() => {
+    try {
+      const saved = localStorage.getItem('robolab_sim_workspaceXmls');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [simViewMode, setSimViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
+  const [simShowConsole, setSimShowConsole] = useState<boolean>(true);
+  const [simResetKey, setSimResetKey] = useState<number>(0);
+
+  useEffect(() => {
+    localStorage.setItem('robolab_sim_board', simBoard);
+  }, [simBoard]);
+
+  useEffect(() => {
+    if (Object.keys(simFiles).length > 0) {
+      localStorage.setItem('robolab_sim_files', JSON.stringify(simFiles));
+    }
+  }, [simFiles]);
+
+  useEffect(() => {
+    localStorage.setItem('robolab_sim_activeFile', simActiveFile);
+  }, [simActiveFile]);
+
+  useEffect(() => {
+    if (Object.keys(simWorkspaceXmls).length > 0) {
+      localStorage.setItem('robolab_sim_workspaceXmls', JSON.stringify(simWorkspaceXmls));
+    }
+  }, [simWorkspaceXmls]);
+
+  // Board Connection (Real Hardware Device)
   const [board, setBoard] = useState<string>('ESP32 DevKit V1');
   const [port, setPort] = useState<string>('none');
   const [availablePorts, setAvailablePorts] = useState<Array<{ address: string, label: string }>>([]);
@@ -3660,44 +3795,79 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   // Hardware action ref to pause port polling during upload/compile
   const isHardwareActionRef = useRef(false);
 
-  // Fetch and sync active serial ports periodically
-  // refreshPorts: manual & periodic port detection callback
+  // Fetch and sync active serial ports periodically (Electron IPC + Web Serial API)
   const refreshPorts = useCallback(async () => {
     const req = (window as any).__electronRequire || (window as any).require;
-    if (!req) return;
-    try {
-      const electron = req('electron');
-      const ports = await electron.ipcRenderer.invoke('get-serial-ports');
-      console.log('[RoboLab UI] Detected ports:', ports);
-      if (ports) {
-        setAvailablePorts(ports);
-        if (ports.length > 0) {
+    if (req) {
+      try {
+        const electron = req('electron');
+        const ports = await electron.ipcRenderer.invoke('get-serial-ports');
+        console.log('[RoboLab UI] Detected ports:', ports);
+        if (ports) {
+          setAvailablePorts(ports);
+          if (ports.length > 0) {
+            setPort((prev: string) => {
+              if (prev !== 'none' && ports.some((p: any) => p.address === prev)) {
+                return prev;
+              }
+              const usbPort = ports.find((p: any) =>
+                p.label && !p.label.toLowerCase().includes('bth') && !p.label.toLowerCase().includes('bluetooth')
+              );
+              const selected = usbPort ? usbPort.address : ports[0].address;
+              console.log('[RoboLab UI] Auto-selected port:', selected);
+              return selected;
+            });
+          } else {
+            setPort('none');
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch serial ports:", err);
+      }
+    } else {
+      // Web Browser Mode — Web Serial API
+      try {
+        const webPorts = await getWebSerialPorts();
+        setAvailablePorts(webPorts.map(p => ({ address: p.address, label: p.label })));
+        if (webPorts.length > 0) {
           setPort((prev: string) => {
-            // Keep current selected port if it is still available.
-            if (prev !== 'none' && ports.some((p: any) => p.address === prev)) {
+            if (prev !== 'none' && webPorts.some(p => p.address === prev)) {
               return prev;
             }
-            // Auto-select if no port was selected ('none') or the selected port was disconnected/changed
-            const usbPort = ports.find((p: any) =>
-              p.label && !p.label.toLowerCase().includes('bth') && !p.label.toLowerCase().includes('bluetooth')
+            const usbCom = webPorts.find(
+              p =>
+                /^COM\d+$/i.test(p.address) &&
+                p.address !== 'COM1' &&
+                !p.label.toLowerCase().includes('bth') &&
+                !p.label.toLowerCase().includes('bluetooth')
             );
-            const selected = usbPort ? usbPort.address : ports[0].address;
-            console.log('[RoboLab UI] Auto-selected port:', selected);
-            return selected;
+            if (usbCom) return usbCom.address;
+            const webUsbList = webPorts.filter(p => p.address.startsWith('WebUSB'));
+            if (webUsbList.length > 0) return webUsbList[webUsbList.length - 1].address;
+            return webPorts[0].address;
           });
         } else {
           setPort('none');
         }
+      } catch (err) {
+        console.warn('[WebSerial] Failed to list ports:', err);
       }
-    } catch (err) {
-      console.warn("Failed to fetch serial ports:", err);
     }
   }, []);
 
-  useEffect(() => {
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (!req) return;
+  const handleRequestWebPort = useCallback(async () => {
+    const picked = await requestWebSerialPort();
+    if (picked) {
+      await refreshPorts();
+      setPort(picked.address);
+      setInteractiveTerminalLogs(prev => [
+        ...prev,
+        { text: `🔌 [Web Serial API] Perangkat USB terhubung: ${picked.label}`, type: 'success' }
+      ]);
+    }
+  }, [refreshPorts]);
 
+  useEffect(() => {
     let isMounted = true;
     const fetchPorts = async () => {
       if (isHardwareActionRef.current) return;
@@ -3706,10 +3876,23 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     };
 
     fetchPorts();
-    const interval = setInterval(fetchPorts, 2000);
+    const req = (window as any).__electronRequire || (window as any).require;
+    const interval = req ? setInterval(fetchPorts, 2000) : null;
+
+    // In Web mode, listen for USB plug/unplug events via navigator.serial
+    const serial = typeof navigator !== 'undefined' ? (navigator as any).serial : null;
+    if (!req && serial && typeof serial.addEventListener === 'function') {
+      serial.addEventListener('connect', fetchPorts);
+      serial.addEventListener('disconnect', fetchPorts);
+    }
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
+      if (!req && serial && typeof serial.removeEventListener === 'function') {
+        serial.removeEventListener('connect', fetchPorts);
+        serial.removeEventListener('disconnect', fetchPorts);
+      }
     };
   }, [refreshPorts]);
 
@@ -4143,7 +4326,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return config;
   };
 
-  const programPins = useMemo(() => parseProgramPins(files[activeFile] || ''), [files, activeFile]);
+  const programPins = useMemo(() => parseProgramPins(simFiles[simActiveFile] || ''), [simFiles, simActiveFile]);
   const simulationTimeouts = useRef<any[]>([]);
   const [activeLoopPrints, setActiveLoopPrints] = useState<string[]>([]);
   const [hasLoop, setHasLoop] = useState<boolean>(false);
@@ -4169,6 +4352,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const activePythonFile = Object.keys(files).find(f => f.endsWith('.py')) || 'python/main.py';
   const activePythonCode = files[activePythonFile] || '';
   const activeCode = files[activeFile] || '';
+  const simActivePythonFile = Object.keys(simFiles).find(f => f.endsWith('.py')) || 'python/sim_main.py';
+  const simActivePythonCode = simFiles[simActivePythonFile] || '';
+  const simActiveCode = simBoard === 'BBC micro:bit' ? simActivePythonCode : (simFiles[simActiveFile] || '');
   const codeUpper = activeCode.toUpperCase();
   void codeUpper; // referenced dynamically in runtime checks
 
@@ -4202,10 +4388,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [isResizingSimulator, setIsResizingSimulator] = useState(false);
   const [projectPath, setProjectPath] = useState<string>('');
   
-  // Responsive screen checker
+  // Responsive screen checker (only stack vertically on small phone screens < 640px)
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 1023px)');
+    const mql = window.matchMedia('(max-width: 639px)');
     setIsMobile(mql.matches);
     const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mql.addEventListener('change', listener);
@@ -4238,6 +4424,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setProjectPath('');
     localStorage.removeItem('robolab_files');
     localStorage.removeItem('robolab_savedFiles');
+    localStorage.removeItem('robolab_activeFile');
     localStorage.removeItem('robolab_project_name');
     setTerminalLogs(prev => [...prev, { text: '✓ Folder proyek ditutup.', type: 'info' }]);
   };
@@ -4272,24 +4459,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleCreateFile = async () => {
     setShowExplorer(true);
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (req) {
-      try {
-        const electron = req('electron');
-        const file = await electron.ipcRenderer.invoke('create-file');
-        if (file) {
-          if (file.path) {
-            setFilePaths(prev => ({ ...prev, [file.name]: file.path }));
-          }
-          handleOpenFileAction(file.name, file.content, file.path);
-        }
-      } catch (err) {
-        console.error("IPC create-file error", err);
-        setShowNewFileModal(true);
-      }
+    if (activeFile.endsWith('.py') || board === 'BBC micro:bit') {
+      setNewFileType('py');
     } else {
-      setShowNewFileModal(true);
+      setNewFileType('ino');
     }
+    setNewFileName('');
+    setShowNewFileModal(true);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -4340,13 +4516,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleOpenFileAction = (filename: string, content: string, _absolutePath?: string) => {
     setShowExplorer(true);
+    if (!projectName) {
+      const baseName = filename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'PROYEK';
+      setProjectName(baseName.toUpperCase());
+    }
     const extension = filename.split('.').pop()?.toLowerCase();
     
     let updatedFiles: { [key: string]: string } = { [filename]: content };
     let updatedXmls: { [key: string]: string } = {};
-    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex)$/i, '.py');
+    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
+    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
     
-    if (extension === 'ino') {
+    if (extension === 'ino' || ((extension === 'cpp' || extension === 'c') && /void\s+(setup|loop)\s*\(/.test(content))) {
       let xml = '';
       try {
         xml = arduinoToBlocklyXml(content);
@@ -4355,11 +4536,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
       if (xml && xml.includes('<block')) {
         updatedXmls[filename] = xml;
+        updatedXmls[inoFilename] = xml;
+        updatedXmls[pyFilename] = xml;
       }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false }));
-      if (workspaceMode === 'blockly') {
-        setWorkspaceMode('code');
-      }
+      setSyncStatuses(prev => ({ ...prev, [filename]: false, [inoFilename]: false, [pyFilename]: false }));
+      setIsBlocklyCollapsed(false);
+      setIsEditorCollapsed(false);
     }
     else if (extension === 'hex') {
       const pythonCode = `# RoboLab Studio - Auto Generated from HEX: ${filename}\nimport robolab as robot\nimport time\n\ndef run_hex():\n    print("Executing HEX program...")\n    while True:\n        robot.send("FORWARD")\n        time.sleep(0.5)\n\nif __name__ == "__main__":\n    run_hex()\n`;
@@ -4380,8 +4562,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
       if (xml && xml.includes('<block')) {
         updatedXmls[filename] = xml;
+        updatedXmls[pyFilename] = xml;
       }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false }));
+      setSyncStatuses(prev => ({ ...prev, [filename]: false, [pyFilename]: false }));
+      setIsBlocklyCollapsed(false);
+      setIsEditorCollapsed(false);
     }
     else if (extension === 'py') {
       let xml = '';
@@ -4392,8 +4577,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
       if (xml && xml.includes('<block')) {
         updatedXmls[filename] = xml;
+        updatedXmls[pyFilename] = xml;
+        updatedXmls[inoFilename] = xml;
       }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false }));
+      setSyncStatuses(prev => ({ ...prev, [filename]: false, [pyFilename]: false, [inoFilename]: false }));
+      setIsBlocklyCollapsed(false);
+      setIsEditorCollapsed(false);
+    } else {
+      setIsEditorCollapsed(false);
     }
 
     // Auto-detect board target based on analog pin usage or metadata
@@ -4423,10 +4614,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     setFiles(prev => ({ ...prev, ...updatedFiles }));
     setWorkspaceXmls(prev => ({ ...prev, ...updatedXmls }));
+    setLearningLessonLoadedCount(prev => prev + 1);
     
-    if (['c', 'h', 'cpp', 'hpp', 'json', 'txt', 'md'].includes(extension || '')) {
+    if (['c', 'h', 'cpp', 'hpp', 'json', 'txt', 'md'].includes(extension || '') && !updatedXmls[filename]) {
+      setWorkspaceMode('code');
+      if (uiMode === 'student') {
+        setStudentSubMode('code');
+      }
+    } else {
       if (workspaceMode === 'blockly') {
-        setWorkspaceMode('code');
+        setWorkspaceMode('split');
+      }
+      if (uiMode === 'student') {
+        setUiMode('pro');
       }
     }
 
@@ -4436,23 +4636,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setCurrentTab('ide');
   };
 
-  const handleFileSelect = (filename: string) => {
-    const content = files[filename] || '';
+  const handleFileSelect = (filename: string, explicitFilesMap?: { [key: string]: string }) => {
+    const sourceFiles = explicitFilesMap || files;
+    const content = sourceFiles[filename] || '';
     
     const extension = filename.split('.').pop()?.toLowerCase();
     let updatedFiles: { [key: string]: string } = {};
     let updatedXmls: { [key: string]: string } = {};
-    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex)$/i, '.py');
+    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
+    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
     
     if (extension === 'ino') {
-      const hasXml = !!workspaceXmls[filename];
-      
       let xml = workspaceXmls[filename] || '';
-      if (!hasXml && content.trim()) {
+      // Always re-parse from text code if sync is manual or if no XML exists yet
+      if ((syncStatuses[filename] === false || !xml || explicitFilesMap) && content.trim()) {
         try {
-          xml = arduinoToBlocklyXml(content);
-          if (xml && xml.includes('<block')) {
-            updatedXmls[filename] = xml;
+          const parsedXml = arduinoToBlocklyXml(content);
+          if (parsedXml && parsedXml.includes('<block')) {
+            xml = parsedXml;
+            updatedXmls[filename] = parsedXml;
+            updatedXmls[inoFilename] = parsedXml;
+            updatedXmls[pyFilename] = parsedXml;
           }
         } catch (e) {
           console.warn("Failed to parse Arduino to Blockly XML on select:", e);
@@ -4462,19 +4666,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const effectiveXml = updatedXmls[filename] || workspaceXmls[filename] || '';
       if (!effectiveXml.includes('<block') && content.trim().length > 0) {
         setSyncStatuses(prev => ({ ...prev, [filename]: false }));
-        if (workspaceMode === 'blockly') {
-          setWorkspaceMode('code');
-        }
       }
     }
     else if (extension === 'hex') {
-      const hasPy = !!files[pyFilename];
+      const hasPy = !!sourceFiles[pyFilename];
       const hasXml = !!workspaceXmls[filename];
 
       let xml = workspaceXmls[filename] || '';
       const pythonCode = `# RoboLab Studio - Auto Generated from HEX: ${filename}\nimport robolab as robot\nimport time\n\ndef run_hex():\n    print("Executing HEX program...")\n    while True:\n        robot.send("FORWARD")\n        time.sleep(0.5)\n\nif __name__ == "__main__":\n    run_hex()\n`;
 
-      if (!hasXml) {
+      if (!hasXml || explicitFilesMap) {
         try {
           xml = pythonToBlocklyXml(pythonCode);
           if (xml) updatedXmls[filename] = xml;
@@ -4491,11 +4692,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     }
     else if (extension === 'py') {
-      const hasXml = !!workspaceXmls[filename];
-      if (!hasXml) {
+      let xml = workspaceXmls[filename] || '';
+      if ((syncStatuses[filename] === false || !xml || explicitFilesMap) && content.trim()) {
         try {
-          const xml = pythonToBlocklyXml(content);
-          if (xml) updatedXmls[filename] = xml;
+          const parsedXml = pythonToBlocklyXml(content);
+          if (parsedXml && parsedXml.includes('<block')) {
+            xml = parsedXml;
+            updatedXmls[filename] = parsedXml;
+            updatedXmls[pyFilename] = parsedXml;
+            updatedXmls[inoFilename] = parsedXml;
+          }
         } catch (e) {
           console.warn("Failed to parse Python to Blockly XML on select:", e);
         }
@@ -4526,15 +4732,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
 
     if (Object.keys(updatedFiles).length > 0 || Object.keys(updatedXmls).length > 0) {
-      setFiles(prev => ({ ...prev, ...updatedFiles }));
-      setWorkspaceXmls(prev => ({ ...prev, ...updatedXmls }));
+      if (Object.keys(updatedFiles).length > 0) {
+        setFiles(prev => ({ ...prev, ...updatedFiles }));
+      }
+      if (Object.keys(updatedXmls).length > 0) {
+        setWorkspaceXmls(prev => ({ ...prev, ...updatedXmls }));
+      }
     }
     
+    setIsEditorCollapsed(false);
     // Auto-switch to 'code' view mode if selecting a non-Blockly code/header file (.c, .h, .cpp, .hpp, .json, .txt, .md) while in 'blockly' mode
     if (['c', 'h', 'cpp', 'hpp', 'json', 'txt', 'md'].includes(extension || '')) {
       if (workspaceMode === 'blockly') {
         setWorkspaceMode('code');
       }
+    } else if (workspaceMode === 'blockly') {
+      setWorkspaceMode('split');
     }
 
     const activeFileToSet = extension === 'hex' ? pyFilename : filename;
@@ -4543,46 +4756,71 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleNativeOpenFolder = async () => {
     setShowExplorer(true);
+    const buildFolderXmlsAndSync = (rawFiles: { [key: string]: string }) => {
+      const cleanedFiles: { [key: string]: string } = {};
+      const generatedXmls: { [key: string]: string } = {};
+      const newSyncs: { [key: string]: boolean } = {};
+
+      Object.keys(rawFiles).forEach(f => {
+        if (f.endsWith('.xml')) return;
+        cleanedFiles[f] = rawFiles[f];
+      });
+
+      Object.keys(cleanedFiles).forEach(f => {
+        const ext = f.split('.').pop()?.toLowerCase();
+        const code = cleanedFiles[f] || '';
+        if (ext === 'ino') {
+          try {
+            const xml = arduinoToBlocklyXml(code);
+            if (xml && xml.includes('<block')) {
+              generatedXmls[f] = xml;
+            }
+          } catch (_) {}
+          newSyncs[f] = false;
+        } else if (ext === 'py') {
+          try {
+            const xml = pythonToBlocklyXml(code);
+            if (xml && xml.includes('<block')) {
+              generatedXmls[f] = xml;
+            }
+          } catch (_) {}
+          newSyncs[f] = false;
+        }
+      });
+
+      return { cleanedFiles, generatedXmls, newSyncs };
+    };
+
     const req = (window as any).__electronRequire || (window as any).require;
     if (req) {
       try {
         const electron = req('electron');
         const folder = await electron.ipcRenderer.invoke('open-directory');
         if (folder) {
-          const loadedFiles = folder.files;
+          const { cleanedFiles, generatedXmls, newSyncs } = buildFolderXmlsAndSync(folder.files || {});
           const folderPath = folder.path || '';
           
           const paths: { [key: string]: string } = {};
-          Object.keys(loadedFiles).forEach(f => {
+          Object.keys(cleanedFiles).forEach(f => {
             paths[f] = folderPath ? `${folderPath}/${f}` : f;
           });
-          setFilePaths(prev => ({ ...prev, ...paths }));
-          
-          // Read any sidecar XML files (e.g. main.ino.xml) for exact block restoration
-          const sidecarXmls: { [key: string]: string } = {};
-          const fs = req('fs');
-          Object.keys(loadedFiles).forEach(f => {
-            const fullFilePath = paths[f];
-            if (fullFilePath && fs.existsSync && fs.existsSync(fullFilePath + '.xml')) {
-              try {
-                const xmlContent = fs.readFileSync(fullFilePath + '.xml', 'utf-8');
-                if (xmlContent) sidecarXmls[f] = xmlContent;
-              } catch (e) {}
-            }
-          });
-          if (Object.keys(sidecarXmls).length > 0) {
-            setWorkspaceXmls(prev => ({ ...prev, ...sidecarXmls }));
-          }
-
-          setFiles(loadedFiles);
+          setFilePaths(paths);
+          setWorkspaceXmls(generatedXmls);
+          setSyncStatuses(newSyncs);
+          setFiles(cleanedFiles);
           setProjectPath(folderPath);
-          const firstFile = Object.keys(loadedFiles)[0];
-          if (firstFile) {
-            setTimeout(() => {
-              handleFileSelect(firstFile);
-            }, 100);
-          }
           setProjectName(folder.name);
+          setIsBlocklyCollapsed(false);
+          setIsEditorCollapsed(false);
+          if (workspaceMode === 'blockly') setWorkspaceMode('split');
+          if (uiMode === 'student') setUiMode('pro');
+
+          const fileKeys = Object.keys(cleanedFiles);
+          const firstFile = fileKeys.find(f => f.endsWith('.ino') || f.endsWith('.py')) || fileKeys[0];
+          if (firstFile) {
+            handleFileSelect(firstFile, cleanedFiles);
+          }
+          setLearningLessonLoadedCount(prev => prev + 1);
           setCurrentTab('ide');
           setTerminalLogs(prev => [
             ...prev,
@@ -4593,10 +4831,30 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         console.error("IPC open-directory error", err);
       }
     } else {
-      const mockName = prompt("Buka Folder (Simulasi):\nMasukkan nama folder proyek:", "Proyek_Robot_Soccer");
-      if (mockName) {
-        setProjectName(mockName);
+      // Web Browser Mode — File System Access API / webkitdirectory
+      const webFolder = await openFolderInBrowser();
+      if (webFolder && Object.keys(webFolder.files).length > 0) {
+        const { cleanedFiles, generatedXmls, newSyncs } = buildFolderXmlsAndSync(webFolder.files);
+        setWorkspaceXmls(generatedXmls);
+        setSyncStatuses(newSyncs);
+        setFiles(cleanedFiles);
+        setProjectName(webFolder.name);
+        setIsBlocklyCollapsed(false);
+        setIsEditorCollapsed(false);
+        if (workspaceMode === 'blockly') setWorkspaceMode('split');
+        if (uiMode === 'student') setUiMode('pro');
+
+        const fileKeys = Object.keys(cleanedFiles);
+        const firstFile = fileKeys.find(f => f.endsWith('.ino') || f.endsWith('.py')) || fileKeys[0];
+        if (firstFile) {
+          handleFileSelect(firstFile, cleanedFiles);
+        }
+        setLearningLessonLoadedCount(prev => prev + 1);
         setCurrentTab('ide');
+        setTerminalLogs(prev => [
+          ...prev,
+          { text: `✓ Folder '${webFolder.name}' berhasil dibuka di browser (${Object.keys(cleanedFiles).length} berkas).`, type: 'success' }
+        ]);
       }
     }
   };
@@ -4618,57 +4876,58 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         console.error("IPC open-file error", err);
       }
     } else {
-      const mockName = prompt("Buka Berkas (Simulasi):\nMasukkan nama berkas:", "sensor_test.ino");
-      if (mockName) {
-        const defaultContent = mockName.endsWith('.py') ? `# Custom Python script\n` : `void setup() {\n}\nvoid loop() {\n}`;
-        handleOpenFileAction(mockName, defaultContent);
+      // Web Browser Mode — File System Access API / <input type="file">
+      const webFile = await openFileInBrowser();
+      if (webFile) {
+        handleOpenFileAction(webFile.name, webFile.content);
       }
     }
   };
 
   const handleImportZipLibrary = async () => {
-    let zipName = "Adafruit_Sensor.zip";
     const req = (window as any).__electronRequire || (window as any).require;
     if (req) {
       try {
         const electron = req('electron');
-        const res = await electron.ipcRenderer.invoke('open-file');
-        if (res) {
-          zipName = res.name;
-        } else {
-          return;
+        const res = await electron.ipcRenderer.invoke('install-lib-from-zip');
+        if (res && res.success) {
+          const installedName = res.libName || 'Custom_ZIP_Library';
+          setPackages((prev: any) => ({
+            ...prev,
+            arduino: [
+              ...prev.arduino.filter((p: any) => p.name !== installedName),
+              {
+                name: installedName,
+                desc: `ZIP Library imported from local file`,
+                version: '1.0.0-custom',
+                installed: true
+              }
+            ]
+          }));
+          setTerminalLogs((prev: any) => [
+            ...prev,
+            { text: `[ZIP IMPORT] Library '${installedName}' berhasil diekstrak dan diinstal ke folder Arduino libraries.`, type: 'success' }
+          ]);
         }
-      } catch (e) {
-        console.warn(e);
+      } catch (e: any) {
+        console.warn('ZIP Import error:', e);
       }
     } else {
       const input = prompt("Nama Pustaka Arduino (.zip):", "Adafruit_MPU6050.zip");
       if (!input) return;
-      zipName = input;
+      setPackages((prev: any) => ({
+        ...prev,
+        arduino: [
+          ...prev.arduino,
+          {
+            name: input.replace('.zip', ''),
+            desc: `ZIP Library imported from local file: ${input}`,
+            version: '1.0.0-custom',
+            installed: true
+          }
+        ]
+      }));
     }
-
-    setPackages((prev: any) => ({
-      ...prev,
-      arduino: [
-        ...prev.arduino,
-        {
-          name: zipName.replace('.zip', ''),
-          desc: `ZIP Library imported from local file: ${zipName}`,
-          version: '1.0.0-custom',
-          installed: true
-        }
-      ]
-    }));
-
-    setTerminalLogs((prev: any) => [
-      ...prev,
-      { text: `[ZIP IMPORT] Library '${zipName}' successfully unpacked and installed to Arduino libraries folder.`, type: 'success' }
-    ]);
-    
-    setInteractiveTerminalLogs(prev => [
-      ...prev,
-      { text: `ZIP Import: Unpacked ${zipName} -> Arduino/libraries/`, type: 'success' }
-    ]);
   };
 
   const handleTerminalCommand = (e: React.FormEvent) => {
@@ -4863,7 +5122,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   };
 
   const startCodeInterpreter = (customCode?: string) => {
-    const code = customCode !== undefined ? customCode : (files[activeFile] || '');
+    const code = customCode !== undefined ? customCode : (simFiles[simActiveFile] || files[activeFile] || '');
     const lines = code.split('\n');
 
     // Pre-scan: detect which pins are used as servo (Microbit MicroPython pattern)
@@ -5987,51 +6246,29 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   };
 
   const handleArduinoHardwareAction = async (action: 'verify' | 'upload' | 'flash-firmware') => {
+    if (isHardwareActionRef.current) {
+      return;
+    }
     // ── Trial Gate: block upload if trial expired ──
     if (action === 'upload' && trialStatus.isExpired) {
       setPaywallFeature('Upload');
       setShowPaywallModal(true);
       return;
     }
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (!req) {
-      setInteractiveTerminalLogs(prev => [
-        ...prev,
-        { text: `[SIMULATION] Running ${action} for ${board}...`, type: 'output' }
-      ]);
-      startRunAll();
-      return;
+
+    let activeCode = files[activeFile] || '';
+    if (board === 'BBC micro:bit') {
+      activeCode = files['python/main.py'] || files[activeFile] || '';
+    } else if (!activeFile.toLowerCase().endsWith('.ino')) {
+      // If user is currently editing a .h, .cpp, or .c file, find the primary .ino sketch file
+      const mainInoKey = Object.keys(files).find(f => f.toLowerCase().endsWith('.ino'));
+      if (mainInoKey && files[mainInoKey]) {
+        activeCode = files[mainInoKey];
+      }
     }
-    
-    isHardwareActionRef.current = true;
-    setTerminalTab('terminal');
-    setTerminalLogs([]);
-    setInteractiveTerminalLogs([]);
-    setBuildProgress(10);
-    setBuildStatusText(action === 'verify' ? 'Compiling sketch...' : action === 'upload' ? 'Compiling & uploading sketch...' : 'Downloading & Flashing Firmware...');
-    
-    try {
-      const electron = req('electron');
-      // Stop serial monitor to free up the COM port before uploading
-      try {
-        await electron.ipcRenderer.invoke('stop-serial-monitor');
-      } catch (serialErr) {
-        console.warn('Could not stop serial monitor (might not be registered yet):', serialErr);
-      }
-      
-      let activeCode = files[activeFile] || '';
-      if (board === 'BBC micro:bit') {
-        activeCode = files['python/main.py'] || files[activeFile] || '';
-      } else if (!activeFile.toLowerCase().endsWith('.ino')) {
-        // If user is currently editing a .h, .cpp, or .c file, find the primary .ino sketch file
-        const mainInoKey = Object.keys(files).find(f => f.toLowerCase().endsWith('.ino'));
-        if (mainInoKey && files[mainInoKey]) {
-          activeCode = files[mainInoKey];
-        }
-      }
-      const fileExt = activeFile.split('.').pop() || 'ino';
-      
-      const urlEncodeHelperCode = `#include <Arduino.h>\nstatic inline String urlEncode(String str) {
+    const fileExt = activeFile.split('.').pop() || 'ino';
+
+    const urlEncodeHelperCode = `#include <Arduino.h>\nstatic inline String urlEncode(String str) {
   String encodedString = "";
   for (int i = 0; i < str.length(); i++) {
     char c = str.charAt(i);
@@ -6051,42 +6288,153 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   return encodedString;
 }\n\n`;
 
-      const preparedFiles: { [key: string]: string } = { ...files };
-      Object.keys(preparedFiles).forEach(fname => {
-        let content = preparedFiles[fname] || '';
-        if (content.includes('urlEncode')) {
-          content = content
-            .replace(/static\s+inline\s+String\s+urlEncode[\s\S]*?\n\}/g, '')
-            .replace(/#include\s*<Arduino\.h>\s*String\s+urlEncode\s*\([^)]*\);\s*/g, '')
-            .replace(/String\s+urlEncode\s*\([^)]*\);\s*/g, '');
-
-          const hasUserImplementation = /String\s+urlEncode\s*\(/.test(content);
-
-          if (hasUserImplementation) {
-            content = '#include <Arduino.h>\nString urlEncode(String str);\n' + content;
-          } else {
-            content = urlEncodeHelperCode + content;
-          }
-        }
-        if ((fname.endsWith('.cpp') || fname.endsWith('.c')) && (content.includes('WiFi') || content.includes('WL_CONNECTED')) && !content.includes('<WiFi.h>') && !content.includes('<ESP8266WiFi.h>')) {
-          content = '#include <WiFi.h>\n' + content;
-        }
-        preparedFiles[fname] = content;
-      });
-
-      if (activeCode.includes('urlEncode')) {
-        activeCode = activeCode
+    const preparedFiles: { [key: string]: string } = { ...files };
+    Object.keys(preparedFiles).forEach(fname => {
+      let content = preparedFiles[fname] || '';
+      if (content.includes('urlEncode')) {
+        content = content
           .replace(/static\s+inline\s+String\s+urlEncode[\s\S]*?\n\}/g, '')
           .replace(/#include\s*<Arduino\.h>\s*String\s+urlEncode\s*\([^)]*\);\s*/g, '')
           .replace(/String\s+urlEncode\s*\([^)]*\);\s*/g, '');
 
-        const hasUserImplementation = /String\s+urlEncode\s*\(/.test(activeCode);
+        const hasUserImplementation = /String\s+urlEncode\s*\(/.test(content);
 
         if (hasUserImplementation) {
-          activeCode = '#include <Arduino.h>\nString urlEncode(String str);\n' + activeCode;
+          content = '#include <Arduino.h>\nString urlEncode(String str);\n' + content;
         } else {
-          activeCode = urlEncodeHelperCode + activeCode;
+          content = urlEncodeHelperCode + content;
         }
+      }
+      if ((fname.endsWith('.cpp') || fname.endsWith('.c')) && (content.includes('WiFi') || content.includes('WL_CONNECTED')) && !content.includes('<WiFi.h>') && !content.includes('<ESP8266WiFi.h>')) {
+        content = '#include <WiFi.h>\n' + content;
+      }
+      preparedFiles[fname] = content;
+    });
+
+    if (activeCode.includes('urlEncode')) {
+      activeCode = activeCode
+        .replace(/static\s+inline\s+String\s+urlEncode[\s\S]*?\n\}/g, '')
+        .replace(/#include\s*<Arduino\.h>\s*String\s+urlEncode\s*\([^)]*\);\s*/g, '')
+        .replace(/String\s+urlEncode\s*\([^)]*\);\s*/g, '');
+
+      const hasUserImplementation = /String\s+urlEncode\s*\(/.test(activeCode);
+
+      if (hasUserImplementation) {
+        activeCode = '#include <Arduino.h>\nString urlEncode(String str);\n' + activeCode;
+      } else {
+        activeCode = urlEncodeHelperCode + activeCode;
+      }
+    }
+
+    const req = (window as any).__electronRequire || (window as any).require;
+
+    // ── WEB BROWSER MODE: Cloud Compiler + Web Serial API Flashing (Schematik.io style) ──
+    if (!req) {
+      isHardwareActionRef.current = true;
+      setIsTerminalCollapsed(false);
+      setTerminalTab('terminal');
+      setTerminalLogs([]);
+      setInteractiveTerminalLogs([]);
+      setBuildProgress(5);
+      setBuildStatusText(
+        action === 'verify'
+          ? 'Compiling sketch via Cloud Compiler...'
+          : action === 'upload'
+          ? 'Compiling & uploading via Web Serial...'
+          : 'Flashing Firmware via Web Serial...'
+      );
+
+      try {
+        if (isSerialConnected) {
+          await stopWebSerialMonitor();
+          setIsSerialConnected(false);
+        }
+
+        const webRes = await executeWebHardwareAction({
+          action,
+          board,
+          port,
+          fileExt,
+          files: preparedFiles,
+          onLog: (log) => {
+            setTerminalLogs(prev => [...prev, log]);
+            setInteractiveTerminalLogs(prev => [
+              ...prev,
+              { text: log.text, type: log.type === 'stdout' || log.type === 'info' ? 'output' : log.type }
+            ]);
+          },
+          onProgress: (pct: number) => {
+            setBuildProgress(pct);
+          },
+          onPortSelected: (newAddr: string) => {
+            setPort(newAddr);
+            refreshPorts();
+          },
+        });
+
+        if (webRes.selectedPort && webRes.selectedPort !== port) {
+          setPort(webRes.selectedPort);
+          refreshPorts();
+        }
+
+        if (webRes.success) {
+          setBuildStatusText(
+            action === 'verify'
+              ? 'Compilation Successful'
+              : action === 'upload'
+              ? 'Upload Successful 🎉'
+              : 'Firmware Flashed Successfully 🎉'
+          );
+          if (action === 'upload') {
+            setTimeout(async () => {
+              const targetPortAddr = webRes.selectedPort || port;
+              setTerminalTab('serial');
+              const started = await startWebSerialMonitor(
+                targetPortAddr,
+                serialBaudrate,
+                (chunk: string) => setSerialRawOutput(prev => (prev + chunk).slice(-50000)),
+                () => setIsSerialConnected(false)
+              );
+              if (started.success) {
+                setIsSerialConnected(true);
+                setConnectedPort(targetPortAddr);
+              }
+            }, 500);
+          }
+        } else {
+          setBuildStatusText(
+            action === 'verify'
+              ? 'Compilation Failed'
+              : action === 'upload'
+              ? 'Upload Failed'
+              : 'Flash Firmware Failed'
+          );
+        }
+      } catch (err: any) {
+        console.error(err);
+        setBuildProgress(100);
+        setBuildStatusText('Error executing Web hardware action');
+        setTerminalLogs(prev => [...prev, { text: `Web Hardware Error: ${err?.message || err}`, type: 'error' }]);
+      } finally {
+        isHardwareActionRef.current = false;
+      }
+      return;
+    }
+
+    isHardwareActionRef.current = true;
+    setTerminalTab('terminal');
+    setTerminalLogs([]);
+    setInteractiveTerminalLogs([]);
+    setBuildProgress(10);
+    setBuildStatusText(action === 'verify' ? 'Compiling sketch...' : action === 'upload' ? 'Compiling & uploading sketch...' : 'Downloading & Flashing Firmware...');
+    
+    try {
+      const electron = req('electron');
+      // Stop serial monitor to free up the COM port before uploading
+      try {
+        await electron.ipcRenderer.invoke('stop-serial-monitor');
+      } catch (serialErr) {
+        console.warn('Could not stop serial monitor (might not be registered yet):', serialErr);
       }
 
       const targetBoardArg = (board === 'ESP32 DevKit V1' || (board || '').toLowerCase().includes('esp32')) 
@@ -6137,7 +6485,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const handleInstallCores = async () => {
     const req = (window as any).__electronRequire || (window as any).require;
     if (!req) {
-      alert("This feature is only available in the desktop app.");
+      setIsTerminalCollapsed(false);
+      setTerminalTab('terminal');
+      setTerminalLogs(prev => [
+        ...prev,
+        { text: '🌐 [WEB COMPILER] Core Arduino AVR, ESP32, dan ESP8266 sudah terinstal dan siap di Cloud Compiler Server.', type: 'success' }
+      ]);
       return;
     }
     
@@ -6177,17 +6530,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setShowPaywallModal(true);
       return;
     }
-    const codeStr = typeof customCode === 'string' ? customCode : undefined;
+    const codeStr = typeof customCode === 'string'
+      ? customCode
+      : (simFiles[simActiveFile] || simFiles['firmware/main.ino'] || '');
     startRunAll(codeStr);
   };
 
 
-  // Run Python - actually reads and simulates the current Python file content
+  // Run Python - reads and simulates the current Simulator Python file content
   const handleRunPython = async (customCode?: string | React.MouseEvent) => {
     const codeStr = typeof customCode === 'string' ? customCode : undefined;
-    const pyFile = activeFile.endsWith('.py') ? activeFile
-      : Object.keys(files).find(f => f.endsWith('.py')) || 'python/main.py';
-    const code = codeStr !== undefined ? codeStr : (files[pyFile] || '');
+    const useSimWorkspace = currentTab === 'simulator' || isSimulatorExpanded;
+    const targetFiles = useSimWorkspace ? simFiles : files;
+    const targetActive = useSimWorkspace ? simActiveFile : activeFile;
+    const pyFile = targetActive.endsWith('.py') ? targetActive
+      : Object.keys(targetFiles).find(f => f.endsWith('.py')) || 'python/main.py';
+    const code = codeStr !== undefined ? codeStr : (targetFiles[pyFile] || '');
     
     if (isRunning) return;
     clearSimulationTimeouts();
@@ -6210,7 +6568,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     // Tetap jalankan simulator visual untuk LED/Sensor UI di sidebar
     startCodeInterpreter(code);
 
-    const isIoTCode = code.includes('import machine') || 
+    const req = (window as any).__electronRequire || (window as any).require;
+    const isIoTCode = !req ||
+                      code.includes('import machine') || 
                       code.includes('import network') || 
                       code.includes('import cv2') || 
                       code.includes('robot.') ||
@@ -6218,7 +6578,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       code.includes('from machine');
 
     if (isIoTCode) {
-      logToBoth(`[HYBRID ENGINE] Membelokkan eksekusi ke Virtual Simulator (MicroPython/IoT Code terdeteksi)`, 'success');
+      logToBoth(`[HYBRID ENGINE] Menjalankan eksekusi di Virtual Simulator`, 'success');
       
       const simSSID = localStorage.getItem('simulatorWifiSSID') || 'Wokwi-GUEST';
       let delay = 500;
@@ -6264,7 +6624,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     } else {
       // PYTHON MURNI (REAL ENGINE)
       try {
-        const req = (window as any).__electronRequire || (window as any).require;
         const electron = req('electron');
         setBuildProgress(60);
         
@@ -6454,6 +6813,25 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       ...prev,
       [activeFile]: newCode
     }));
+    const inoFile = Object.keys(files).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
+    const pyFile = Object.keys(files).find(f => f.endsWith('.py')) || 'python/main.py';
+    if (activeFile.endsWith('.ino')) {
+      try {
+        const xml = arduinoToBlocklyXml(newCode);
+        setWorkspaceXmls(prev => ({ ...prev, [activeFile]: xml, [inoFile]: xml, [pyFile]: xml }));
+        setLearningLessonLoadedCount(c => c + 1);
+      } catch (e) {
+        console.warn('Failed to parse applied C++ code to blocks:', e);
+      }
+    } else if (activeFile.endsWith('.py')) {
+      try {
+        const xml = pythonToBlocklyXml(newCode);
+        setWorkspaceXmls(prev => ({ ...prev, [activeFile]: xml, [inoFile]: xml, [pyFile]: xml }));
+        setLearningLessonLoadedCount(c => c + 1);
+      } catch (e) {
+        console.warn('Failed to parse applied Python code to blocks:', e);
+      }
+    }
     setInteractiveTerminalLogs(prev => [
       ...prev,
       { text: `✨ [Asisten Robolab AI] Kode berhasil diterapkan ke berkas '${activeFile}'`, type: 'success' }
@@ -6476,6 +6854,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setBoard(proj.board as "ESP32 DevKit V1" | "BBC micro:bit" | "Arduino Uno");
     setActiveFile(primaryFile);
     setWorkspaceMode('split');
+    setIsBlocklyCollapsed(false);
+    setIsEditorCollapsed(false);
+    if (uiMode === 'student') setUiMode('pro');
     setCurrentTab('ide');
 
     // Set handcrafted code sebagai fallback awal
@@ -6848,6 +7229,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setPort={setPort}
         availablePorts={availablePorts}
         onRefreshPorts={refreshPorts}
+        onRequestWebPort={handleRequestWebPort}
         setShowSettingsModal={setShowSettingsModal}
         setShowHelpModal={setShowHelpModal}
         setShowAboutModal={setShowAboutModal}
@@ -7423,7 +7805,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 {/* EDITORS SPLIT WORKSPACE */}
                 <div 
                   id="workspace-split-container" 
-                  className="flex-1 min-h-0 flex flex-col lg:flex-row gap-0 bg-transparent relative z-10 box-border"
+                  className="flex-1 min-h-0 flex flex-col sm:flex-row gap-0 bg-transparent relative z-10 box-border"
                   style={{
                     paddingBottom: isTerminalCollapsed ? '38px' : `${terminalHeight + 6}px`,
                     transition: isResizingTerminal ? 'none' : 'padding-bottom 0.15s ease-out'
@@ -7431,7 +7813,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 >
                   
                   {/* Editors Area (Left + Center) */}
-                  <div className="flex-1 flex flex-col lg:flex-row min-w-0 h-full relative gap-0 bg-transparent">
+                  <div className="flex-1 flex flex-col sm:flex-row min-w-0 h-full relative gap-0 bg-transparent">
                     {activeFile === '' ? (
                       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl min-h-[400px]">
                         <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-6 relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)]">
@@ -7472,11 +7854,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         {((uiMode === 'student' && studentSubMode === 'block') ||
                           (uiMode === 'pro' && (workspaceMode === 'blockly' || (workspaceMode === 'split' && !isBlocklyCollapsed)))) && (
                           <div 
-                            className="panel-3d panel-blockly min-w-0 h-full relative overflow-hidden glass-panel"
+                            className="panel-3d panel-blockly min-w-0 min-h-0 h-full relative overflow-hidden glass-panel"
                             style={{ 
                               width: uiMode === 'student' ? '100%' : (isMobile ? '100%' : (workspaceMode === 'split' ? (!isEditorCollapsed ? `calc(${splitRatio}% - 2px)` : 'calc(100% - 32px)') : '100%')),
                               height: uiMode === 'student' ? '100%' : (isMobile ? (workspaceMode === 'split' && !isEditorCollapsed ? `${splitRatio}%` : '100%') : '100%'),
-                              minHeight: uiMode === 'pro' && isMobile && workspaceMode === 'split' && !isEditorCollapsed ? '320px' : undefined,
                               flexGrow: 0,
                               flexShrink: 0
                             }}
@@ -7546,15 +7927,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               onCollapse={workspaceMode === 'split' ? () => { setIsBlocklyCollapsed(true); setIsEditorCollapsed(false); } : undefined}
                               isRunning={isRunning}
                               onMicrobitPreview={(frames) => setMicrobitFrames(frames)}
-                              onRunSimulator={(code) => {
-                                const isPython = activeFile.endsWith('.py');
-                                if (isPython) {
-                                  handleRunPython(code);
-                                } else {
-                                  handleRunCode(code);
-                                }
-                              }}
-                              onStopSimulator={handleStopCode}
                               themeMode={themeMode}
                             />
                           </div>
@@ -7589,11 +7961,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         {((uiMode === 'student' && studentSubMode === 'code') ||
                           (uiMode === 'pro' && (workspaceMode === 'code' || (workspaceMode === 'split' && !isEditorCollapsed)))) && (
                           <div 
-                            className="panel-3d panel-code min-w-0 h-full relative overflow-hidden rounded-2xl glass-panel"
+                            className="panel-3d panel-code min-w-0 min-h-0 h-full relative overflow-hidden rounded-2xl glass-panel"
                             style={{ 
                               width: (uiMode === 'student') ? '100%' : (isMobile ? '100%' : (workspaceMode === 'split' ? (!isBlocklyCollapsed ? `calc(${100 - splitRatio}% - 2px)` : 'calc(100% - 32px)') : '100%')),
                               height: (uiMode === 'student') ? '100%' : (isMobile ? (workspaceMode === 'split' && !isBlocklyCollapsed ? `${100 - splitRatio}%` : '100%') : '100%'),
-                              minHeight: isMobile && workspaceMode === 'split' && !isBlocklyCollapsed ? '320px' : undefined,
                               flexGrow: 0,
                               flexShrink: 0
                             }}
@@ -7644,21 +8015,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   ...prev,
                                   [filename]: content
                                 }));
+                                if (syncStatuses[filename] === false) {
+                                  const inoFile = Object.keys(files).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
+                                  const pyFile = Object.keys(files).find(f => f.endsWith('.py')) || 'python/main.py';
+                                  try {
+                                    if (filename.endsWith('.ino')) {
+                                      const xml = arduinoToBlocklyXml(content);
+                                      setWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                    } else if (filename.endsWith('.py')) {
+                                      const xml = pythonToBlocklyXml(content);
+                                      setWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                    }
+                                  } catch (err) {
+                                    // Ignore transient parse errors while typing
+                                  }
+                                }
                               }}
                               onTabChange={(filename) => {
-                                setActiveFile(filename);
+                                handleFileSelect(filename);
                               }}
                               onCollapse={workspaceMode === 'split' ? () => { setIsEditorCollapsed(true); setIsBlocklyCollapsed(false); } : undefined}
                               isRunning={isRunning}
-                              onRunSimulator={() => {
-                                const isPython = activeFile.endsWith('.py');
-                                if (isPython) {
-                                  handleRunPython();
-                                } else {
-                                  handleRunCode();
-                                }
-                              }}
-                              onStopSimulator={handleStopCode}
                               themeMode={themeMode}
                             />
                           </div>
@@ -7762,7 +8139,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     className={`flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none font-mono transition border ${themeMode === 'light' ? 'bg-slate-200/50 border-slate-200 text-slate-850 focus:border-[var(--accent-primary)]' : 'bg-[#080910] border-slate-700 text-slate-200 focus:border-blue-500'}`}
                   />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const url = githubUrl.trim();
                       if (!url) return;
                       if (!url.startsWith('http')) {
@@ -7773,43 +8150,48 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       const parts = url.split('/').filter(Boolean);
                       let repoName = (parts[parts.length - 1] || 'library').replace(/\.git$/i, '');
                       const authorName = parts.length >= 2 ? parts[parts.length - 2] : 'unknown';
-                      let libFullName = repoName;
-                      const lowerRepo = repoName.toLowerCase();
-                      if (lowerRepo.includes('dht')) {
-                        libFullName = 'DHT sensor library';
-                      } else if (lowerRepo.includes('servo')) {
-                        libFullName = 'Servo';
-                      } else if (lowerRepo.includes('liquidcrystal') || lowerRepo.includes('lcd')) {
-                        libFullName = 'LiquidCrystal_I2C';
-                      }
-                      
+
                       setInteractiveTerminalLogs((prev: any) => [
                         ...prev,
-                        { text: `> Cloning ${url}...`, type: 'output' },
-                        { text: `> Resolving git objects...`, type: 'output' },
+                        { text: `> Memulai instalasi library dari ${url}...`, type: 'output' },
                       ]);
 
-                      setTimeout(() => {
+                      const req = (window as any).__electronRequire || (window as any).require;
+                      let success = false;
+                      if (req) {
+                        try {
+                          const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', url);
+                          if (res && res.success) success = true;
+                        } catch (e: any) {
+                          console.warn('GitHub install error:', e);
+                        }
+                      } else {
+                        success = true;
+                      }
+
+                      if (success) {
                         setPackages((prev: any) => ({
                           ...prev,
-                          arduino: prev.arduino.some((p: any) => p.name === libFullName)
-                            ? prev.arduino.map((p: any) => p.name === libFullName ? { ...p, installed: true } : p)
-                            : [...prev.arduino, { name: libFullName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true }]
+                          arduino: prev.arduino.some((p: any) => p.name === repoName)
+                            ? prev.arduino.map((p: any) => p.name === repoName ? { ...p, installed: true } : p)
+                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true }]
                         }));
                         setTerminalLogs((prev: any) => [
                           ...prev,
-                          { text: `[LIB] Cloning ${url}...`, type: 'info' },
-                          { text: `[LIB] ✓ Library '${libFullName}' berhasil diinstall! Cek panel Library Manager di kiri.`, type: 'success' }
+                          { text: `[LIB] ✓ Library '${repoName}' berhasil diinstal!`, type: 'success' }
                         ]);
                         setInteractiveTerminalLogs((prev: any) => [
                           ...prev,
-                          { text: `> Installing library '${libFullName}'...`, type: 'output' },
-                          { text: `> ✓ Library '${libFullName}' installed to Arduino/libraries/`, type: 'success' },
-                          { text: `> Block baru tersedia di Blockly Editor: "Custom Libraries ✨"`, type: 'success' }
+                          { text: `> ✓ Library '${repoName}' installed to Arduino/libraries/`, type: 'success' }
                         ]);
                         setGithubUrl('');
-                        setIsInstallingGithub(false);
-                      }, 1800);
+                      } else {
+                        setTerminalLogs((prev: any) => [
+                          ...prev,
+                          { text: `[LIB] ❌ Gagal menginstal library dari ${url}. Cek log terminal.`, type: 'error' }
+                        ]);
+                      }
+                      setIsInstallingGithub(false);
                     }}
                     disabled={isInstallingGithub || !githubUrl.trim()}
                     className={`px-4 py-2 text-xs font-bold rounded-lg transition cursor-pointer select-none whitespace-nowrap hover:opacity-90 border ${
@@ -8000,59 +8382,439 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
           )}
 
-          {/* TAB: HARDWARE SIMULATOR */}
+          {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
-            <div className={`absolute inset-0 p-4 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
-              <div className={`flex items-center justify-between pb-3 select-none border-b mb-3 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
-                <div>
-                  <h2 className={`text-lg font-bold flex items-center gap-2 ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`} style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
-                    <Monitor className={`w-5 h-5 ${themeMode === 'light' ? 'text-cyan-600' : 'text-cyan-400'}`} /> {t(language, 'simulator', 'title')}
-                  </h2>
-                  <p className={`text-xs ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{t(language, 'simulator', 'description', { board })}</p>
+            <div className={`absolute inset-0 p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
+              {/* Simulator Dedicated Toolbar */}
+              <div className={`flex flex-wrap items-center justify-between gap-2 pb-2.5 select-none border-b mb-2.5 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <Monitor className={`w-5 h-5 ${themeMode === 'light' ? 'text-cyan-600' : 'text-cyan-400'}`} />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`} style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
+                          {t(language, 'simulator', 'title')}
+                        </h2>
+                        <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                          Workspace Simulator Mandiri
+                        </span>
+                      </div>
+                      <p className={`text-[10px] ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Kode di halaman ini terpisah penuh dari kode Real Device (IDE).
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Controls: Simulator Board, Language File, View Mode, Run/Stop, Reset */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Simulator Virtual Board Selector */}
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs ${themeMode === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900/90 border-slate-700/80 text-slate-200'}`}>
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="text-[10px] font-semibold text-slate-400">Board Sim:</span>
+                    <select
+                      value={simBoard}
+                      onChange={(e) => setSimBoard(e.target.value)}
+                      className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer"
+                    >
+                      <option value="ESP32 DevKit V1" className="bg-slate-900 text-white">ESP32 DevKit V1</option>
+                      <option value="ESP32-CAM" className="bg-slate-900 text-white">ESP32-CAM</option>
+                      <option value="ESP8266 NodeMCU" className="bg-slate-900 text-white">ESP8266 NodeMCU</option>
+                      <option value="Arduino Uno" className="bg-slate-900 text-white">Arduino Uno</option>
+                      <option value="Arduino Nano" className="bg-slate-900 text-white">Arduino Nano</option>
+                      <option value="Arduino Mega" className="bg-slate-900 text-white">Arduino Mega</option>
+                      <option value="Raspberry Pi Pico" className="bg-slate-900 text-white">Raspberry Pi Pico</option>
+                      <option value="STM32 BluePill" className="bg-slate-900 text-white">STM32 BluePill</option>
+                      <option value="BBC micro:bit" className="bg-slate-900 text-white">BBC micro:bit</option>
+                    </select>
+                  </div>
+
+                  {/* Simulator File / Language Switcher */}
+                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
+                    <button
+                      onClick={() => setSimActiveFile('firmware/main.ino')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        simActiveFile === 'firmware/main.ino'
+                          ? 'bg-cyan-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ⚡ C++ (main.ino)
+                    </button>
+                    <button
+                      onClick={() => setSimActiveFile('python/main.py')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        simActiveFile === 'python/main.py'
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🐍 Python (main.py)
+                    </button>
+                  </div>
+
+                  {/* Layout Mode Switcher */}
+                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
+                    <button
+                      onClick={() => setSimViewMode('split')}
+                      title="Tampilkan Editor Kode/Blok + Rangkaian Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'split'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Code className="w-3 h-3" /> Split Kode + Sim
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('blockly')}
+                      title="Tampilkan Visual Blockly + Rangkaian Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'blockly'
+                          ? 'bg-purple-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Blocks className="w-3 h-3" /> Blok + Sim
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('code')}
+                      title="Tampilkan Monaco Code Editor + Rangkaian Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'code'
+                          ? 'bg-sky-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <FileText className="w-3 h-3" /> Editor + Sim
+                    </button>
+                    <button
+                      onClick={() => setSimViewMode('circuit')}
+                      title="Layar Penuh Rangkaian Simulator"
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        simViewMode === 'circuit'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Monitor className="w-3 h-3" /> Full Rangkaian
+                    </button>
+                  </div>
+
+                  {/* Run / Stop Simulator Button */}
+                  {isRunning ? (
+                    <button
+                      onClick={handleStopCode}
+                      className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" /> Hentikan Simulasi
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const codeToRun = simFiles[simActiveFile] || '';
+                        if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                          handleRunPython(codeToRun);
+                        } else {
+                          handleRunCode(codeToRun);
+                        }
+                      }}
+                      className="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" /> Jalankan Simulasi
+                    </button>
+                  )}
+
+                  {/* Reset Simulator Workspace Code */}
                   <button
-                    onClick={() => { setCurrentTab('ide'); setWorkspaceMode('split'); }}
-                    className={`px-3.5 py-1.5 text-xs font-bold rounded-xl border transition cursor-pointer select-none ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'}`}
+                    onClick={() => {
+                      handleStopCode();
+                      setSimFiles(DEFAULT_SIM_FILES);
+                      setSimWorkspaceXmls({});
+                      setSimSyncStatuses({ 'firmware/main.ino': true, 'python/main.py': true });
+                      setSimResetKey(prev => prev + 1);
+                    }}
+                    title="Reset Kode Simulator ke Default"
+                    className={`p-1.5 rounded-xl border transition cursor-pointer ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
                   >
-                    {t(language, 'simulator', 'backToWorkspace')}
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Toggle Virtual Serial Output */}
+                  <button
+                    onClick={() => setSimShowConsole(prev => !prev)}
+                    className={`px-2.5 py-1.5 text-[10px] font-bold rounded-xl border transition cursor-pointer select-none flex items-center gap-1 ${
+                      simShowConsole
+                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40'
+                        : themeMode === 'light' ? 'bg-white text-slate-600 border-slate-300' : 'bg-slate-900 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    <TerminalIcon className="w-3 h-3" /> Log Simulasi
                   </button>
                 </div>
               </div>
-              <div className={`flex-1 min-w-0 min-h-0 relative rounded-2xl overflow-hidden border shadow-2xl ${themeMode === 'light' ? 'border-slate-200/90 bg-slate-50' : 'border-slate-800 bg-slate-950'}`}>
-                <Simulator
-                  isExpanded={true}
-                  isRunning={isRunning}
-                  robotCommand={robotCommand}
-                  sensorData={sensorData}
-                  board={board}
-                  activePythonCode={activePythonCode}
-                  activeCode={board === 'BBC micro:bit' ? activePythonCode : (files[activeFile] || '')}
-                  microbitFrames={microbitFrames}
-                  pinStates={pinStates}
-                  onPinStateChange={handlePinStateChange}
-                  programPins={programPins}
-                  potValue={simulatorPotValue}
-                  onPotValueChange={setSimulatorPotValue}
-                  buttonPressed={simulatorButtonPressed}
-                  onButtonPressedChange={setSimulatorButtonPressed}
-                  activeComponents={simulatorActiveComponents}
-                  onActiveComponentsChange={setSimulatorActiveComponents}
-                  positions={simulatorPositions}
-                  onPositionsChange={setSimulatorPositions}
-                  wires={simulatorWires}
-                  onWiresChange={setSimulatorWires}
-                  blynkStatus={blynkStatus}
-                  blynkVirtualPins={blynkVirtualPins}
-                  onBlynkVirtualWrite={handleBlynkVirtualWrite}
-                  isWifiConnected={isWifiConnected}
-                  onWifiConnectedChange={setIsWifiConnected}
-                  selectedWifi={selectedWifi}
-                  onSelectedWifiChange={setSelectedWifi}
-                  wifiPassword={wifiPassword}
-                  onWifiPasswordChange={setWifiPassword}
-                  onSensorDataChange={() => {}}
-                />
+
+              {/* Main Simulator Workspace Content: Left (Isolated Code/Blockly) + Right (Interactive Circuit + Console) */}
+              <div className="flex-1 min-w-0 min-h-0 flex gap-3 overflow-hidden">
+                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace */}
+                {simViewMode !== 'circuit' && (
+                  <div className="w-[46%] min-w-[340px] max-w-[680px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
+                    {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
+                    {(simViewMode === 'blockly' || simViewMode === 'split') && (
+                      <div
+                        className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-2xl border border-indigo-500/20"
+                        style={{ height: simViewMode === 'split' ? '55%' : '100%' }}
+                      >
+                        <BlocklyEditor
+                          key={`sim_blockly_${simActiveFile}_${themeMode}_${simResetKey}`}
+                          codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
+                          board={simBoard}
+                          installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
+                          isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
+                          workspaceXml={simWorkspaceXmls[simActiveFile] || null}
+                          onWorkspaceChange={(xmlText) => {
+                            const pyFile = 'python/main.py';
+                            const inoFile = 'firmware/main.ino';
+                            setSimWorkspaceXmls(prev => ({
+                              ...prev,
+                              [simActiveFile]: xmlText,
+                              [inoFile]: xmlText,
+                              [pyFile]: xmlText,
+                            }));
+                          }}
+                          onCodeChange={(newCode, otherCode) => {
+                            if (simSyncStatuses[simActiveFile] === false) return;
+                            const currentCode = simFiles[simActiveFile] || '';
+                            if (currentCode.trim().length > 30 && newCode.trim().length < 15) return;
+                            const pyFile = 'python/main.py';
+                            const inoFile = 'firmware/main.ino';
+                            const otherFile = simActiveFile.endsWith('.ino') ? pyFile : inoFile;
+                            setSimFiles(prev => ({
+                              ...prev,
+                              [simActiveFile]: newCode,
+                              ...(otherCode !== undefined ? { [otherFile]: otherCode } : {})
+                            }));
+                          }}
+                          onSyncToCode={(arduinoCode, pythonCode) => {
+                            setSimSyncStatuses(prev => ({
+                              ...prev,
+                              'firmware/main.ino': true,
+                              'python/main.py': true,
+                            }));
+                            setSimFiles(prev => ({
+                              ...prev,
+                              'firmware/main.ino': arduinoCode,
+                              'python/main.py': pythonCode,
+                            }));
+                          }}
+                          activeFile={simActiveFile}
+                          isRunning={isRunning}
+                          onMicrobitPreview={(frames) => setMicrobitFrames(frames)}
+                          onRunSimulator={(code) => {
+                            if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                              handleRunPython(code);
+                            } else {
+                              handleRunCode(code);
+                            }
+                          }}
+                          onStopSimulator={handleStopCode}
+                          themeMode={themeMode}
+                        />
+                      </div>
+                    )}
+
+                    {/* Monaco Code Editor (shown in 'code' or bottom half of 'split') */}
+                    {(simViewMode === 'code' || simViewMode === 'split') && (
+                      <div
+                        className="panel-3d panel-code min-w-0 relative overflow-hidden rounded-2xl glass-panel border border-cyan-500/20"
+                        style={{ height: simViewMode === 'split' ? '42%' : '100%' }}
+                      >
+                        <CodeEditor
+                          files={simFiles}
+                          activeFile={simActiveFile}
+                          onSaveFile={() => {
+                            const content = simFiles[simActiveFile] || '';
+                            if (!isElectronEnv()) {
+                              downloadFileInBrowser(simActiveFile.split('/').pop() || simActiveFile, content);
+                            }
+                          }}
+                          isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
+                          onSyncToggle={(sync) => {
+                            const pyFile = 'python/main.py';
+                            const inoFile = 'firmware/main.ino';
+                            if (sync) {
+                              try {
+                                const currentCode = simFiles[simActiveFile] || '';
+                                const xml = simActiveFile.endsWith('.ino')
+                                  ? arduinoToBlocklyXml(currentCode)
+                                  : pythonToBlocklyXml(currentCode);
+                                if (xml && xml.includes('<block')) {
+                                  setSimWorkspaceXmls(prev => ({
+                                    ...prev,
+                                    [simActiveFile]: xml,
+                                    [inoFile]: xml,
+                                    [pyFile]: xml,
+                                  }));
+                                }
+                              } catch (err) {
+                                console.warn('Failed to parse simulator code back to blocks:', err);
+                              }
+                            }
+                            setSimSyncStatuses(prev => ({
+                              ...prev,
+                              [inoFile]: sync,
+                              [pyFile]: sync,
+                            }));
+                          }}
+                          onFileChange={(filename, content) => {
+                            setSimFiles(prev => ({
+                              ...prev,
+                              [filename]: content,
+                            }));
+                            if (simSyncStatuses[filename] === false) {
+                              const inoFile = Object.keys(simFiles).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
+                              const pyFile = Object.keys(simFiles).find(f => f.endsWith('.py')) || 'python/main.py';
+                              try {
+                                if (filename.endsWith('.ino')) {
+                                  const xml = arduinoToBlocklyXml(content);
+                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                } else if (filename.endsWith('.py')) {
+                                  const xml = pythonToBlocklyXml(content);
+                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                }
+                              } catch (err) {
+                                // Ignore transient parse errors while typing
+                              }
+                            }
+                          }}
+                          onTabChange={(filename) => {
+                            setSimActiveFile(filename);
+                            const content = simFiles[filename];
+                            if (content) {
+                              const inoFile = Object.keys(simFiles).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
+                              const pyFile = Object.keys(simFiles).find(f => f.endsWith('.py')) || 'python/main.py';
+                              try {
+                                if (filename.endsWith('.ino')) {
+                                  const xml = arduinoToBlocklyXml(content);
+                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                } else if (filename.endsWith('.py')) {
+                                  const xml = pythonToBlocklyXml(content);
+                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
+                                }
+                              } catch (err) {
+                                console.warn('Failed to parse simulator tab code to blocks:', err);
+                              }
+                            }
+                          }}
+                          isRunning={isRunning}
+                          onRunSimulator={() => {
+                            const codeToRun = simFiles[simActiveFile] || '';
+                            if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                              handleRunPython(codeToRun);
+                            } else {
+                              handleRunCode(codeToRun);
+                            }
+                          }}
+                          onStopSimulator={handleStopCode}
+                          themeMode={themeMode}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* RIGHT PANE: Hardware Circuit Simulator + Collapsible Virtual Serial Console */}
+                <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
+                  <div className={`flex-1 min-w-0 min-h-0 relative rounded-2xl overflow-hidden border shadow-2xl ${themeMode === 'light' ? 'border-slate-200/90 bg-slate-50' : 'border-slate-800 bg-slate-950'}`}>
+                    <Simulator
+                      isExpanded={true}
+                      isRunning={isRunning}
+                      robotCommand={robotCommand}
+                      sensorData={sensorData}
+                      board={simBoard}
+                      activePythonCode={simActivePythonCode}
+                      activeCode={simActiveCode}
+                      microbitFrames={microbitFrames}
+                      pinStates={pinStates}
+                      onPinStateChange={handlePinStateChange}
+                      programPins={programPins}
+                      potValue={simulatorPotValue}
+                      onPotValueChange={setSimulatorPotValue}
+                      buttonPressed={simulatorButtonPressed}
+                      onButtonPressedChange={setSimulatorButtonPressed}
+                      activeComponents={simulatorActiveComponents}
+                      onActiveComponentsChange={setSimulatorActiveComponents}
+                      positions={simulatorPositions}
+                      onPositionsChange={setSimulatorPositions}
+                      wires={simulatorWires}
+                      onWiresChange={setSimulatorWires}
+                      blynkStatus={blynkStatus}
+                      blynkVirtualPins={blynkVirtualPins}
+                      onBlynkVirtualWrite={handleBlynkVirtualWrite}
+                      isWifiConnected={isWifiConnected}
+                      onWifiConnectedChange={setIsWifiConnected}
+                      selectedWifi={selectedWifi}
+                      onSelectedWifiChange={setSelectedWifi}
+                      wifiPassword={wifiPassword}
+                      onWifiPasswordChange={setWifiPassword}
+                      onSensorDataChange={(newData) => setSensorData(prev => ({ ...prev, ...newData }))}
+                      themeMode={themeMode}
+                    />
+                  </div>
+
+                  {/* Virtual Simulator Serial / Output Console */}
+                  {simShowConsole && (
+                    <div className={`h-36 flex-shrink-0 rounded-2xl border p-3 flex flex-col font-mono text-xs overflow-hidden ${themeMode === 'light' ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#07080d] border-slate-800 text-slate-200'}`}>
+                      <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10 select-none">
+                        <div className="flex items-center gap-2">
+                          <TerminalIcon className="w-3.5 h-3.5 text-cyan-400" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">
+                            Virtual Simulator Serial &amp; Telemetry Log
+                          </span>
+                          <span className="text-[10px] text-slate-500">({buildStatusText})</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setTerminalLogs([])}
+                            className="text-[10px] text-slate-400 hover:text-white cursor-pointer px-1.5 py-0.5 rounded bg-white/5"
+                          >
+                            Bersihkan
+                          </button>
+                          <button
+                            onClick={() => setSimShowConsole(false)}
+                            className="text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1 pr-1 text-[11px]">
+                        {terminalLogs.length === 0 ? (
+                          <p className="text-slate-500 italic text-[10px]">
+                            Klik &quot;Jalankan Simulasi&quot; untuk melihat output Serial.println() / print() dan telemetri virtual di sini...
+                          </p>
+                        ) : (
+                          terminalLogs.map((log, i) => (
+                            <div
+                              key={i}
+                              className={
+                                log.type === 'error'
+                                  ? 'text-rose-400'
+                                  : log.type === 'success'
+                                  ? 'text-emerald-400'
+                                  : log.type === 'stdout'
+                                  ? 'text-cyan-300'
+                                  : 'text-slate-300'
+                              }
+                            >
+                              {log.text}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -8264,70 +9026,448 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       <div className="h-6 glass-header border-t px-4 flex items-center justify-between font-mono text-[9px] text-slate-500 select-none flex-shrink-0">
         <div className="flex items-center gap-4">
           <span className="text-blue-500 font-bold">RoboLab Studio v1.0.0</span>
-          <span>Bound: ESP32</span>
-          <span>Port: COM4 (USB Serial)</span>
-          <span>Baudrate: 115200</span>
+          <span>Bound: {currentTab === 'simulator' ? `${simBoard} (Sim)` : board}</span>
+          <span>Port: {port || 'Web Serial'}</span>
+          <span>Baudrate: {serialBaudrate}</span>
         </div>
         <div className="flex items-center gap-3">
           <span>Ln 15, Col 25</span>
           <span>Spaces: 2</span>
           <span>UTF-8</span>
           <span>LF</span>
-          <span>C++</span>
-          <span>ESP32</span>
+          <span>{(currentTab === 'simulator' ? simActiveFile : activeFile).endsWith('.py') ? 'MicroPython' : 'C++'}</span>
+          <span>{currentTab === 'simulator' ? simBoard : board}</span>
         </div>
       </div>
 
-      {/* 5. NEW FILE DIALOG MODAL */}
-      {showNewFileModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 select-none">
-          <div className="glass-panel rounded-xl p-5 w-80 space-y-4 shadow-2xl"
-          style={{background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Tambah Berkas Baru</h3>
-              <button onClick={() => setShowNewFileModal(false)} className="text-slate-500 hover:text-slate-350 cursor-pointer"><X className="w-4 h-4" /></button>
-            </div>
-            <input 
-              type="text" 
-              placeholder="Contoh: sensor.ino, motor.h, atau utils.cpp"
-              value={newFileName}
-              onChange={(e) => setNewFileName(e.target.value)}
-              className="w-full bg-[#12131a] border border-slate-800 rounded px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            />
-            <div className="flex justify-end gap-2">
-              <button 
-                onClick={() => setShowNewFileModal(false)}
-                className="text-[10px] font-bold text-slate-400 hover:bg-slate-850 px-3.5 py-1.5 rounded transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={() => {
-                  if (newFileName.trim()) {
-                    const name = newFileName.trim();
-                    let defaultContent = `void setup() {\n}\nvoid loop() {\n}`;
-                    if (name.endsWith('.py')) {
-                      defaultContent = `# Custom Python script\n`;
-                    } else if (name.endsWith('.h') || name.endsWith('.hpp')) {
-                      const guard = name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
-                      defaultContent = `#ifndef ${guard}\n#define ${guard}\n\n#include <Arduino.h>\n\n// Header declarations\n\n#endif // ${guard}\n`;
-                    } else if (name.endsWith('.c') || name.endsWith('.cpp')) {
-                      const headerName = name.replace(/\.(c|cpp)$/i, '.h');
-                      defaultContent = `#include <Arduino.h>\n#include "${headerName}"\n\n// Function implementations\n`;
+      {/* 5. NEW FILE DIALOG MODAL (CARD BUTTON SELECTOR & THEME ADAPTIVE) */}
+      {showNewFileModal && (() => {
+        const isLight = themeMode === 'light';
+        const fileTypeOptions: Array<{
+          ext: 'ino' | 'py' | 'h' | 'cpp' | 'c' | 'json';
+          title: string;
+          badge: string;
+          desc: string;
+          defaultBase: string;
+          suggestions: string[];
+          icon: React.ReactNode;
+        }> = [
+          {
+            ext: 'ino',
+            title: 'Arduino Sketch',
+            badge: '.ino',
+            desc: 'Program utama mikrokontroler C++ (setup & loop)',
+            defaultBase: 'main',
+            suggestions: ['main', 'sensor', 'motor_control', 'iot_blynk'],
+            icon: <Cpu className="w-4 h-4" />
+          },
+          {
+            ext: 'py',
+            title: 'Python / MicroPython',
+            badge: '.py',
+            desc: 'Skrip Python untuk robotika, AI Vision & IoT',
+            defaultBase: 'main',
+            suggestions: ['main', 'robot_ai', 'sensor_node', 'vision'],
+            icon: <TerminalIcon className="w-4 h-4" />
+          },
+          {
+            ext: 'h',
+            title: 'Header C/C++',
+            badge: '.h',
+            desc: 'Deklarasi fungsi, konstanta pin & konfigurasi',
+            defaultBase: 'config',
+            suggestions: ['config', 'pins', 'secrets', 'sensors'],
+            icon: <Code className="w-4 h-4" />
+          },
+          {
+            ext: 'cpp',
+            title: 'Modul C++',
+            badge: '.cpp',
+            desc: 'Implementasi class & driver perangkat keras C++',
+            defaultBase: 'motor_driver',
+            suggestions: ['motor_driver', 'pid_controller', 'oled_ui', 'helper'],
+            icon: <FileText className="w-4 h-4" />
+          },
+          {
+            ext: 'c',
+            title: 'Modul Bahasa C',
+            badge: '.c',
+            desc: 'Kode sumber C standar tingkat rendah',
+            defaultBase: 'utils',
+            suggestions: ['utils', 'hal_driver', 'crc_check'],
+            icon: <FileIcon className="w-4 h-4" />
+          },
+          {
+            ext: 'json',
+            title: 'Konfigurasi JSON',
+            badge: '.json',
+            desc: 'Data konfigurasi, kalibrasi & parameter proyek',
+            defaultBase: 'config',
+            suggestions: ['config', 'calibration', 'settings'],
+            icon: <Sliders className="w-4 h-4" />
+          }
+        ];
+
+        const activeOption = fileTypeOptions.find(o => o.ext === newFileType) || fileTypeOptions[0];
+        const rawCleaned = newFileName
+          .trim()
+          .replace(/\.(ino|py|h|hpp|cpp|c|json|txt|md|hex)$/i, '')
+          .replace(/[\\/:*?"<>|]/g, '_');
+        const effectiveBaseName = rawCleaned || activeOption.defaultBase;
+        const finalFileName = `${effectiveBaseName}.${newFileType}`;
+
+        const confirmCreateNewFile = () => {
+          const base = rawCleaned || activeOption.defaultBase;
+          const targetName = `${base}.${newFileType}`;
+          let defaultContent = `void setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  \n}\n`;
+
+          if (newFileType === 'py') {
+            defaultContent = `# Berkas MicroPython / Python: ${targetName}\nimport time\nimport robolab as robot\n\ndef loop():\n    while True:\n        print("RoboLab Python aktif")\n        time.sleep(1)\n\nif __name__ == "__main__":\n    loop()\n`;
+          } else if (newFileType === 'h') {
+            const guard = `${base.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}_H`;
+            defaultContent = `#ifndef ${guard}\n#define ${guard}\n\n#include <Arduino.h>\n\n// Deklarasi konstanta & fungsi untuk ${base}\n\n#endif // ${guard}\n`;
+          } else if (newFileType === 'cpp') {
+            defaultContent = `#include <Arduino.h>\n#include "${base}.h"\n\n// Implementasi fungsi C++ untuk ${base}\n`;
+          } else if (newFileType === 'c') {
+            defaultContent = `#include <Arduino.h>\n\n// Implementasi fungsi C untuk ${base}\n`;
+          } else if (newFileType === 'json') {
+            defaultContent = `{\n  "project": "${projectName || 'RoboLab_Project'}",\n  "board": "${board}",\n  "baudrate": 115200\n}\n`;
+          }
+
+          let savedDiskPath: string | undefined = undefined;
+          const req = (window as any).__electronRequire || (window as any).require;
+          if (req && projectPath) {
+            try {
+              const fs = req('fs');
+              const pathMod = req('path');
+              const fullPath = pathMod.join(projectPath, targetName);
+              fs.writeFileSync(fullPath, defaultContent, 'utf-8');
+              savedDiskPath = fullPath;
+              setFilePaths(prev => ({ ...prev, [targetName]: fullPath }));
+            } catch (e) {
+              console.warn('Could not save new file to projectPath:', e);
+            }
+          }
+
+          handleOpenFileAction(targetName, defaultContent, savedDiskPath);
+          setTerminalLogs(prev => [
+            ...prev,
+            { text: `✓ Berkas baru '${targetName}' (${activeOption.title}) berhasil dibuat.`, type: 'success' }
+          ]);
+          setNewFileName('');
+          setShowNewFileModal(false);
+        };
+
+        return (
+          <div
+            className={`fixed inset-0 flex items-center justify-center z-[99999] select-none p-4 ${
+              isLight ? 'bg-slate-900/30 backdrop-blur-md' : 'bg-black/65 backdrop-blur-sm'
+            }`}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowNewFileModal(false);
+            }}
+          >
+            <div
+              className="glass-panel rounded-2xl p-6 w-full max-w-[540px] space-y-5 shadow-2xl relative overflow-hidden"
+              style={
+                isLight
+                  ? {
+                      background: '#ffffff',
+                      border: '1px solid rgba(var(--accent-rgb), 0.22)',
+                      boxShadow: '0 24px 60px -15px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(var(--accent-rgb), 0.08)'
                     }
-                    handleOpenFileAction(name, defaultContent);
-                    setNewFileName('');
-                    setShowNewFileModal(false);
-                  }
-                }}
-                className="text-[10px] font-bold bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded transition cursor-pointer"
+                  : {
+                      background: 'var(--glass-bg)',
+                      border: '1px solid rgba(var(--accent-rgb), 0.28)',
+                      boxShadow: '0 24px 60px -12px rgba(0, 0, 0, 0.75), 0 0 30px -8px rgba(var(--accent-rgb), 0.18)'
+                    }
+              }
+            >
+              {/* Decorative ambient accent glow */}
+              <div
+                className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[70px] pointer-events-none"
+                style={{ background: 'var(--accent-primary)', opacity: isLight ? 0.12 : 0.18 }}
+              />
+
+              {/* Header */}
+              <div
+                className="flex justify-between items-center pb-3.5 border-b relative z-10"
+                style={{ borderColor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }}
               >
-                Buat Berkas
-              </button>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm"
+                    style={{
+                      background: 'rgba(var(--accent-rgb), 0.14)',
+                      color: 'var(--accent-primary)',
+                      border: '1px solid rgba(var(--accent-rgb), 0.28)'
+                    }}
+                  >
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-bold tracking-wide uppercase ${isLight ? 'text-slate-800' : 'text-white'}`}>
+                      Buat Berkas Baru
+                    </h3>
+                    <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Pilih jenis berkas di bawah, lalu ketik nama tanpa menulis ekstensi
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowNewFileModal(false)}
+                  className={`p-1.5 rounded-xl transition cursor-pointer ${
+                    isLight
+                      ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Step 1: Card Button File Type Picker */}
+              <div className="space-y-2 relative z-10">
+                <div className="flex items-center justify-between">
+                  <label
+                    className="text-[10px] font-bold uppercase tracking-wider"
+                    style={{ color: isLight ? '#334155' : '#cbd5e1' }}
+                  >
+                    1. Pilih Jenis Berkas
+                  </label>
+                  <span
+                    className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md"
+                    style={{
+                      background: 'rgba(var(--accent-rgb), 0.12)',
+                      color: 'var(--accent-primary)'
+                    }}
+                  >
+                    Ekstensi Otomatis: .{newFileType}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {fileTypeOptions.map((item) => {
+                    const isSelected = newFileType === item.ext;
+                    return (
+                      <button
+                        key={item.ext}
+                        type="button"
+                        onClick={() => setNewFileType(item.ext)}
+                        className="group relative text-left rounded-xl p-3 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-2 overflow-hidden"
+                        style={
+                          isSelected
+                            ? {
+                                background: isLight
+                                  ? 'rgba(var(--accent-rgb), 0.10)'
+                                  : 'rgba(var(--accent-rgb), 0.16)',
+                                border: '1.5px solid var(--accent-primary)',
+                                boxShadow: isLight
+                                  ? '0 8px 20px -6px rgba(var(--accent-rgb), 0.25)'
+                                  : '0 8px 24px -6px rgba(var(--accent-rgb), 0.35)'
+                              }
+                            : {
+                                background: isLight ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                                border: isLight
+                                  ? '1.5px solid rgba(15, 23, 42, 0.08)'
+                                  : '1.5px solid rgba(255, 255, 255, 0.08)'
+                              }
+                        }
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105"
+                            style={
+                              isSelected
+                                ? {
+                                    background: 'var(--accent-gradient)',
+                                    color: '#ffffff',
+                                    boxShadow: '0 4px 10px rgba(var(--accent-rgb), 0.35)'
+                                  }
+                                : {
+                                    background: isLight ? 'rgba(15,23,42,0.05)' : 'rgba(255,255,255,0.06)',
+                                    color: isLight ? '#475569' : '#94a3b8'
+                                  }
+                            }
+                          >
+                            {item.icon}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span
+                              className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md transition"
+                              style={
+                                isSelected
+                                  ? {
+                                      background: 'var(--accent-gradient)',
+                                      color: '#ffffff'
+                                    }
+                                  : {
+                                      background: isLight ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.07)',
+                                      color: isLight ? '#475569' : '#94a3b8'
+                                    }
+                              }
+                            >
+                              {item.badge}
+                            </span>
+                            {isSelected && (
+                              <span
+                                className="w-4 h-4 rounded-full flex items-center justify-center text-white"
+                                style={{ background: 'var(--accent-primary)' }}
+                              >
+                                <Check className="w-2.5 h-2.5 stroke-[3px]" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div
+                            className="text-xs font-bold leading-snug"
+                            style={{
+                              color: isSelected
+                                ? isLight
+                                  ? 'var(--accent-primary)'
+                                  : '#ffffff'
+                                : isLight
+                                  ? '#1e293b'
+                                  : '#e2e8f0'
+                            }}
+                          >
+                            {item.title}
+                          </div>
+                          <div
+                            className={`text-[10px] leading-tight mt-0.5 line-clamp-2 ${
+                              isLight ? 'text-slate-500' : 'text-slate-400'
+                            }`}
+                          >
+                            {item.desc}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 2: File Base Name Input (Auto-Extension) */}
+              <div className="space-y-2 relative z-10">
+                <label
+                  className="text-[10px] font-bold uppercase tracking-wider block"
+                  style={{ color: isLight ? '#334155' : '#cbd5e1' }}
+                >
+                  2. Nama Berkas (Tanpa Menulis Ekstensi)
+                </label>
+
+                <div
+                  className="flex items-center rounded-xl overflow-hidden transition-all"
+                  style={{
+                    background: isLight ? '#f8fafc' : 'rgba(10, 12, 20, 0.85)',
+                    border: '1.5px solid var(--accent-primary)',
+                    boxShadow: '0 0 0 3px rgba(var(--accent-rgb), 0.12)'
+                  }}
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder={`Contoh: ${activeOption.defaultBase}`}
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        confirmCreateNewFile();
+                      } else if (e.key === 'Escape') {
+                        setShowNewFileModal(false);
+                      }
+                    }}
+                    className={`flex-1 bg-transparent px-3.5 py-2.5 text-xs font-mono focus:outline-none ${
+                      isLight ? 'text-slate-800 placeholder-slate-400' : 'text-slate-100 placeholder-slate-500'
+                    }`}
+                  />
+                  <div
+                    className="px-3.5 py-2.5 text-xs font-mono font-bold select-none border-l"
+                    style={{
+                      background: 'rgba(var(--accent-rgb), 0.14)',
+                      color: 'var(--accent-primary)',
+                      borderColor: 'rgba(var(--accent-rgb), 0.25)'
+                    }}
+                  >
+                    .{newFileType}
+                  </div>
+                </div>
+
+                {/* Quick Name Suggestion Chips & Live Preview */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>Saran cepat:</span>
+                    {activeOption.suggestions.map((sug) => (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => setNewFileName(sug)}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded-md transition cursor-pointer"
+                        style={
+                          effectiveBaseName === sug
+                            ? {
+                                background: 'rgba(var(--accent-rgb), 0.18)',
+                                color: 'var(--accent-primary)',
+                                border: '1px solid rgba(var(--accent-rgb), 0.35)'
+                              }
+                            : {
+                                background: isLight ? 'rgba(15,23,42,0.05)' : 'rgba(255,255,255,0.05)',
+                                color: isLight ? '#475569' : '#94a3b8',
+                                border: '1px solid transparent'
+                              }
+                        }
+                      >
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-[10px] font-mono flex items-center gap-1">
+                    <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Hasil:</span>
+                    <span className="font-bold" style={{ color: 'var(--accent-primary)' }}>
+                      {finalFileName}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div
+                className="flex items-center justify-end gap-2.5 pt-3 border-t relative z-10"
+                style={{ borderColor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowNewFileModal(false)}
+                  className={`text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer ${
+                    isLight
+                      ? 'text-slate-600 hover:bg-slate-100'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                  }`}
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCreateNewFile}
+                  className="text-xs font-bold text-white px-5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-md hover:opacity-95"
+                  style={{
+                    background: 'var(--accent-gradient)',
+                    boxShadow: '0 6px 16px -3px rgba(var(--accent-rgb), 0.4)'
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Buat {finalFileName}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 6. EXPANDED SIMULATOR MODAL */}
       {isSimulatorExpanded && (
@@ -8350,9 +9490,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               isRunning={isRunning}
               robotCommand={robotCommand}
               sensorData={sensorData}
-              board={board}
-              activePythonCode={activePythonCode}
-              activeCode={board === 'BBC micro:bit' ? activePythonCode : (files[activeFile] || '')}
+              board={simBoard}
+              activePythonCode={simActivePythonCode}
+              activeCode={simActiveCode}
               microbitFrames={microbitFrames}
               pinStates={pinStates}
               onPinStateChange={handlePinStateChange}
@@ -8418,7 +9558,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
                 <div className="space-y-0.5">
                   <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Warna Aksen</label>
-                  <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#94a3b8' }}>Hanya aktif di mode terang</span>
+                  <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#94a3b8' }}>Sesuaikan warna aksen &amp; kartu sistem</span>
                 </div>
                 <div className="flex gap-1.5">
                   {[
@@ -8428,16 +9568,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     { id: 'pink', bg: 'bg-[#ec4899]', title: 'Pink' }
                   ].map((item) => {
                     const isSelected = themeColor === item.id;
-                    const disabled = themeMode !== 'light';
                     return (
                       <button 
                         key={item.id}
-                        disabled={disabled}
                         onClick={() => setThemeColor(item.id as any)}
-                        className={`w-6 h-6 rounded-full ${item.bg} flex items-center justify-center transition cursor-pointer relative shadow-md ${disabled ? 'opacity-30 cursor-not-allowed' : 'hover:scale-110'}`}
+                        className={`w-6 h-6 rounded-full ${item.bg} flex items-center justify-center transition cursor-pointer relative shadow-md hover:scale-110`}
                         title={item.title}
                       >
-                        {isSelected && !disabled && <Check className="w-3 h-3 text-white stroke-[3px]" />}
+                        {isSelected && <Check className="w-3 h-3 text-white stroke-[3px]" />}
                       </button>
                     )
                   })}
@@ -8683,6 +9821,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         onClose={() => setShowCommandPalette(false)}
         themeMode={themeMode}
         commands={[
+          { id: 'new_file', title: 'Buat Berkas Baru...', category: 'File', icon: <Plus className="w-4 h-4 text-emerald-400" />, shortcut: 'Ctrl+N', action: handleCreateFile },
           { id: 'open', title: 'Buka Berkas...', category: 'File', icon: <FolderOpen className="w-4 h-4 text-amber-400" />, shortcut: 'Ctrl+O', action: handleNativeOpenFile },
           { id: 'save', title: 'Simpan Berkas', category: 'File', icon: <Save className="w-4 h-4 text-blue-400" />, shortcut: 'Ctrl+S', action: handleSaveFile },
           { id: 'verify', title: 'Kompilasi Firmware (Verify)', category: 'Hardware', icon: <Check className="w-4 h-4 text-emerald-400" />, action: () => handleArduinoHardwareAction('verify') },

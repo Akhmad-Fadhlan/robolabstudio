@@ -7,6 +7,11 @@ import {
 import type { KiloCodeConfig, ChatMessage } from '../../services/kilocodeService';
 import { DATASHEET_DATABASE } from '../../data/datasheetDb';
 import type { ComponentDatasheet } from '../../data/datasheetDb';
+import {
+  startWebSerialMonitor,
+  stopWebSerialMonitor,
+  sendWebSerialData,
+} from '../../services/webSerialService';
 
 interface TerminalPanelProps {
   isTerminalCollapsed: boolean;
@@ -353,6 +358,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setShowSettingsModal(false);
   };
 
+  const [serialTxInput, setSerialTxInput] = useState('');
+
   // ─── Tab button helper ───────────────────────────────────────────────────
   const tabBtn = (
     tab: typeof terminalTab,
@@ -367,6 +374,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           try {
             const req = (window as any).__electronRequire || (window as any).require;
             if (req) req('electron').ipcRenderer.invoke('stop-serial-monitor');
+            else stopWebSerialMonitor();
           } catch(e) {}
         } else if (port && port !== 'none' && board) {
           try {
@@ -430,7 +438,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               
               {/* AI Tab — special gradient style */}
               <button
-                onClick={() => { setTerminalTab('ai'); try { const req = (window as any).__electronRequire || (window as any).require; if (req) req('electron').ipcRenderer.invoke('stop-serial-monitor'); } catch(e) {} }}
+                onClick={() => { setTerminalTab('ai'); try { const req = (window as any).__electronRequire || (window as any).require; if (req) req('electron').ipcRenderer.invoke('stop-serial-monitor'); else stopWebSerialMonitor(); } catch(e) {} }}
                 className={`flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer px-3 py-1.5 rounded-lg transition-all duration-200
                   ${terminalTab === 'ai'
                     ? 'bg-gradient-to-r from-sky-500/15 to-blue-500/15 text-sky-400 border border-sky-500/20 shadow-sm'
@@ -482,17 +490,44 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     <option value="115200">115200 baud</option>
                   </select>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       try {
                         const req = (window as any).__electronRequire || (window as any).require;
-                        if (req && port && port !== 'none' && board) {
-                          const electron = req('electron');
+                        if (req) {
+                          if (port && port !== 'none' && board) {
+                            const electron = req('electron');
+                            if (isSerialConnected) {
+                              electron.ipcRenderer.invoke('stop-serial-monitor');
+                              setIsSerialConnected(false);
+                            } else {
+                              electron.ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
+                              setIsSerialConnected(true);
+                            }
+                          }
+                        } else {
+                          // Web Browser Mode — Web Serial API
                           if (isSerialConnected) {
-                            electron.ipcRenderer.invoke('stop-serial-monitor');
+                            await stopWebSerialMonitor();
                             setIsSerialConnected(false);
                           } else {
-                            electron.ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
-                            setIsSerialConnected(true);
+                            const res = await startWebSerialMonitor(
+                              port,
+                              serialBaudrate,
+                              (chunk) => {
+                                setSerialRawOutput((prev) => {
+                                  const next = prev + chunk;
+                                  return next.length > 50000 ? next.slice(next.length - 50000) : next;
+                                });
+                              },
+                              () => {
+                                setIsSerialConnected(false);
+                              }
+                            );
+                            if (res.success) {
+                              setIsSerialConnected(true);
+                            } else if (res.error) {
+                              setSerialRawOutput((prev) => prev + `\r\n[WebSerial Error] ${res.error}\r\n`);
+                            }
                           }
                         }
                       } catch(e) {}
@@ -500,8 +535,35 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     className={`flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer
                       ${isSerialConnected ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                   >
-                    {isSerialConnected ? <><WifiOff className="w-3.5 h-3.5" />Disconnect</> : <><Wifi className="w-3.5 h-3.5" />Connect</>}
+                    {isSerialConnected ? <><WifiOff className="w-3.5 h-3.5" />Disconnect</> : <><Wifi className="w-3.5 h-3.5" />Connect (WebUSB / Serial)</>}
                   </button>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!serialTxInput) return;
+                      await sendWebSerialData(serialTxInput + '\r\n');
+                      setSerialTxInput('');
+                    }}
+                    className="flex-1 flex gap-2 ml-2"
+                  >
+                    <input
+                      type="text"
+                      value={serialTxInput}
+                      onChange={(e) => setSerialTxInput(e.target.value)}
+                      placeholder="Kirim pesan ke Serial Port (Enter)..."
+                      className={`flex-1 px-3 py-1 text-xs font-mono rounded-lg border outline-none transition-all ${
+                        isLight
+                          ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
+                          : 'bg-[#0c0e16] border-slate-700 text-slate-200 focus:border-indigo-500'
+                      }`}
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                    >
+                      <Send className="w-3 h-3" /> Kirim
+                    </button>
+                  </form>
                 </div>
                 <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto ${isLight ? 'bg-slate-900 text-emerald-400 border-slate-700' : 'bg-[#070810] text-emerald-400 border-slate-800'}`}>
                   <pre className="whitespace-pre-wrap">{serialRawOutput || 'Belum ada data Serial...'}</pre>

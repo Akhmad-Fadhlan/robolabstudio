@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-electron
+resources/bin
+resources/drivers
+resources/arduino-data
+robolab-landing
+robolab-web
+staging
+testing-php
+tmp
+*.step
+*.mod
+*.log

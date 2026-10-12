@@ -88,12 +88,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     let editorInstance: any = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let disposable: any = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    import('monaco-editor').then((monaco) => {
-      if (cancelled || !containerRef.current) return;
+    const initMonaco = (attempt = 0) => {
+      import('monaco-editor').then((monaco) => {
+        if (cancelled || !containerRef.current) return;
 
-      monacoRef.current = monaco;
-
+        monacoRef.current = monaco;
 
         monaco.editor.defineTheme('premium-dark', {
           base: 'vs-dark',
@@ -137,65 +139,69 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           }
         });
 
+        editorInstance = monaco.editor.create(containerRef.current, {
+          value: files[activeFileRef.current] || '',
+          language: getLanguage(activeFileRef.current),
+          theme: themeMode === 'light' ? 'premium-light' : 'premium-dark',
+          readOnly: isSyncWithBlocks,
+          fontFamily: "'Fira Code', 'Courier New', Courier, monospace",
+          fontSize: 14,
+          minimap: { enabled: true },
+          scrollbar: {
+            vertical: 'visible',
+            horizontal: 'visible',
+            useShadows: false,
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+          },
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          lineNumbersMinChars: 3,
+          padding: { top: 8, bottom: 8 },
+          automaticLayout: true,
+          tabSize: 2,
+          wordWrap: 'on',
+          bracketPairColorization: { enabled: true },
+        });
 
-      editorInstance = monaco.editor.create(containerRef.current, {
-        value: files[activeFileRef.current] || '',
-        language: getLanguage(activeFileRef.current),
-        theme: themeMode === 'light' ? 'premium-light' : 'premium-dark',
-        readOnly: isSyncWithBlocks,
-        fontFamily: "'Fira Code', 'Courier New', Courier, monospace",
-        fontSize: 14,
-        minimap: { enabled: true },
-        scrollbar: {
-          vertical: 'visible',
-          horizontal: 'visible',
-          useShadows: false,
-          verticalScrollbarSize: 10,
-          horizontalScrollbarSize: 10,
-        },
-        cursorBlinking: 'smooth',
-        cursorSmoothCaretAnimation: 'on',
-        lineNumbersMinChars: 3,
-        padding: { top: 8, bottom: 8 },
-        automaticLayout: true,
-        tabSize: 2,
-        wordWrap: 'on',
-        bracketPairColorization: { enabled: true },
-      });
+        editorRef.current = editorInstance;
+        setIsEditorReady(true);
 
-      editorRef.current = editorInstance;
-      setIsEditorReady(true);
+        requestAnimationFrame(() => {
+          try { editorInstance?.layout(); } catch (_) {}
+        });
+        setTimeout(() => {
+          try { editorInstance?.layout(); } catch (_) {}
+        }, 120);
 
-      disposable = editorInstance.onDidChangeModelContent(() => {
-        const value = editorInstance.getValue();
-        
-        // Debounce update to parent by 150ms to prevent component re-render lag during typing
-        if (debounceTimeoutRef.current) {
-          clearTimeout(debounceTimeoutRef.current);
+        if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+          resizeObserver = new ResizeObserver(() => {
+            try { editorInstance?.layout(); } catch (_) {}
+          });
+          resizeObserver.observe(containerRef.current);
         }
-        debounceTimeoutRef.current = setTimeout(() => {
-          debounceTimeoutRef.current = null;
-          onFileChangeRef.current(activeFileRef.current, value);
-        }, 150);
-      });
 
-      editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-        const isReadOnly = editorInstance.getOption(monaco.editor.EditorOption.readOnly);
-        if (!isReadOnly) {
-          try {
-            const req = (window as any).__electronRequire || (window as any).require;
-            if (req) {
-              const { clipboard } = req('electron');
-              const text = clipboard.readText();
-              if (text) {
-                editorInstance.executeEdits("clipboard-paste", [{
-                  range: editorInstance.getSelection(),
-                  text: text,
-                  forceMoveMarkers: true
-                }]);
-              }
-            } else if (navigator.clipboard && navigator.clipboard.readText) {
-              navigator.clipboard.readText().then((text: string) => {
+        disposable = editorInstance.onDidChangeModelContent(() => {
+          const value = editorInstance.getValue();
+          
+          // Debounce update to parent by 150ms to prevent component re-render lag during typing
+          if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+          }
+          debounceTimeoutRef.current = setTimeout(() => {
+            debounceTimeoutRef.current = null;
+            onFileChangeRef.current(activeFileRef.current, value);
+          }, 150);
+        });
+
+        editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+          const isReadOnly = editorInstance.getOption(monaco.editor.EditorOption.readOnly);
+          if (!isReadOnly) {
+            try {
+              const req = (window as any).__electronRequire || (window as any).require;
+              if (req) {
+                const { clipboard } = req('electron');
+                const text = clipboard.readText();
                 if (text) {
                   editorInstance.executeEdits("clipboard-paste", [{
                     range: editorInstance.getSelection(),
@@ -203,25 +209,42 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                     forceMoveMarkers: true
                   }]);
                 }
-              }).catch((err: any) => console.error("Paste error:", err));
+              } else if (navigator.clipboard && navigator.clipboard.readText) {
+                navigator.clipboard.readText().then((text: string) => {
+                  if (text) {
+                    editorInstance.executeEdits("clipboard-paste", [{
+                      range: editorInstance.getSelection(),
+                      text: text,
+                      forceMoveMarkers: true
+                    }]);
+                  }
+                }).catch((err: any) => console.error("Paste error:", err));
+              }
+            } catch (err) {
+              console.error("Failed manual paste", err);
             }
-          } catch (err) {
-            console.error("Failed manual paste", err);
           }
-        }
-      });
+        });
 
-      editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        if (onSaveFileRef.current) {
-          onSaveFileRef.current();
+        editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+          if (onSaveFileRef.current) {
+            onSaveFileRef.current();
+          }
+        });
+      }).catch((err) => {
+        console.error('Failed to load monaco-editor:', err);
+        if (!cancelled && attempt < 3) {
+          retryTimer = setTimeout(() => initMonaco(attempt + 1), 800);
         }
       });
-    }).catch((err) => {
-      console.error('Failed to load monaco-editor:', err);
-    });
+    };
+
+    initMonaco();
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (resizeObserver) resizeObserver.disconnect();
       if (disposable) disposable.dispose();
       if (editorInstance) editorInstance.dispose();
       editorRef.current = null;
@@ -386,6 +409,33 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
       {/* ✨ Premium Editor Container */}
       <div className={`flex-1 min-h-0 relative rounded-xl overflow-hidden border shadow-inner ${themeMode === 'light' ? 'border-slate-200 bg-white' : 'border-slate-800 bg-[#0b0c10]'}`}>
+        {!isEditorReady && (
+          <div className="absolute inset-0 flex overflow-hidden font-mono text-[13.5px] leading-[21px] z-10">
+            <div
+              className={`select-none py-2 px-2.5 text-right border-r overflow-hidden flex-shrink-0 ${
+                themeMode === 'light'
+                  ? 'bg-slate-50 text-slate-400 border-slate-200'
+                  : 'bg-[#08090d] text-slate-600 border-slate-800/80'
+              }`}
+              style={{ minWidth: '42px' }}
+            >
+              {(files[activeFile] || '').split('\n').map((_, idx) => (
+                <div key={idx}>{idx + 1}</div>
+              ))}
+            </div>
+            <textarea
+              value={files[activeFile] || ''}
+              readOnly={isSyncWithBlocks}
+              onChange={(e) => onFileChange(activeFile, e.target.value)}
+              spellCheck={false}
+              className={`flex-1 w-full h-full py-2 px-3 resize-none focus:outline-none font-mono text-[13.5px] leading-[21px] overflow-auto ${
+                themeMode === 'light'
+                  ? 'bg-white text-slate-800'
+                  : 'bg-[#0b0c10] text-[#eeffff]'
+              }`}
+            />
+          </div>
+        )}
         <div ref={containerRef} className="absolute inset-0" />
       </div>
     </div>

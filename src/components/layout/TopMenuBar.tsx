@@ -57,6 +57,7 @@ interface TopMenuBarProps {
   // Language
   language: LangCode;
   onLanguageChange: (lang: LangCode) => void;
+  onRequestWebPort?: () => void;
 }
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({
@@ -95,6 +96,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   onSignOut,
   language,
   onLanguageChange,
+  onRequestWebPort,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -380,20 +382,31 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden xl:inline">{tb('portLabel')}</span>
             <select 
               value={port} 
-              onChange={(e) => setPort(e.target.value)}
-              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[70px] sm:max-w-[85px] lg:max-w-[100px] xl:max-w-[115px] truncate"
+              onChange={(e) => {
+                if (e.target.value === '__request_web_serial__') {
+                  onRequestWebPort?.();
+                } else {
+                  setPort(e.target.value);
+                }
+              }}
+              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[90px] sm:max-w-[115px] lg:max-w-[130px] xl:max-w-[145px] truncate"
             >
               {availablePorts.map((p) => (
                 <option key={p.address} value={p.address} className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>
                   {p.address}
                 </option>
               ))}
+              {onRequestWebPort && (
+                <option value="__request_web_serial__" className={isDark ? 'bg-[#0e0f16] text-cyan-400 font-bold' : 'bg-white text-cyan-700 font-bold'}>
+                  ➕ Pilih USB (Web Serial)...
+                </option>
+              )}
               <option value="none" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>None</option>
             </select>
             {onRefreshPorts && (
               <button
                 onClick={onRefreshPorts}
-                title="Refresh daftar COM port"
+                title="Refresh / Pilih Port USB"
                 className={`p-0.5 rounded transition-colors hover:text-cyan-400 ${
                   isDark ? 'text-slate-400 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200'
                 }`}

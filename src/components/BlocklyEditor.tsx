@@ -330,7 +330,10 @@ try {
           "options": [
             ["<", "LT"],
             [">", "GT"],
-            ["=", "EQ"]
+            ["=", "EQ"],
+            ["!=", "NEQ"],
+            ["<=", "LTE"],
+            [">=", "GTE"]
           ]
         },
         {
@@ -1277,7 +1280,7 @@ const LIBRARY_SIGNATURES: Array<{
 }> = [
   {
     patterns: ['tft', 'ili9', 'st7', 'ssd1', 'oled', 'display', 'lcd', 'screen'],
-    categoryName: '🖥️ Display',
+    categoryName: 'Display',
     colour: '#f2c94c',
     blocks: [
       { type: 'lib_display_begin',   message: 'Display Begin',              isStatement: true },
@@ -1288,7 +1291,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['fastled', 'crgb', 'ledstrip', 'ws2812', 'sk6812'],
-    categoryName: '🌈 FastLED',
+    categoryName: 'FastLED',
     colour: '#eb5757',
     blocks: [
       { type: 'lib_fastled_begin',   message: 'FastLED AddLeds Pin %1 Count %2', inputs: [{ name: 'PIN', type: 'field_number', value: 5 }, { name: 'NUM', type: 'field_number', value: 60 }], isStatement: true },
@@ -1299,7 +1302,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['stepper', 'motor', 'l298', 'l293', 'drv8825', 'a4988', 'accelstepper'],
-    categoryName: '⚙️ Stepper Motor',
+    categoryName: 'Stepper Motor',
     colour: '#27ae60',
     blocks: [
       { type: 'lib_stepper_begin',  message: 'Stepper Setup Steps %1 Pin1 %2 Pin2 %3', inputs: [{ name: 'STEPS', type: 'field_number', value: 200 }, { name: 'P1', type: 'field_number', value: 8 }, { name: 'P2', type: 'field_number', value: 9 }], isStatement: true },
@@ -1309,7 +1312,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['sd', 'sdcard', 'sd_fat', 'fatfs'],
-    categoryName: '💾 SD Card',
+    categoryName: 'SD Card',
     colour: '#219653',
     blocks: [
       { type: 'lib_sd_begin',  message: 'SD Begin CS Pin %1', inputs: [{ name: 'PIN', type: 'field_number', value: 5 }], isStatement: true },
@@ -1320,7 +1323,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['bmp', 'bme280', 'bme680', 'lps', 'pressure', 'barometer'],
-    categoryName: '🌡️ Pressure Sensor',
+    categoryName: 'Pressure Sensor',
     colour: '#9b51e0',
     blocks: [
       { type: 'lib_bme_begin',    message: 'Pressure Sensor Begin',           isStatement: true },
@@ -1331,7 +1334,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['gps', 'nmea', 'tinygps', 'neo6', 'neo7', 'neo8'],
-    categoryName: '📡 GPS',
+    categoryName: 'GPS',
     colour: '#2f80ed',
     blocks: [
       { type: 'lib_gps_begin',   message: 'GPS Begin Baud %1', inputs: [{ name: 'BAUD', type: 'field_number', value: 9600 }], isStatement: true },
@@ -1342,7 +1345,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['rfid', 'mfrc522', 'pn532', 'nfc'],
-    categoryName: '📶 RFID / NFC',
+    categoryName: 'RFID / NFC',
     colour: '#56ccf2',
     blocks: [
       { type: 'lib_rfid_i2c_begin',  message: 'RFID Begin (I2C) SDA Pin %1 SCL Pin %2', inputs: [{ name: 'SDA', type: 'field_input', text: 'D2' }, { name: 'SCL', type: 'field_input', text: 'D1' }], isStatement: true },
@@ -1354,7 +1357,7 @@ const LIBRARY_SIGNATURES: Array<{
   },
   {
     patterns: ['keypad', 'keyboard', 'matrix4x4', '4x4', '3x4'],
-    categoryName: '⌨️ Keypad',
+    categoryName: 'Keypad',
     colour: '#f2994a',
     blocks: [
       { type: 'lib_keypad_begin', message: 'Keypad Begin',         isStatement: true },
@@ -1400,8 +1403,11 @@ function registerLibraryBlocks(sig: typeof LIBRARY_SIGNATURES[0]) {
   }
 }
 
-// Pre-register all built-in signature blocks at load time
+// Pre-register all built-in signature blocks at load time & disable native Blockly 8px left border bar
 try {
+  if ((Blockly as any).ToolboxCategory) {
+    (Blockly as any).ToolboxCategory.borderWidth = 0;
+  }
   LIBRARY_SIGNATURES.forEach(sig => registerLibraryBlocks(sig));
 } catch (e) {
   console.warn("Library signatures pre-registration warning:", e);
@@ -1423,6 +1429,7 @@ interface BlocklyEditorProps {
   onSyncToCode?: (arduinoCode: string, pythonCode: string) => void;
   themeMode?: 'dark' | 'light';
   onMicrobitPreview?: (frames: string[]) => void;
+  compact?: boolean;
 }
 
 const getBlockTypesForLibrary = (libName: string): string[] => {
@@ -1511,6 +1518,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   onSyncToCode,
   themeMode = 'dark',
   onMicrobitPreview,
+  compact = false,
 }) => {
   const onWorkspaceChangeRef = useRef(onWorkspaceChange);
   onWorkspaceChangeRef.current = onWorkspaceChange;
@@ -1540,36 +1548,40 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const CAT_ICON_CONFIG: Record<string, { color: string; rgb: string; section: string; svg: string }> = {
-    'cat-logic':      { color: '#4c97ff', rgb: '76, 151, 255', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
-    'cat-loop':       { color: '#ffab19', rgb: '255, 171, 25', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17"/></svg>` },
-    'cat-math':       { color: '#40bf4a', rgb: '64, 191, 74', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>` },
-    'cat-text':       { color: '#4cbfe6', rgb: '76, 191, 230', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>` },
-    'cat-variables':  { color: '#ff8c1a', rgb: '255, 140, 26', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>` },
-    'cat-functions':  { color: '#ff6680', rgb: '255, 102, 128', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>` },
-    'cat-io':         { color: '#9966ff', rgb: '153, 102, 255', section: 'SYSTEM', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l4-4m0 0l-4-4m4 4H3m18 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
-    'cat-time':       { color: '#ff4081', rgb: '255, 64, 129', section: 'SYSTEM', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
-    'cat-arduino':    { color: '#14b8a6', rgb: '20, 184, 166', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>` },
-    'cat-esp32':      { color: '#059669', rgb: '5, 150, 105', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M3 9h2m-2 6h2m16-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>` },
-    'cat-bluetooth':  { color: '#00b0ff', rgb: '0, 176, 255', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17l10-10-5-5v20l5-5L7 7"/></svg>` },
-    'cat-servo':      { color: '#ff6d00', rgb: '255, 109, 0', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>` },
-    'cat-motor':      { color: '#ff6d00', rgb: '255, 109, 0', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>` },
-    'cat-servo-motor':{ color: '#ff6d00', rgb: '255, 109, 0', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>` },
-    'cat-sensor':     { color: '#a855f7', rgb: '168, 85, 247', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>` },
-    'cat-display':    { color: '#f59e0b', rgb: '245, 158, 11', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>` },
-    'cat-iot':        { color: '#0ea5e9', rgb: '14, 165, 233', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>` },
-    'cat-microbit':   { color: '#1e293b', rgb: '30, 41, 59', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><rect x="3" y="7" width="18" height="10" rx="5"/><circle cx="8" cy="12" r="1.5" fill="white"/><circle cx="12" cy="12" r="1.5" fill="white"/><circle cx="16" cy="12" r="1.5" fill="white"/></svg>` },
-    'cat-mb-basic':   { color: '#2ac1bc', rgb: '42, 193, 188', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
-    'cat-mb-input':   { color: '#12b886', rgb: '18, 184, 134', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></svg>` },
-    'cat-mb-music':   { color: '#e286f2', rgb: '226, 134, 242', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 10l12-3M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z"/></svg>` },
-    'cat-mb-radio':   { color: '#74c0fc', rgb: '116, 192, 252', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 8a9 9 0 010 8M16 10a5 5 0 010 4M12 12a1 1 0 100-2 1 1 0 000 2z"/></svg>` },
-    'cat-mb-pins':    { color: '#6366f1', rgb: '99, 102, 241', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5v4a4 4 0 008 0V5M12 13v8M10 21h4"/></svg>` },
-    'cat-dht':        { color: '#06b6d4', rgb: '6, 182, 212', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v10m0 0c-1.333 0-4 .8-4 4s2.667 4 4 4 4-.8 4-4-2.667-4-4-4z"/></svg>` },
-    'cat-mpu':        { color: '#8b5cf6', rgb: '139, 92, 246', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18m-3-3l3 3-3 3M6 9l-3 3 3 3"/></svg>` },
-    'cat-neopixel':   { color: '#ec4899', rgb: '236, 72, 153', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.364l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.07 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>` },
-    'cat-ir':         { color: '#f97316', rgb: '249, 115, 22', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>` },
-    'cat-ultrasonic': { color: '#a855f7', rgb: '168, 85, 247', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 10l12-3M9 19a3 3 0 11-6 0 3 3 0 016 0z"/></svg>` },
-    'cat-rfid':       { color: '#00b0ff', rgb: '0, 176, 255', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>` },
-    'cat-default':    { color: '#475569', rgb: '71, 85, 105', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.2" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>` },
+    'cat-logic':      { color: '#4c97ff', rgb: '76, 151, 255', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>` },
+    'cat-loop':       { color: '#ffab19', rgb: '255, 171, 25', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>` },
+    'cat-math':       { color: '#40bf4a', rgb: '64, 191, 74', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>` },
+    'cat-text':       { color: '#26c6da', rgb: '38, 198, 218', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>` },
+    'cat-variables':  { color: '#ff8c1a', rgb: '255, 140, 26', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>` },
+    'cat-functions':  { color: '#ff6680', rgb: '255, 102, 128', section: 'CORE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>` },
+    'cat-io':         { color: '#9966ff', rgb: '153, 102, 255', section: 'SYSTEM', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>` },
+    'cat-time':       { color: '#f43f5e', rgb: '244, 63, 94', section: 'SYSTEM', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
+    'cat-arduino':    { color: '#14b8a6', rgb: '20, 184, 166', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>` },
+    'cat-esp32':      { color: '#10b981', rgb: '16, 185, 129', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><rect x="6" y="6" width="12" height="12" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M9 1v3m6-3v3M9 20v3m6-3v3M20 9h3m-3 6h3M1 9h3m-3 6h3"/></svg>` },
+    'cat-bluetooth':  { color: '#3b82f6', rgb: '59, 130, 246', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17l10-10-5-5v20l5-5L7 7"/></svg>` },
+    'cat-servo':      { color: '#f97316', rgb: '249, 115, 22', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>` },
+    'cat-motor':      { color: '#22c55e', rgb: '34, 197, 94', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>` },
+    'cat-servo-motor':{ color: '#f97316', rgb: '249, 115, 22', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>` },
+    'cat-sensor':     { color: '#a855f7', rgb: '168, 85, 247', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>` },
+    'cat-display':    { color: '#f59e0b', rgb: '245, 158, 11', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>` },
+    'cat-iot':        { color: '#0ea5e9', rgb: '14, 165, 233', section: 'HARDWARE', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>` },
+    'cat-microbit':   { color: '#14b8a6', rgb: '20, 184, 166', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><rect x="3" y="7" width="18" height="10" rx="5"/><circle cx="8" cy="12" r="1.5" fill="white"/><circle cx="12" cy="12" r="1.5" fill="white"/><circle cx="16" cy="12" r="1.5" fill="white"/></svg>` },
+    'cat-mb-basic':   { color: '#2ac1bc', rgb: '42, 193, 188', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>` },
+    'cat-mb-input':   { color: '#12b886', rgb: '18, 184, 134', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></svg>` },
+    'cat-mb-music':   { color: '#e286f2', rgb: '226, 134, 242', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 10l12-3M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z"/></svg>` },
+    'cat-mb-radio':   { color: '#74c0fc', rgb: '116, 192, 252', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 8a9 9 0 010 8M16 10a5 5 0 010 4M12 12a1 1 0 100-2 1 1 0 000 2z"/></svg>` },
+    'cat-mb-pins':    { color: '#6366f1', rgb: '99, 102, 241', section: 'MICRO:BIT', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5v4a4 4 0 008 0V5M12 13v8M10 21h4"/></svg>` },
+    'cat-dht':        { color: '#06b6d4', rgb: '6, 182, 212', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v10m0 0c-1.333 0-4 .8-4 4s2.667 4 4 4 4-.8 4-4-2.667-4-4-4z"/></svg>` },
+    'cat-mpu':        { color: '#8b5cf6', rgb: '139, 92, 246', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18m-3-3l3 3-3 3M6 9l-3 3 3 3"/></svg>` },
+    'cat-neopixel':   { color: '#ec4899', rgb: '236, 72, 153', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>` },
+    'cat-ir':         { color: '#f97316', rgb: '249, 115, 22', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>` },
+    'cat-ultrasonic': { color: '#a855f7', rgb: '168, 85, 247', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 10l12-3M9 19a3 3 0 11-6 0 3 3 0 016 0z"/></svg>` },
+    'cat-rfid':       { color: '#06b6d4', rgb: '6, 182, 212', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><rect x="3" y="5" width="18" height="14" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h2m4 0h2"/></svg>` },
+    'cat-sdcard':     { color: '#10b981', rgb: '16, 185, 129', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm2 3v3m3-3v3m3-3v3"/></svg>` },
+    'cat-pressure':   { color: '#8b5cf6', rgb: '139, 92, 246', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 12l3.5-3.5M12 7v1m5 4h-1M7 12h1"/></svg>` },
+    'cat-gps':        { color: '#3b82f6', rgb: '59, 130, 246', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>` },
+    'cat-keypad':     { color: '#f59e0b', rgb: '245, 158, 11', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><rect x="4" y="4" width="4" height="4" rx="1"/><rect x="10" y="4" width="4" height="4" rx="1"/><rect x="16" y="4" width="4" height="4" rx="1"/><rect x="4" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="16" y="10" width="4" height="4" rx="1"/><rect x="4" y="16" width="4" height="4" rx="1"/><rect x="10" y="16" width="4" height="4" rx="1"/><rect x="16" y="16" width="4" height="4" rx="1"/></svg>` },
+    'cat-default':    { color: '#6366f1', rgb: '99, 102, 241', section: 'EXTENSIONS', svg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2.3" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>` },
   };
 
   const getCatKey = (lowerText: string): string => {
@@ -1580,10 +1592,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     if (t.includes('text')) return 'cat-text';
     if (t.includes('variable')) return 'cat-variables';
     if (t.includes('func') || t.includes('fung')) return 'cat-functions';
-    if (t.includes('input') || t.includes('io') || t.includes('i/o') || t.includes('keypad')) return 'cat-io';
+    if (t.includes('keypad') || t.includes('keyboard')) return 'cat-keypad';
+    if (t.includes('input') || t.includes('io') || t.includes('i/o')) return 'cat-io';
     if (t.includes('time') || t.includes('waktu')) return 'cat-time';
     if (t.includes('arduino')) return 'cat-arduino';
-    if (t.includes('esp32')) return 'cat-esp32';
+    if (t.includes('esp')) return 'cat-esp32';
     if (t.includes('bluetooth')) return 'cat-bluetooth';
     if (t.includes('servo')) return 'cat-servo';
     if (t.includes('motor') || t.includes('stepper')) return 'cat-motor';
@@ -1594,27 +1607,31 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     if (t.includes('ultra')) return 'cat-ultrasonic';
     if (t.includes('rfid') || t.includes('nfc')) return 'cat-rfid';
     if (t.includes('display') || t.includes('screen') || t.includes('tft') || t.includes('oled') || t.includes('lcd')) return 'cat-display';
-    if (t.includes('iot') || t.includes('gps')) return 'cat-iot';
+    if (t.includes('gps')) return 'cat-gps';
+    if (t.includes('iot')) return 'cat-iot';
     if (t.includes('micro') || t.includes('mb')) return 'cat-microbit';
-    if (t.includes('pressure') || t.includes('bmp') || t.includes('bme') || t.includes('sensor') || t.includes('sens')) return 'cat-sensor';
-    if (t.includes('sd') || t.includes('card')) return 'cat-default';
+    if (t.includes('sd') || t.includes('card')) return 'cat-sdcard';
+    if (t.includes('pressure') || t.includes('bmp') || t.includes('bme')) return 'cat-pressure';
+    if (t.includes('sensor') || t.includes('sens')) return 'cat-sensor';
     return 'cat-default';
   };
 
   const isLightModeRef = React.useRef(false);
 
   const updateToolboxUI = useCallback(() => {
-    if (!blocklyDivRef.current) return;
+    const rootEl = blocklyDivRef.current;
+    if (!rootEl) return;
     const isLight = isLightModeRef.current;
+    const tbWidth = '215px';
 
-    // Inject permanent global CSS to kill native Blockly tree icons & pseudo-element duplicates
+    // Inject permanent global CSS to kill native Blockly tree icons & 8px border-left bars
     if (!document.getElementById('codekit-toolbox-kill-icons')) {
       const killStyle = document.createElement('style');
       killStyle.id = 'codekit-toolbox-kill-icons';
       killStyle.textContent = `
         .blocklyTreeIcon, .blocklyTreeIconNone, .blocklyToolboxCategoryIcon, [class*="TreeIcon"] { display: none !important; width: 0 !important; height: 0 !important; min-width: 0 !important; border: none !important; border-left: none !important; visibility: hidden !important; opacity: 0 !important; }
         .blocklyTreeRow::before, .blocklyToolboxCategory::before { display: none !important; content: none !important; }
-        .blocklyTreeRow, .blocklyToolboxCategory, [role="treeitem"] { border-left: none !important; }
+        .blocklyToolboxDiv [role="treeitem"] > div:not(.codekit-icon-box):not(.cat-active-bar) { border: none !important; border-left: none !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
         .blocklyTreeSelected .blocklyTreeLabel, .blocklyToolboxCategorySelected .blocklyToolboxCategoryLabel { background: transparent !important; background-color: transparent !important; border-left: none !important; }
         .blocklyToolboxContents { overflow: visible !important; padding-bottom: 32px !important; }
         .blocklyToolboxDiv { overflow-x: hidden !important; overflow-y: auto !important; }
@@ -1623,15 +1640,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     }
 
     try {
-      const toolboxDiv = document.querySelector('.blocklyToolboxDiv') as HTMLElement | null;
+      const toolboxDiv = rootEl.querySelector('.blocklyToolboxDiv') as HTMLElement | null;
       if (toolboxDiv) {
-        toolboxDiv.style.setProperty('width', '215px', 'important');
-        toolboxDiv.style.setProperty('min-width', '215px', 'important');
-        toolboxDiv.style.setProperty('max-width', '215px', 'important');
+        toolboxDiv.style.setProperty('width', tbWidth, 'important');
+        toolboxDiv.style.setProperty('min-width', tbWidth, 'important');
+        toolboxDiv.style.setProperty('max-width', tbWidth, 'important');
         toolboxDiv.style.setProperty('box-sizing', 'border-box', 'important');
         toolboxDiv.style.setProperty('padding-top', '0px', 'important');
         toolboxDiv.style.setProperty('padding-bottom', '32px', 'important');
-        toolboxDiv.style.setProperty('background-color', isLight ? '#ffffff' : '#0f172a', 'important');
+        toolboxDiv.style.setProperty('background-color', isLight ? '#f8fafc' : '#0b1120', 'important');
         toolboxDiv.style.setProperty('border-right', isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.08)', 'important');
         toolboxDiv.style.setProperty('box-shadow', 'none', 'important');
         toolboxDiv.style.setProperty('overflow-x', 'hidden', 'important');
@@ -1647,13 +1664,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="w-3.5 h-3.5">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
-              <span>BLOCKS</span>
+              <span>BLOCKS MENU</span>
             </div>
             <div class="codekit-search-input-wrapper">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="codekit-search-icon">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
               </svg>
-              <input type="text" class="codekit-search-input" placeholder="Search blocks..." />
+              <input type="text" class="codekit-search-input" placeholder="Cari blok..." />
             </div>
           `;
           toolboxDiv.insertBefore(headerEl, toolboxDiv.firstChild);
@@ -1673,14 +1690,29 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       }
 
-      const contentsEl = document.querySelector('.blocklyToolboxContents') as HTMLElement | null;
-      const effectiveRows = document.querySelectorAll('.blocklyTreeRow, .blocklyToolboxCategory, [role="treeitem"]');
+      const contentsEl = rootEl.querySelector('.blocklyToolboxContents') as HTMLElement | null;
+      const effectiveRows = rootEl.querySelectorAll('[role="treeitem"]');
 
       const renderedSections = new Set<string>();
 
       effectiveRows.forEach((rowEl: Element) => {
         const row = rowEl as HTMLElement;
-        row.style.setProperty('border-left', 'none', 'important');
+
+        // Strip any native Blockly 8px left color border on inner rowDiv_ / rowContents_
+        row.querySelectorAll('div:not(.codekit-icon-box):not(.cat-active-bar)').forEach((innerDivEl) => {
+          const innerDiv = innerDivEl as HTMLElement;
+          if (innerDiv.getAttribute('role') === 'group') return;
+          innerDiv.style.setProperty('border', 'none', 'important');
+          innerDiv.style.setProperty('border-left', 'none', 'important');
+          innerDiv.style.setProperty('background', 'transparent', 'important');
+          innerDiv.style.setProperty('background-color', 'transparent', 'important');
+          innerDiv.style.setProperty('padding', '0px', 'important');
+          innerDiv.style.setProperty('margin', '0px', 'important');
+          innerDiv.style.setProperty('display', 'flex', 'important');
+          innerDiv.style.setProperty('align-items', 'center', 'important');
+          innerDiv.style.setProperty('flex', '1', 'important');
+          innerDiv.style.setProperty('min-width', '0', 'important');
+        });
 
         let labelEl = row.querySelector('.blocklyTreeLabel, .blocklyToolboxCategoryLabel, .blocklyToolboxCategoryName, [id$=".label"]') as HTMLElement | null;
         if (!labelEl) {
@@ -1700,10 +1732,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           let cleanedText = row.getAttribute('data-cat-label') || '';
           if (!cleanedText) {
             const rawText = (labelEl ? labelEl.textContent : row.textContent) || '';
-            cleanedText = rawText.replace(/\p{Emoji}/gu, '').replace(/\s+/g, ' ').trim();
+            // Use Extended_Pictographic instead of Emoji so digits (e.g. ESP32, MPU6050) are never stripped!
+            cleanedText = rawText.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
             if (cleanedText) {
               row.setAttribute('data-cat-label', cleanedText);
             }
+          }
+          if (labelEl && cleanedText && labelEl.textContent !== cleanedText) {
+            labelEl.textContent = cleanedText;
           }
 
           const lowerText = cleanedText.toLowerCase();
@@ -1712,7 +1748,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           // Section header insertion
           const sectionName = iconConf.section;
-          if (contentsEl && !renderedSections.has(sectionName) && sectionName) {
+          if (contentsEl && !renderedSections.has(sectionName) && sectionName && row.parentNode === contentsEl) {
             renderedSections.add(sectionName);
             let sectionHeader = contentsEl.querySelector(`.cat-section-header[data-section="${sectionName}"]`) as HTMLElement | null;
             if (!sectionHeader) {
@@ -1735,58 +1771,63 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           if (searchQuery && !matches) return;
 
-          const isSelected = row.classList.contains('blocklyTreeSelected') || row.classList.contains('blocklyToolboxCategorySelected');
+          const isSelected =
+            row.classList.contains('blocklyTreeSelected') ||
+            row.classList.contains('blocklyToolboxCategorySelected') ||
+            row.getAttribute('aria-selected') === 'true' ||
+            !!row.querySelector('.blocklyTreeSelected, .blocklyToolboxCategorySelected');
 
           row.style.setProperty('--cat-color', iconConf.color, 'important');
-          row.style.setProperty('--cat-selected-bg', `rgba(${iconConf.rgb}, ${isLight ? 0.10 : 0.16})`, 'important');
-          row.style.setProperty('--cat-border', `rgba(${iconConf.rgb}, ${isLight ? 0.25 : 0.40})`, 'important');
+          row.style.setProperty('--cat-rgb', iconConf.rgb, 'important');
 
+          // Kids-friendly colorful tactile card styling
           row.style.setProperty('display', 'flex', 'important');
           row.style.setProperty('align-items', 'center', 'important');
-          row.style.setProperty('height', '38px', 'important');
-          row.style.setProperty('min-height', '38px', 'important');
-          row.style.setProperty('max-height', '38px', 'important');
-          row.style.setProperty('padding', '0 10px 0 8px', 'important');
-          row.style.setProperty('margin', '2px 8px', 'important');
-          row.style.setProperty('border-radius', '8px', 'important');
+          row.style.setProperty('height', '42px', 'important');
+          row.style.setProperty('min-height', '42px', 'important');
+          row.style.setProperty('max-height', '42px', 'important');
+          row.style.setProperty('padding', '0 10px 0 7px', 'important');
+          row.style.setProperty('margin', '5px 10px', 'important');
+          row.style.setProperty('border-radius', '12px', 'important');
           row.style.setProperty('cursor', 'pointer', 'important');
           row.style.setProperty('box-sizing', 'border-box', 'important');
           row.style.setProperty('position', 'relative', 'important');
-          row.style.setProperty('border-left', 'none', 'important');
+          row.style.setProperty('transition', 'all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)', 'important');
 
-          // Active left accent indicator bar
-          let activeBar = row.querySelector('.cat-active-bar') as HTMLElement | null;
-          if (!activeBar) {
-            activeBar = document.createElement('div');
-            activeBar.className = 'cat-active-bar';
-            row.appendChild(activeBar);
-          }
           if (isSelected) {
-            activeBar.style.setProperty('display', 'block', 'important');
-            activeBar.style.setProperty('position', 'absolute', 'important');
-            activeBar.style.setProperty('left', '0px', 'important');
-            activeBar.style.setProperty('top', '6px', 'important');
-            activeBar.style.setProperty('bottom', '6px', 'important');
-            activeBar.style.setProperty('width', '3.5px', 'important');
-            activeBar.style.setProperty('border-radius', '0 4px 4px 0', 'important');
-            activeBar.style.setProperty('background-color', iconConf.color, 'important');
+            row.style.setProperty('background', `linear-gradient(135deg, ${iconConf.color} 0%, rgba(${iconConf.rgb}, 0.86) 100%)`, 'important');
+            row.style.setProperty('border', '1.5px solid rgba(255, 255, 255, 0.55)', 'important');
+            row.style.setProperty('box-shadow', `0 5px 14px rgba(${iconConf.rgb}, 0.42), inset 0 2px 0 rgba(255, 255, 255, 0.35)`, 'important');
+            row.style.setProperty('transform', 'translateX(2px) scale(1.01)', 'important');
           } else {
+            row.style.setProperty('background', isLight
+              ? `linear-gradient(135deg, rgba(${iconConf.rgb}, 0.14) 0%, rgba(${iconConf.rgb}, 0.06) 100%)`
+              : `linear-gradient(135deg, rgba(${iconConf.rgb}, 0.18) 0%, rgba(${iconConf.rgb}, 0.08) 100%)`, 'important');
+            row.style.setProperty('border', `1.5px solid rgba(${iconConf.rgb}, ${isLight ? 0.32 : 0.36})`, 'important');
+            row.style.setProperty('box-shadow', `0 2px 0 rgba(${iconConf.rgb}, ${isLight ? 0.18 : 0.24}), 0 2px 6px rgba(0, 0, 0, ${isLight ? 0.04 : 0.2})`, 'important');
+            row.style.setProperty('transform', 'none', 'important');
+          }
+
+          // Hide legacy activeBar since the whole card now lights up playfully
+          const activeBar = row.querySelector('.cat-active-bar') as HTMLElement | null;
+          if (activeBar) {
             activeBar.style.setProperty('display', 'none', 'important');
           }
 
           if (labelEl) {
-            labelEl.style.setProperty('font-family', "'Inter', system-ui, -apple-system, sans-serif", 'important');
-            labelEl.style.setProperty('font-size', '14px', 'important');
-            labelEl.style.setProperty('font-weight', isSelected ? '600' : '500', 'important');
-            labelEl.style.setProperty('color', isSelected ? (isLight ? '#0f172a' : '#ffffff') : (isLight ? '#334155' : '#cbd5e1'), 'important');
+            labelEl.style.setProperty('font-family', "'Outfit', 'Inter', system-ui, -apple-system, sans-serif", 'important');
+            labelEl.style.setProperty('font-size', '13.5px', 'important');
+            labelEl.style.setProperty('font-weight', isSelected ? '700' : '600', 'important');
+            labelEl.style.setProperty('letter-spacing', '0.01em', 'important');
+            labelEl.style.setProperty('color', isSelected ? '#ffffff' : (isLight ? '#1e293b' : '#f1f5f9'), 'important');
             labelEl.style.setProperty('padding-left', '0', 'important');
             labelEl.style.setProperty('flex', '1', 'important');
             labelEl.style.setProperty('background', 'transparent', 'important');
             labelEl.style.setProperty('background-color', 'transparent', 'important');
-            labelEl.style.setProperty('border-left', 'none', 'important');
+            labelEl.style.setProperty('border', 'none', 'important');
           }
 
-          // Strip all native Blockly icon spans/divs and border-left bars
+          // Strip all native Blockly icon spans/divs
           row.querySelectorAll('.blocklyTreeIcon, .blocklyTreeIconNone, .blocklyToolboxCategoryIcon, [class*="TreeIcon"], [id$=".icon"]').forEach((iconEl: Element) => {
             const icon = iconEl as HTMLElement;
             icon.style.setProperty('display', 'none', 'important');
@@ -1804,25 +1845,25 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           if (!iconBox) {
             iconBox = document.createElement('div');
             iconBox.className = 'codekit-icon-box';
-            if (labelEl && labelEl.parentNode === row) {
-              row.insertBefore(iconBox, labelEl);
-            } else if (row.firstChild) {
+            if (row.firstChild) {
               row.insertBefore(iconBox, row.firstChild);
             } else {
               row.appendChild(iconBox);
             }
           }
-          iconBox.style.setProperty('width', '24px', 'important');
-          iconBox.style.setProperty('min-width', '24px', 'important');
-          iconBox.style.setProperty('height', '24px', 'important');
-          iconBox.style.setProperty('border-radius', '6px', 'important');
+          iconBox.style.setProperty('width', '28px', 'important');
+          iconBox.style.setProperty('min-width', '28px', 'important');
+          iconBox.style.setProperty('height', '28px', 'important');
+          iconBox.style.setProperty('border-radius', '9px', 'important');
           iconBox.style.setProperty('margin-right', '10px', 'important');
           iconBox.style.setProperty('display', 'inline-flex', 'important');
           iconBox.style.setProperty('align-items', 'center', 'important');
           iconBox.style.setProperty('justify-content', 'center', 'important');
           iconBox.style.setProperty('flex-shrink', '0', 'important');
-          iconBox.style.setProperty('background-color', iconConf.color, 'important');
-          iconBox.style.setProperty('box-shadow', 'inset 0 1px 0 rgba(255,255,255,0.25)', 'important');
+          iconBox.style.setProperty('background-color', isSelected ? 'rgba(255,255,255,0.24)' : iconConf.color, 'important');
+          iconBox.style.setProperty('box-shadow', isSelected
+            ? 'inset 0 1px 0 rgba(255,255,255,0.45)'
+            : `inset 0 2px 0 rgba(255,255,255,0.35), 0 2px 5px rgba(${iconConf.rgb}, 0.35)`, 'important');
           iconBox.innerHTML = iconConf.svg;
         } catch (innerErr) {
           // ignore
@@ -2695,7 +2736,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     const hasDht = normalizedLibs.some(l => l.includes('dht'));
     const hasMpu = normalizedLibs.some(l => l.includes('mpu6050') || l.includes('mpu_6050'));
     const hasNeo = normalizedLibs.some(l => l.includes('neopixel') || l.includes('neo_pixel'));
-    const hasServo = normalizedLibs.some(l => l.includes('servo'));
     const hasIR = normalizedLibs.some(l => l.includes('irremote') || l.includes('ir_remote') || l.includes('infrared'));
     const hasUltrasonic = normalizedLibs.some(l => l.includes('ultrasonic') || l.includes('hcsr04') || l.includes('hc_sr04'));
 
@@ -2725,13 +2765,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       `;
     }
-    if (hasServo) {
-      xml += `
-      <category name="Servo Motor" colour="#219653" css-row="cat-servo-motor">
-        <block type="arduino_servo_write"></block>
-      </category>
-      `;
-    }
     if (hasIR) {
       xml += `
       <category name="IR Remote" colour="#f2994a" css-row="cat-ir">
@@ -2749,9 +2782,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     }
 
     // ── Dynamic & Hardware LIBRARY_SIGNATURES scan ──────────────────────────
-    // Register all library signatures and display their toolbox categories
+    // Register all library signatures and display their toolbox categories (skip Display since Displays is already in core hardware)
     LIBRARY_SIGNATURES.forEach((sig, idx) => {
       registerLibraryBlocks(sig);
+      if (sig.categoryName.toLowerCase() === 'display') return;
       xml += `<category name="${sig.categoryName}" colour="${sig.colour}" css-row="cat-lib-${idx}">`;
       sig.blocks.forEach(bd => {
         xml += `<block type="${bd.type}"></block>`;
@@ -2834,7 +2868,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       zoom: {
         controls: true,
         wheel: true,
-        startScale: 0.9,
+        startScale: 0.85,
         maxScale: 2,
         minScale: 0.3,
         scaleSpeed: 1.15,
@@ -2859,6 +2893,45 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
     workspaceRef.current = workspace;
 
+    // Keep Flyout sub-menu at a comfortable kid-friendly scale and refresh card highlight on category click
+    try {
+      const flyout = (workspace as any).getFlyout?.();
+      if (flyout) {
+        const flyoutScale = 0.78;
+        flyout.MARGIN = 12;
+        flyout.GAP_Y = 14;
+        flyout.getFlyoutScale = () => flyoutScale;
+        const flyoutWs = flyout.getWorkspace?.();
+        if (flyoutWs) {
+          flyoutWs.scale = flyoutScale;
+          if (typeof flyoutWs.setScale === 'function') {
+            flyoutWs.setScale(flyoutScale);
+          }
+        }
+        const origShow = flyout.show?.bind(flyout);
+        if (origShow) {
+          flyout.show = (flyoutDef: any) => {
+            const ws = flyout.getWorkspace?.();
+            if (ws) {
+              ws.scale = flyoutScale;
+              if (typeof ws.setScale === 'function') ws.setScale(flyoutScale);
+            }
+            origShow(flyoutDef);
+            if (ws) {
+              ws.scale = flyoutScale;
+              if (typeof ws.setScale === 'function') ws.setScale(flyoutScale);
+            }
+            if (typeof flyout.reflow === 'function') {
+              flyout.reflow();
+            }
+            setTimeout(() => updateToolboxUIRef.current(), 20);
+          };
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
     // Apply CodeKit toolbox styles after Blockly fully renders
     // Use ref to avoid stale closure (inject effect deps don't include updateToolboxUI)
     setTimeout(() => updateToolboxUIRef.current(), 250);
@@ -2877,6 +2950,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       `;
       const xmlToLoad = workspaceXml || defaultXml;
       lastLoadedXmlRef.current = xmlToLoad;
+      isLoadingXmlRef.current = true;
+      Blockly.Events.disable();
       try {
         Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlToLoad), workspace);
       } catch (xmlErr) {
@@ -2885,8 +2960,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         try {
           Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(defaultXml), workspace);
         } catch (_) {}
+      } finally {
+        Blockly.Events.enable();
+        isLoadingXmlRef.current = false;
       }
     } catch (e) {
+      isLoadingXmlRef.current = false;
       console.error(e);
     }
 
@@ -3067,7 +3146,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     // This fixes the "blank blockly canvas" bug when the panel has zero size at mount time.
     requestAnimationFrame(() => {
       Blockly.svgResize(workspace);
-      updateCode(); // Initial generation after resize
+      if (isSyncWithBlocksRef.current) {
+        updateCode(); // Initial generation after resize
+      } else {
+        latestCodeRef.current = generateCodeForLang(codeType, boardRef.current);
+        if (boardRef.current === 'BBC micro:bit' && onMicrobitPreviewRef.current) {
+          onMicrobitPreviewRef.current(extractMicrobitFrames());
+        }
+      }
     });
 
     // ResizeObserver: re-sync SVG whenever the container div changes size
@@ -3091,7 +3177,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   // Re-generate code whenever board prop changes (e.g., user switches board)
   useEffect(() => {
-    if (updateCodeRef.current) {
+    if (isSyncWithBlocksRef.current && updateCodeRef.current) {
       updateCodeRef.current();
     }
   }, [board]);
@@ -3125,12 +3211,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           lastLoadedXmlRef.current = workspaceXml;
           isLoadingXmlRef.current = true;
-          workspaceRef.current.clear();
-          Blockly.Xml.domToWorkspace(
-            Blockly.utils.xml.textToDom(workspaceXml),
-            workspaceRef.current
-          );
-          isLoadingXmlRef.current = false;
+          Blockly.Events.disable();
+          try {
+            workspaceRef.current.clear();
+            Blockly.Xml.domToWorkspace(
+              Blockly.utils.xml.textToDom(workspaceXml),
+              workspaceRef.current
+            );
+          } finally {
+            Blockly.Events.enable();
+            isLoadingXmlRef.current = false;
+          }
+          Blockly.svgResize(workspaceRef.current);
           // Setelah load XML selesai, generate ulang kode hanya jika sync aktif
           if (isSyncWithBlocksRef.current && updateCodeRef.current) {
             updateCodeRef.current();
@@ -4324,18 +4416,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     return code;
   };
 
+  const isLight = themeMode === 'light';
+
   return (
-    <div className="w-full h-full relative overflow-hidden flex flex-col bg-white dark:bg-[#08090d]">
+    <div className={`w-full h-full relative overflow-hidden flex flex-col ${isLight ? 'bg-white' : 'bg-[#08090d]'} ${compact ? 'compact-blockly' : ''}`}>
       {/* ✨ Premium Glassmorphism Toolbar */}
-      <div className="flex items-center justify-between bg-white/80 dark:bg-[#0b0c10]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-4 py-3 z-20 shadow-sm relative">
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-            <Blocks className="w-4 h-4" />
+      <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/90 border-slate-200' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-3'} z-20 shadow-sm relative`}>
+        <div className="flex items-center gap-2">
+          <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} font-bold ${isLight ? 'text-indigo-600' : 'text-indigo-400'} uppercase tracking-widest flex items-center gap-1.5`}>
+            <Blocks className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
             Visual Block
           </span>
         </div>
         
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 items-center">
           {!isSyncWithBlocks && (
             <button
               onClick={() => {
@@ -4351,7 +4445,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
                   Blockly.svgResize(workspaceRef.current);
                 }
               }}
-              className="text-[10px] bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800/60 px-3 py-1.5 rounded-full hover:bg-sky-100 dark:hover:bg-sky-900/50 transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm"
+              className={`text-[10px] border ${isLight ? 'bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100' : 'bg-sky-500/15 text-sky-400 border-sky-500/30 hover:bg-sky-500/25'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
               title="Sinkronkan susunan block saat ini ke kode editor"
             >
               Sinkron ke Kode
@@ -4362,33 +4456,34 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             isRunning ? (
               <button 
                 onClick={onStopSimulator}
-                className="text-[10px] bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 px-4 py-1.5 rounded-full hover:bg-rose-100 dark:hover:bg-rose-900/50 transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm"
+                className={`text-[10px] border ${isLight ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'} ${compact ? 'px-2.5 py-1' : 'px-4 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
                 title="Stop simulation"
               >
-                <Square className="w-3.5 h-3.5 fill-current" /> Stop Sim
+                <Square className="w-3 h-3 fill-current" /> Stop Sim
               </button>
             ) : (
               <button 
                 onClick={() => onRunSimulator?.(latestCodeRef.current)}
-                className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 px-4 py-1.5 rounded-full hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm"
+                className={`text-[10px] border ${isLight ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'} ${compact ? 'px-2.5 py-1' : 'px-4 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
                 title="Run simulation"
               >
-                <Play className="w-3.5 h-3.5 fill-current" /> Run Sim
+                <Play className="w-3 h-3 fill-current" /> Run Sim
               </button>
             )
           )}
           
-          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+          <div className={`h-3.5 w-px ${isLight ? 'bg-slate-200' : 'bg-slate-700/80'} mx-0.5`}></div>
 
           <button 
             onClick={() => {
               if (workspaceRef.current) {
-                workspaceRef.current.zoom(0, 0, 1);
+                workspaceRef.current.setScale(compact ? 0.72 : 0.85);
+                workspaceRef.current.scrollCenter();
               }
             }}
-            className="flex items-center gap-1.5 text-[10px] font-bold bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer shadow-sm"
+            className={`flex items-center gap-1 text-[10px] font-bold border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' : 'bg-[#151824] text-slate-200 border-slate-700/80 hover:bg-slate-800 hover:text-white'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition cursor-pointer shadow-sm`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3 h-3" />
             Reset View
           </button>
           <button 
@@ -4399,9 +4494,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
                 }
               }
             }}
-            className="flex items-center gap-1.5 text-[10px] font-bold bg-white dark:bg-slate-800 text-rose-500 dark:text-rose-400 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-full hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-200 dark:hover:border-rose-900/50 transition cursor-pointer shadow-sm"
+            className={`flex items-center gap-1 text-[10px] font-bold border ${isLight ? 'bg-white text-rose-500 border-slate-200 hover:bg-rose-50 hover:border-rose-200' : 'bg-[#151824] text-rose-400 border-slate-700/80 hover:bg-rose-500/15 hover:border-rose-500/40'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition cursor-pointer shadow-sm`}
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
             Clear
           </button>
         </div>

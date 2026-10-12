@@ -6,7 +6,11 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node --max-old-space-size=4096 node_modules/vite/bin/vite.js",
-    "build": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -b && vite build",
+    "compile-server": "node server/compile-server.cjs",
+    "web:dev": "concurrently -k \"node server/compile-server.cjs\" \"npm run dev\"",
+    "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
+    "vercel-build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
+    "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b",
     "lint": "oxlint",
     "preview": "vite preview",
     "electron": "electron .",
