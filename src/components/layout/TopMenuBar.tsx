@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FolderOpen, Save, Check, Upload, Package, Play, 
   MoreHorizontal, Cpu, Settings, 
@@ -100,16 +101,29 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [moreMenuPos, setMoreMenuPos] = useState<{ top: number; left: number }>({ top: 48, left: 220 });
+  const [langMenuPos, setLangMenuPos] = useState<{ top: number; right: number }>({ top: 48, right: 16 });
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreDropdownRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
+  const langDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        moreMenuRef.current &&
+        !moreMenuRef.current.contains(target) &&
+        (!moreDropdownRef.current || !moreDropdownRef.current.contains(target))
+      ) {
         setShowMoreMenu(false);
       }
-      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+      if (
+        langMenuRef.current &&
+        !langMenuRef.current.contains(target) &&
+        (!langDropdownRef.current || !langDropdownRef.current.contains(target))
+      ) {
         setShowLangMenu(false);
       }
     };
@@ -222,7 +236,14 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             {/* Dropdown "More" */}
             <div className="relative flex-shrink-0" ref={moreMenuRef}>
               <button
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setMoreMenuPos({
+                    top: rect.bottom + 6,
+                    left: Math.max(8, Math.min(rect.left, window.innerWidth - 220)),
+                  });
+                  setShowMoreMenu(!showMoreMenu);
+                }}
                 className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                   isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-slate-100 text-slate-700'
                 }`}
@@ -232,27 +253,36 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 <span className="hidden xl:inline">{tb('more')}</span>
               </button>
 
-              {showMoreMenu && (
-                <div className={`absolute top-full left-0 mt-1.5 w-52 rounded-xl shadow-2xl border py-1.5 z-[300] text-xs ${
-                  isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/80' : 'bg-white border-slate-200 text-slate-800 shadow-slate-300/80'
-                }`}>
+              {showMoreMenu && typeof document !== 'undefined' && createPortal(
+                <div
+                  ref={moreDropdownRef}
+                  style={{
+                    position: 'fixed',
+                    top: moreMenuPos.top,
+                    left: moreMenuPos.left,
+                    zIndex: 999999,
+                  }}
+                  className={`w-52 rounded-xl shadow-2xl border py-1.5 text-xs select-none ${
+                    isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/90' : 'bg-white border-slate-200 text-slate-800 shadow-slate-400/80'
+                  }`}
+                >
                   <button
                     onClick={() => { setShowMoreMenu(false); onOpenBoardManager?.(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <Cpu className="w-3.5 h-3.5 text-purple-400" /> {tb('boardManager')}
                   </button>
 
                   <button
                     onClick={() => { setShowMoreMenu(false); onOpenLibraryManager?.(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <Sliders className="w-3.5 h-3.5 text-cyan-400" /> {tb('libraryManager')}
                   </button>
 
                   <button
                     onClick={() => { setShowMoreMenu(false); onOpenExtensions?.(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <Package className="w-3.5 h-3.5 text-emerald-400" /> {tb('extensions')}
                   </button>
@@ -261,32 +291,33 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
                   <button
                     onClick={() => { setShowMoreMenu(false); setShowSettingsModal(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <Settings className="w-3.5 h-3.5 text-slate-400" /> {tb('settings')}
                   </button>
 
                   <button
                     onClick={() => { setShowMoreMenu(false); setShowHelpModal(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <HelpCircle className="w-3.5 h-3.5 text-blue-400" /> {tb('documentation')}
                   </button>
 
                   <button
                     onClick={() => { setShowMoreMenu(false); setShowAboutModal?.(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <Info className="w-3.5 h-3.5 text-amber-400" /> {tb('about')}
                   </button>
 
                   <button
                     onClick={() => { setShowMoreMenu(false); setShowFeedbackModal?.(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                   >
                     <MessageSquare className="w-3.5 h-3.5 text-rose-400" /> {tb('feedback')}
                   </button>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
@@ -445,7 +476,14 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           {/* ── Language Switcher ── */}
           <div className="relative flex-shrink-0" ref={langMenuRef}>
             <button
-              onClick={() => setShowLangMenu(!showLangMenu)}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setLangMenuPos({
+                  top: rect.bottom + 6,
+                  right: Math.max(8, window.innerWidth - rect.right),
+                });
+                setShowLangMenu(!showLangMenu);
+              }}
               className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition cursor-pointer flex-shrink-0 ${
                 isDark
                   ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
@@ -457,10 +495,19 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               <span className="text-xs font-bold hidden sm:inline">{currentLang.flag}</span>
             </button>
 
-            {showLangMenu && (
-              <div className={`absolute top-full right-0 mt-1.5 w-52 rounded-xl shadow-2xl border py-1.5 z-[300] text-xs ${
-                isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/80' : 'bg-white border-slate-200 text-slate-800 shadow-slate-300/80'
-              }`}>
+            {showLangMenu && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={langDropdownRef}
+                style={{
+                  position: 'fixed',
+                  top: langMenuPos.top,
+                  right: langMenuPos.right,
+                  zIndex: 999999,
+                }}
+                className={`w-52 rounded-xl shadow-2xl border py-1.5 text-xs select-none ${
+                  isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/90' : 'bg-white border-slate-200 text-slate-800 shadow-slate-400/80'
+                }`}
+              >
                 {/* Dropdown header */}
                 <div className={`px-3 pb-1.5 mb-1 border-b text-[10px] font-bold uppercase tracking-widest ${
                   isDark ? 'text-slate-500 border-white/5' : 'text-slate-400 border-slate-100'
@@ -472,7 +519,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   <button
                     key={lang.code}
                     onClick={() => { onLanguageChange(lang.code); setShowLangMenu(false); }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition cursor-pointer ${
                       language === lang.code
                         ? isDark
                           ? 'bg-cyan-500/15 text-cyan-400'
@@ -492,7 +539,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                     )}
                   </button>
                 ))}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
 
