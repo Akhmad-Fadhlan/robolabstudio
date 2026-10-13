@@ -400,6 +400,290 @@ export function getDefaultSensorPattern(sensorCount: SensorCount): string {
   return '000xxxxxx000';
 }
 
+export interface SensorPresetOption {
+  id: string;
+  label: string;
+  pattern: string;
+  category: 'center' | 'center_left' | 'center_right' | 'left' | 'right' | 'wings' | 'all' | 'custom';
+  description?: string;
+}
+
+/**
+ * Returns complete, hardware-calibrated sensor combination presets
+ * adapted to the robot's active sensorCount (2, 4, 5, 6, 8, or 12 sensors).
+ * Supports Center, Center-Left, Center-Right, multiple left/right detector widths,
+ * wings (T-junction), and full intersection crosses.
+ */
+export function getSensorPresetOptions(sensorCount: SensorCount): SensorPresetOption[] {
+  const makePat = (activeIndices: number[]): string => {
+    const arr = Array(sensorCount).fill('x');
+    for (const idx of activeIndices) {
+      if (idx >= 0 && idx < sensorCount) arr[idx] = '0';
+    }
+    return arr.join('');
+  };
+
+  const options: SensorPresetOption[] = [];
+
+  // 1. Tengah (Lurus)
+  if (sensorCount === 2) {
+    options.push({
+      id: 'center',
+      label: '🎯 Tengah · 2 Sensor (S0, S1)',
+      pattern: makePat([0, 1]),
+      category: 'center',
+      description: 'Membaca kedua sensor di tengah garis',
+    });
+  } else if (sensorCount % 2 === 1) {
+    const mid = Math.floor(sensorCount / 2);
+    options.push({
+      id: 'center',
+      label: `🎯 Tengah · 1 Sensor Tengah (S${mid})`,
+      pattern: makePat([mid]),
+      category: 'center',
+      description: 'Sensor paling tengah tepat di atas garis',
+    });
+  } else {
+    const midL = sensorCount / 2 - 1;
+    const midR = sensorCount / 2;
+    options.push({
+      id: 'center',
+      label: `🎯 Tengah · 2 Sensor Tengah (S${midL}, S${midR})`,
+      pattern: makePat([midL, midR]),
+      category: 'center',
+      description: 'Dua sensor tengah mendeteksi garis lurus',
+    });
+  }
+
+  // 2. Tengah Kiri
+  if (sensorCount === 2) {
+    options.push({
+      id: 'center_left',
+      label: '↖️ Tengah Kiri · Sensor Kiri (S0)',
+      pattern: makePat([0]),
+      category: 'center_left',
+      description: 'Garis condong agak ke kiri',
+    });
+  } else if (sensorCount === 4) {
+    options.push({
+      id: 'center_left',
+      label: '↖️ Tengah Kiri · Sensor S1',
+      pattern: makePat([1]),
+      category: 'center_left',
+    });
+  } else if (sensorCount === 5) {
+    options.push({
+      id: 'center_left_1',
+      label: '↖️ Tengah Kiri · Sensor S1',
+      pattern: makePat([1]),
+      category: 'center_left',
+    });
+    options.push({
+      id: 'center_left_2',
+      label: '↖️ Tengah Kiri · 2 Sensor (S1, S2)',
+      pattern: makePat([1, 2]),
+      category: 'center_left',
+    });
+  } else if (sensorCount === 6) {
+    options.push({
+      id: 'center_left_1',
+      label: '↖️ Tengah Kiri · 1 Sensor (S2)',
+      pattern: makePat([2]),
+      category: 'center_left',
+    });
+    options.push({
+      id: 'center_left_2',
+      label: '↖️ Tengah Kiri · 2 Sensor (S1, S2)',
+      pattern: makePat([1, 2]),
+      category: 'center_left',
+    });
+  } else if (sensorCount === 8) {
+    options.push({
+      id: 'center_left_1',
+      label: '↖️ Tengah Kiri · 1 Sensor (S3)',
+      pattern: makePat([3]),
+      category: 'center_left',
+    });
+    options.push({
+      id: 'center_left_2',
+      label: '↖️ Tengah Kiri · 2 Sensor (S2, S3)',
+      pattern: makePat([2, 3]),
+      category: 'center_left',
+    });
+  } else {
+    // 12 sensor
+    options.push({
+      id: 'center_left_1',
+      label: '↖️ Tengah Kiri · 2 Sensor (S4, S5)',
+      pattern: makePat([4, 5]),
+      category: 'center_left',
+    });
+    options.push({
+      id: 'center_left_2',
+      label: '↖️ Tengah Kiri · 3 Sensor (S3..S5)',
+      pattern: makePat([3, 4, 5]),
+      category: 'center_left',
+    });
+  }
+
+  // 3. Tengah Kanan
+  if (sensorCount === 2) {
+    options.push({
+      id: 'center_right',
+      label: '↗️ Tengah Kanan · Sensor Kanan (S1)',
+      pattern: makePat([1]),
+      category: 'center_right',
+      description: 'Garis condong agak ke kanan',
+    });
+  } else if (sensorCount === 4) {
+    options.push({
+      id: 'center_right',
+      label: '↗️ Tengah Kanan · Sensor S2',
+      pattern: makePat([2]),
+      category: 'center_right',
+    });
+  } else if (sensorCount === 5) {
+    options.push({
+      id: 'center_right_1',
+      label: '↗️ Tengah Kanan · Sensor S3',
+      pattern: makePat([3]),
+      category: 'center_right',
+    });
+    options.push({
+      id: 'center_right_2',
+      label: '↗️ Tengah Kanan · 2 Sensor (S2, S3)',
+      pattern: makePat([2, 3]),
+      category: 'center_right',
+    });
+  } else if (sensorCount === 6) {
+    options.push({
+      id: 'center_right_1',
+      label: '↗️ Tengah Kanan · 1 Sensor (S3)',
+      pattern: makePat([3]),
+      category: 'center_right',
+    });
+    options.push({
+      id: 'center_right_2',
+      label: '↗️ Tengah Kanan · 2 Sensor (S3, S4)',
+      pattern: makePat([3, 4]),
+      category: 'center_right',
+    });
+  } else if (sensorCount === 8) {
+    options.push({
+      id: 'center_right_1',
+      label: '↗️ Tengah Kanan · 1 Sensor (S4)',
+      pattern: makePat([4]),
+      category: 'center_right',
+    });
+    options.push({
+      id: 'center_right_2',
+      label: '↗️ Tengah Kanan · 2 Sensor (S4, S5)',
+      pattern: makePat([4, 5]),
+      category: 'center_right',
+    });
+  } else {
+    // 12 sensor
+    options.push({
+      id: 'center_right_1',
+      label: '↗️ Tengah Kanan · 2 Sensor (S6, S7)',
+      pattern: makePat([6, 7]),
+      category: 'center_right',
+    });
+    options.push({
+      id: 'center_right_2',
+      label: '↗️ Tengah Kanan · 3 Sensor (S6..S8)',
+      pattern: makePat([6, 7, 8]),
+      category: 'center_right',
+    });
+  }
+
+  // 4. Kiri: Beberapa Pilihan Banyak Sensor yang Terdeteksi
+  const maxLeft = Math.max(1, Math.min(sensorCount - 1, Math.floor(sensorCount / 2) + 1));
+  for (let k = 1; k <= maxLeft; k++) {
+    const indices = Array.from({ length: k }, (_, i) => i);
+    const pat = makePat(indices);
+    let name = `⬅️ Kiri · ${k} Sensor`;
+    if (k === 1) name += ' Terluar (S0)';
+    else if (k === Math.floor(sensorCount / 2)) name += ' (Separuh Kiri)';
+    else name += ` (S0..S${k - 1})`;
+
+    options.push({
+      id: `left_${k}`,
+      label: name,
+      pattern: pat,
+      category: 'left',
+      description: `Mendeteksi cabang / belokan kiri (${k} sensor)`,
+    });
+  }
+
+  // 5. Kanan: Beberapa Pilihan Banyak Sensor yang Terdeteksi
+  const maxRight = maxLeft;
+  for (let k = 1; k <= maxRight; k++) {
+    const indices = Array.from({ length: k }, (_, i) => sensorCount - 1 - i);
+    const pat = makePat(indices);
+    let name = `➡️ Kanan · ${k} Sensor`;
+    if (k === 1) name += ` Terluar (S${sensorCount - 1})`;
+    else if (k === Math.floor(sensorCount / 2)) name += ' (Separuh Kanan)';
+    else name += ` (S${sensorCount - k}..S${sensorCount - 1})`;
+
+    options.push({
+      id: `right_${k}`,
+      label: name,
+      pattern: pat,
+      category: 'right',
+      description: `Mendeteksi cabang / belokan kanan (${k} sensor)`,
+    });
+  }
+
+  // 6. Kanan & Kiri: Sayap / Simpang T / Melintang Parsial
+  if (sensorCount >= 4) {
+    options.push({
+      id: 'wings_1',
+      label: `↔️ Kanan & Kiri · 1 Sensor Sayap (S0, S${sensorCount - 1})`,
+      pattern: makePat([0, sensorCount - 1]),
+      category: 'wings',
+      description: 'Sensor paling kiri dan paling kanan mendeteksi sayap / simpang T',
+    });
+  }
+  if (sensorCount >= 5) {
+    options.push({
+      id: 'wings_2',
+      label: `↔️ Kanan & Kiri · 2 Sensor Sayap (S0,S1 & S${sensorCount - 2},S${sensorCount - 1})`,
+      pattern: makePat([0, 1, sensorCount - 2, sensorCount - 1]),
+      category: 'wings',
+      description: 'Dua sensor kiri dan dua sensor kanan mendeteksi sayap garis',
+    });
+  }
+  if (sensorCount >= 8) {
+    options.push({
+      id: 'wings_3',
+      label: `↔️ Kanan & Kiri · 3 Sensor Sayap`,
+      pattern: makePat([0, 1, 2, sensorCount - 3, sensorCount - 2, sensorCount - 1]),
+      category: 'wings',
+    });
+  }
+
+  // 7. Semua Sensor (Perempatan / Full Cross Line)
+  options.push({
+    id: 'cross_all',
+    label: `➕ Semua Sensor · Perempatan / Cross (${sensorCount} Sensor)`,
+    pattern: '0'.repeat(sensorCount),
+    category: 'all',
+    description: 'Semua sensor mendeteksi garis (garis melintang / perempatan)',
+  });
+
+  return options;
+}
+
+export function findMatchingSensorPreset(
+  pattern: string,
+  sensorCount: SensorCount
+): SensorPresetOption | null {
+  const norm = normalizeSensorPattern(pattern, sensorCount);
+  const options = getSensorPresetOptions(sensorCount);
+  return options.find((opt) => opt.pattern === norm) || null;
+}
+
 export function createDefaultRobotHardwareConfig(): RobotHardwareConfig {
   const mcu: RobotMcuId = 'Arduino Uno';
   const sensorCount: SensorCount = 6;
@@ -726,19 +1010,34 @@ void runStep(
     return;
   }
   // Tahap 1: Action & Durasi Aksi (ms / Encoder L / Encoder R) / Sensor PID
-  setMotorSpeed(speedL, speedR);
+  int actSpeedL = speedL;
+  int actSpeedR = speedR;
+  if (act == ACT_LEFT) {
+    actSpeedL = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedL : -abs(speedL);
+    actSpeedR = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedR : abs(speedR);
+  } else if (act == ACT_RIGHT) {
+    actSpeedL = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedL : abs(speedL);
+    actSpeedR = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedR : -abs(speedR);
+  } else if (act == ACT_MUNDUR) {
+    actSpeedL = -abs(speedL);
+    actSpeedR = -abs(speedR);
+  } else if (act == ACT_PAUSE) {
+    actSpeedL = 0;
+    actSpeedR = 0;
+  }
+  setMotorSpeed(actSpeedL, actSpeedR);
   if (trigVal > 0) {
     waitDuration(trigVal, trigUnit);
   }
   if (pattern[0] != 'M') {
     while (!matchSensorPattern(pattern, op, lineColor)) {
-      setMotorSpeed(speedL, speedR);
+      setMotorSpeed(actSpeedL, actSpeedR);
       delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
     }
   }
   // Brake
   if (brakeMs > 0) {
-    setMotorSpeed(-speedL / 2, -speedR / 2);
+    setMotorSpeed(-actSpeedL / 2, -actSpeedR / 2);
     delay(brakeMs);
     stopMotors();
   }
@@ -865,15 +1164,31 @@ def stop_motors():
 
 def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, speed_l, speed_r, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
     # Pola Sensor: '0' = membaca sensor, 'x' = tidak membaca sensor
-    set_motor_speed(speed_l, speed_r)
+    act_l, act_r = speed_l, speed_r
+    if action == "LEFT":
+        act_l = speed_l if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else -abs(speed_l)
+        act_r = speed_r if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else abs(speed_r)
+    elif action == "RIGHT":
+        act_l = speed_l if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else abs(speed_l)
+        act_r = speed_r if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else -abs(speed_r)
+    elif action == "MUNDUR":
+        act_l, act_r = -abs(speed_l), -abs(speed_r)
+    elif action == "PAUSE":
+        act_l, act_r = 0, 0
+    set_motor_speed(act_l, act_r)
     if trig_val > 0:
         time.sleep_ms(trig_val)
     if brake_ms > 0:
+        set_motor_speed(-act_l // 2, -act_r // 2)
         time.sleep_ms(brake_ms)
+        stop_motors()
     if stop_stage == "ACTION":
         stop_motors()
         return
     if timer_val > 0:
+        dir_l = -speed_a if action in ("LEFT", "MUNDUR") else speed_a
+        dir_r = -speed_a if action in ("RIGHT", "MUNDUR") else speed_a
+        set_motor_speed(dir_l, dir_r)
         time.sleep_ms(timer_val)
     if stop_stage == "SPEED_A":
         stop_motors()
@@ -1021,12 +1336,15 @@ export function buildRobotPlanBlocklyXml(
     const bid = item.blockId || `block_item_${idx}`;
     if (item.type === 'step') {
       const pat = normalizeSensorPattern(item.sensorPattern, hw.sensorCount);
+      const matched = findMatchingSensorPreset(pat, hw.sensorCount);
+      const presetVal = matched ? pat : 'CUSTOM';
       return `<block type="robot_plan_step" id="${bid}">
         <field name="INDEX">${item.index}</field>
         <field name="ACTION">${item.action}</field>
         <field name="TRIG_VAL">${item.triggerValue ?? 100}</field>
         <field name="TRIG_UNIT">${item.triggerUnit}</field>
         <field name="TRIG_MODE">${item.triggerMode}</field>
+        <field name="SENSOR_PRESET">${presetVal}</field>
         <field name="PATTERN">${pat}</field>
         <field name="LOGIC_OP">${item.logicOp}</field>
         <field name="BRAKE">${item.brake}</field>

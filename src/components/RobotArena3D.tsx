@@ -704,7 +704,29 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             if (step.action === 'PAUSE') {
               cmdSpeedL = 0;
               cmdSpeedR = 0;
+            } else if (step.action === 'LEFT') {
+              // Belok kiri: roda kiri mundur/lambat, roda kanan maju
+              if (step.speedL < 0 || (step.speedL === 0 && step.speedR > 0)) {
+                cmdSpeedL = step.speedL;
+                cmdSpeedR = step.speedR;
+              } else {
+                cmdSpeedL = -Math.abs(step.speedL || 140);
+                cmdSpeedR = Math.abs(step.speedR || 140);
+              }
+            } else if (step.action === 'RIGHT') {
+              // Belok kanan: roda kiri maju, roda kanan mundur/lambat
+              if (step.speedR < 0 || (step.speedR === 0 && step.speedL > 0)) {
+                cmdSpeedL = step.speedL;
+                cmdSpeedR = step.speedR;
+              } else {
+                cmdSpeedL = Math.abs(step.speedL || 140);
+                cmdSpeedR = -Math.abs(step.speedR || 140);
+              }
+            } else if (step.action === 'MUNDUR') {
+              cmdSpeedL = -Math.abs(step.speedL || 140);
+              cmdSpeedR = -Math.abs(step.speedR || 140);
             } else {
+              // MAJU: Mengikuti garis menggunakan kontrol PID
               const pidCorr = computePidCorrection();
               cmdSpeedL = Math.max(-255, Math.min(255, step.speedL + pidCorr));
               cmdSpeedR = Math.max(-255, Math.min(255, step.speedR - pidCorr));
@@ -752,8 +774,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               }
             }
           } else if (s.subStage === 'BRAKE') {
-            cmdSpeedL = -step.speedL * 0.4;
-            cmdSpeedR = -step.speedR * 0.4;
+            let prevL = step.speedL;
+            let prevR = step.speedR;
+            if (step.action === 'LEFT') {
+              prevL = -Math.abs(step.speedL || 140);
+              prevR = Math.abs(step.speedR || 140);
+            } else if (step.action === 'RIGHT') {
+              prevL = Math.abs(step.speedL || 140);
+              prevR = -Math.abs(step.speedR || 140);
+            } else if (step.action === 'MUNDUR') {
+              prevL = -Math.abs(step.speedL || 140);
+              prevR = -Math.abs(step.speedR || 140);
+            }
+            cmdSpeedL = -prevL * 0.4;
+            cmdSpeedR = -prevR * 0.4;
             if (s.elapsedMs - s.stageStartMs >= step.brake) {
               if (hasStopAfterAction) {
                 s.finished = true;
@@ -788,14 +822,14 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             });
 
             if (step.action === 'LEFT') {
-              cmdSpeedL = -step.speedA;
-              cmdSpeedR = step.speedA;
+              cmdSpeedL = -Math.abs(step.speedA || 120);
+              cmdSpeedR = Math.abs(step.speedA || 120);
             } else if (step.action === 'RIGHT') {
-              cmdSpeedL = step.speedA;
-              cmdSpeedR = -step.speedA;
+              cmdSpeedL = Math.abs(step.speedA || 120);
+              cmdSpeedR = -Math.abs(step.speedA || 120);
             } else if (step.action === 'MUNDUR') {
-              cmdSpeedL = -step.speedA;
-              cmdSpeedR = -step.speedA;
+              cmdSpeedL = -Math.abs(step.speedA || 120);
+              cmdSpeedR = -Math.abs(step.speedA || 120);
             } else if (step.action === 'PAUSE') {
               cmdSpeedL = 0;
               cmdSpeedR = 0;
@@ -844,7 +878,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
           const vLinear = (vL + vR) / 2;
           const wheelBasePx = 42 * (hardwareConfig.robotScale || 1.0);
-          const omega = (vR - vL) / wheelBasePx;
+          const omega = (vL - vR) / wheelBasePx;
 
           s.x = Math.max(35, Math.min(TRACK_W - 35, s.x + vLinear * Math.cos(s.theta) * dtSec));
           s.y = Math.max(35, Math.min(TRACK_H - 35, s.y + vLinear * Math.sin(s.theta) * dtSec));

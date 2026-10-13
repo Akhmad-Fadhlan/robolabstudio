@@ -17,6 +17,9 @@ import {
   createDefaultRobotHardwareConfig,
   normalizeSensorPattern,
   getDefaultSensorPattern,
+  getSensorPresetOptions,
+  findMatchingSensorPreset,
+  type SensorPresetOption,
   getBoardPinOptions,
   generateRobotPlanArduinoCode,
   generateRobotPlanPythonCode,
@@ -49,19 +52,36 @@ const registerRobotPlanBlocks = () => {
         .appendField(new Blockly.FieldDropdown(pwmOpts), 'PWM_R')
         .appendField('│ RPM Motor')
         .appendField(new Blockly.FieldNumber(activeRobotHwConfig.motorRpm, 50, 3000, 10), 'MOTOR_RPM');
+      const sensorCountDropdown = new Blockly.FieldDropdown(
+        [
+          ['2 Sensor', '2'],
+          ['4 Sensor', '4'],
+          ['5 Sensor', '5'],
+          ['6 Sensor', '6'],
+          ['8 Sensor', '8'],
+          ['12 Sensor', '12'],
+        ],
+        function (this: Blockly.FieldDropdown, newVal: string) {
+          const num = Number(newVal) as SensorCount;
+          activeRobotHwConfig = { ...activeRobotHwConfig, sensorCount: num };
+          const ws = this.getSourceBlock()?.workspace;
+          if (ws) {
+            const stepBlocks = ws.getBlocksByType('robot_plan_step', false);
+            stepBlocks.forEach((b: any) => {
+              const cur = b.getFieldValue('PATTERN') || '';
+              const norm = normalizeSensorPattern(cur, num);
+              b.setFieldValue(norm, 'PATTERN');
+              const matched = findMatchingSensorPreset(norm, num);
+              b.setFieldValue(matched ? norm : 'CUSTOM', 'SENSOR_PRESET');
+            });
+          }
+          return newVal;
+        }
+      );
+
       this.appendDummyInput()
         .appendField('🔍 Sensor')
-        .appendField(
-          new Blockly.FieldDropdown([
-            ['2 Sensor', '2'],
-            ['4 Sensor', '4'],
-            ['5 Sensor', '5'],
-            ['6 Sensor', '6'],
-            ['8 Sensor', '8'],
-            ['12 Sensor', '12'],
-          ]),
-          'SENSOR_COUNT'
-        )
+        .appendField(sensorCountDropdown, 'SENSOR_COUNT')
         .appendField('Mode')
         .appendField(
           new Blockly.FieldDropdown([
@@ -131,8 +151,47 @@ const registerRobotPlanBlocks = () => {
   Blockly.Blocks['robot_plan_step'] = {
     init: function (this: Blockly.Block) {
       const defaultPat = getDefaultSensorPattern(activeRobotHwConfig.sensorCount);
-      const patternField = new Blockly.FieldTextInput(defaultPat, (newVal: string) => {
-        return normalizeSensorPattern(newVal, activeRobotHwConfig.sensorCount);
+
+      const presetDropdown = new Blockly.FieldDropdown(
+        () => {
+          const count = activeRobotHwConfig.sensorCount;
+          const opts = getSensorPresetOptions(count);
+          const list: [string, string][] = opts.map((opt) => [
+            `${opt.label} [${opt.pattern}]`,
+            opt.pattern,
+          ]);
+          list.push(['✏️ Kustom (Pola 0/x Bebas)', 'CUSTOM']);
+          return list;
+        },
+        function (this: Blockly.FieldDropdown, selectedVal: string) {
+          const block = this.getSourceBlock();
+          if (block && selectedVal && selectedVal !== 'CUSTOM') {
+            const patField = block.getField('PATTERN');
+            if (patField && patField.getValue() !== selectedVal) {
+              patField.setValue(selectedVal);
+            }
+          }
+          return selectedVal;
+        }
+      );
+
+      const patternField = new Blockly.FieldTextInput(defaultPat, function (
+        this: Blockly.FieldTextInput,
+        newVal: string
+      ) {
+        const norm = normalizeSensorPattern(newVal, activeRobotHwConfig.sensorCount);
+        const block = this.getSourceBlock();
+        if (block) {
+          const matched = findMatchingSensorPreset(norm, activeRobotHwConfig.sensorCount);
+          const pField = block.getField('SENSOR_PRESET');
+          if (pField) {
+            const target = matched ? norm : 'CUSTOM';
+            if (pField.getValue() !== target) {
+              pField.setValue(target);
+            }
+          }
+        }
+        return norm;
       });
 
       this.appendDummyInput()
@@ -159,6 +218,7 @@ const registerRobotPlanBlocks = () => {
           ]),
           'TRIG_MODE'
         )
+        .appendField(presetDropdown, 'SENSOR_PRESET')
         .appendField(patternField, 'PATTERN')
         .appendField(
           new Blockly.FieldDropdown([
@@ -207,7 +267,7 @@ const registerRobotPlanBlocks = () => {
       this.setNextStatement(true, null);
       this.setColour('#3b82f6');
       this.setTooltip(
-        "Step Index Robot: Poin sensor hanya menggunakan '0' (membaca sensor) dan 'x' (tidak membaca sensor)"
+        "Step Index Robot: Pilihan kombinasi sensor (Kanan, Kiri, Tengah Kiri/Kanan, Sayap, Perempatan) menyesuaikan jumlah sensor robot. '0' = membaca garis, 'x' = diabaikan."
       );
     },
   };
@@ -1897,6 +1957,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (curPat !== norm) {
         b.setFieldValue(norm, 'PATTERN');
       }
+      const matched = findMatchingSensorPreset(norm, robotHardwareConfig.sensorCount);
+      b.setFieldValue(matched ? norm : 'CUSTOM', 'SENSOR_PRESET');
       if (!robotHardwareConfig.hasEncoder) {
         if (b.getFieldValue('TRIG_UNIT') !== 'ms') b.setFieldValue('ms', 'TRIG_UNIT');
         if (b.getFieldValue('TIMER_UNIT') !== 'ms') b.setFieldValue('ms', 'TIMER_UNIT');
@@ -3110,6 +3172,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
     </xml>`;
     }
+    const curSc = activeRobotHwConfig.sensorCount;
+    const presets = getSensorPresetOptions(curSc);
+    const centerPreset = presets.find((p) => p.category === 'center') || presets[0];
+    const leftPreset =
+      presets.find((p) => p.category === 'left' && p.id === 'left_2') ||
+      presets.find((p) => p.category === 'left') ||
+      presets[0];
+    const rightPreset =
+      presets.find((p) => p.category === 'right' && p.id === 'right_2') ||
+      presets.find((p) => p.category === 'right') ||
+      presets[0];
+    const wingPreset = presets.find((p) => p.category === 'wings') || centerPreset;
+    const crossPreset = presets.find((p) => p.category === 'all') || centerPreset;
+
     let xml = `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
       <category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
@@ -3124,7 +3200,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               <field name="TRIG_VAL">100</field>
               <field name="TRIG_UNIT">ms</field>
               <field name="TRIG_MODE">SENSOR</field>
-              <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
+              <field name="SENSOR_PRESET">${centerPreset.pattern}</field>
+              <field name="PATTERN">${centerPreset.pattern}</field>
               <field name="LOGIC_OP">OR</field>
               <field name="BRAKE">0</field>
               <field name="SPEED_L">160</field>
@@ -3137,20 +3214,117 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             </block>
           </statement>
         </block>
+        <!-- 1. Step Maju Garis Tengah -->
         <block type="robot_plan_step">
           <field name="INDEX">0</field>
           <field name="ACTION">MAJU</field>
           <field name="TRIG_VAL">100</field>
           <field name="TRIG_UNIT">ms</field>
           <field name="TRIG_MODE">SENSOR</field>
-          <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
+          <field name="SENSOR_PRESET">${centerPreset.pattern}</field>
+          <field name="PATTERN">${centerPreset.pattern}</field>
           <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">0</field>
           <field name="SPEED_L">160</field>
           <field name="SPEED_R">160</field>
           <field name="PID_ID">2</field>
           <field name="SPEED_A">140</field>
-          <field name="TIMER_VAL">250</field>
+          <field name="TIMER_VAL">200</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <!-- 2. Step Belok Kiri (Sensor Kiri) -->
+        <block type="robot_plan_step">
+          <field name="INDEX">1</field>
+          <field name="ACTION">LEFT</field>
+          <field name="TRIG_VAL">80</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${leftPreset.pattern}</field>
+          <field name="PATTERN">${leftPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
+          <field name="BRAKE">15</field>
+          <field name="SPEED_L">140</field>
+          <field name="SPEED_R">140</field>
+          <field name="PID_ID">3</field>
+          <field name="SPEED_A">130</field>
+          <field name="TIMER_VAL">120</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <!-- 3. Step Belok Kanan (Sensor Kanan) -->
+        <block type="robot_plan_step">
+          <field name="INDEX">2</field>
+          <field name="ACTION">RIGHT</field>
+          <field name="TRIG_VAL">80</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${rightPreset.pattern}</field>
+          <field name="PATTERN">${rightPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
+          <field name="BRAKE">15</field>
+          <field name="SPEED_L">140</field>
+          <field name="SPEED_R">140</field>
+          <field name="PID_ID">3</field>
+          <field name="SPEED_A">130</field>
+          <field name="TIMER_VAL">120</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <!-- 4. Step Simpang T / Sayap -->
+        <block type="robot_plan_step">
+          <field name="INDEX">3</field>
+          <field name="ACTION">MAJU</field>
+          <field name="TRIG_VAL">80</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${wingPreset.pattern}</field>
+          <field name="PATTERN">${wingPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
+          <field name="BRAKE">20</field>
+          <field name="SPEED_L">150</field>
+          <field name="SPEED_R">150</field>
+          <field name="PID_ID">2</field>
+          <field name="SPEED_A">120</field>
+          <field name="TIMER_VAL">150</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <!-- 5. Step Perempatan (Semua Sensor) -->
+        <block type="robot_plan_step">
+          <field name="INDEX">4</field>
+          <field name="ACTION">MAJU</field>
+          <field name="TRIG_VAL">100</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${crossPreset.pattern}</field>
+          <field name="PATTERN">${crossPreset.pattern}</field>
+          <field name="LOGIC_OP">EQUAL</field>
+          <field name="BRAKE">25</field>
+          <field name="SPEED_L">160</field>
+          <field name="SPEED_R">160</field>
+          <field name="PID_ID">5</field>
+          <field name="SPEED_A">120</field>
+          <field name="TIMER_VAL">150</field>
+          <field name="TIMER_UNIT">ms</field>
+          <field name="LINE_COLOR">HITAM</field>
+        </block>
+        <!-- 6. Step Gerak Motion (Tanpa Sensor) -->
+        <block type="robot_plan_step">
+          <field name="INDEX">5</field>
+          <field name="ACTION">MAJU</field>
+          <field name="TRIG_VAL">500</field>
+          <field name="TRIG_UNIT">ms</field>
+          <field name="TRIG_MODE">MOTION</field>
+          <field name="SENSOR_PRESET">CUSTOM</field>
+          <field name="PATTERN">${centerPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
+          <field name="BRAKE">0</field>
+          <field name="SPEED_L">180</field>
+          <field name="SPEED_R">180</field>
+          <field name="PID_ID">0</field>
+          <field name="SPEED_A">0</field>
+          <field name="TIMER_VAL">0</field>
           <field name="TIMER_UNIT">ms</field>
           <field name="LINE_COLOR">HITAM</field>
         </block>
@@ -3402,7 +3576,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
       setTimeout(() => updateToolboxUI(), 100);
     }
-  }, [installedLibrariesStr, board, updateToolboxUI]);
+  }, [installedLibrariesStr, board, robotHardwareConfig?.sensorCount, updateToolboxUI]);
 
   useEffect(() => {
     if (!blocklyDivRef.current) return;
