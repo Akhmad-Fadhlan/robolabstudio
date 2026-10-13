@@ -14,6 +14,7 @@ import { TopMenuBar } from './components/layout/TopMenuBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { TerminalPanel } from './components/layout/TerminalPanel';
+import { PythonLogo } from './components/icons/PythonLogo';
 import type { BlocklyEditor as BlocklyEditorType } from './components/BlocklyEditor';
 import type { CodeEditor as CodeEditorType } from './components/CodeEditor';
 import type { Simulator as SimulatorType } from './components/Simulator';
@@ -3479,7 +3480,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const saved = localStorage.getItem('robolab_sim_workspaceXmls_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed['firmware/main.ino']) return parsed;
+        if (
+          parsed &&
+          parsed['firmware/main.ino'] &&
+          parsed['firmware/main.ino'].includes('arduino_setup')
+        ) {
+          return parsed;
+        }
       }
     } catch (e) {}
     return {
@@ -5131,7 +5138,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           log('✓ Flash completed. Resetting chip...', 'success');
 
           setBuildStatusText('Launching Python AI Vision Engine...');
-          log('🐍 [PYTHON] Executing virtualenv python/main.py...', 'info');
+          log('⚙️ [PYTHON] Executing virtualenv python/main.py...', 'info');
           log('🎥 [CAMERA] Accessing Camera sensor...', 'info');
           
           const t4 = setTimeout(() => {
@@ -7752,7 +7759,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                               className={`group/file flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer transition relative ${isActive ? (themeMode === 'light' ? 'text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200' : 'text-indigo-300 font-semibold') : (themeMode === 'light' ? 'text-slate-700 hover:text-slate-900 hover:bg-black/5' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5')}`}
                                               style={isActive ? {background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)'} : {}}
                                             >
-                                              <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
+                                              {ext === 'py' ? (
+                                                <PythonLogo className="w-3.5 h-3.5 flex-shrink-0" />
+                                              ) : (
+                                                <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
+                                              )}
                                               <span className="flex-1 truncate mr-4">{filename.split('/').pop()}</span>
                                               {isUnsaved && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full flex-shrink-0" title="Belum disimpan" />}
                                               <button
@@ -7786,7 +7797,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                         onClick={() => handleFileSelect(filename)}
                                         className={`group/file flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-mono cursor-pointer transition relative ${isActive ? (themeMode === 'light' ? 'text-indigo-700 bg-indigo-100 border border-indigo-300 font-semibold' : 'text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 font-semibold') : (themeMode === 'light' ? 'text-slate-700 hover:text-slate-900 hover:bg-black/5' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5')}`}
                                       >
-                                        <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
+                                        {ext === 'py' ? (
+                                          <PythonLogo className="w-3.5 h-3.5 flex-shrink-0" />
+                                        ) : (
+                                          <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
+                                        )}
                                         <span className="flex-1 truncate mr-4">{filename}</span>
                                         {isUnsaved && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full flex-shrink-0" title="Belum disimpan" />}
                                         <button
@@ -8261,7 +8276,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     }`}
                     style={pkgTab === tab ? { background: 'var(--accent-gradient)' } : {}}
                   >
-                    {tab === 'arduino' ? '⚡ Arduino Library' : tab === 'python' ? '🐍 Python (PIP)' : '🔲 Board Manager'}
+                    {tab === 'arduino' ? (
+                      '⚡ Arduino Library'
+                    ) : tab === 'python' ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <PythonLogo className="w-3.5 h-3.5" />
+                        <span>Python (PIP)</span>
+                      </span>
+                    ) : (
+                      '🔲 Board Manager'
+                    )}
                   </button>
                 ))}
               </div>
@@ -8516,13 +8540,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     </button>
                     <button
                       onClick={() => setSimActiveFile('python/main.py')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
                         simActiveFile === 'python/main.py'
                           ? 'bg-amber-500 text-slate-950 shadow'
                           : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      🐍 Python (.py)
+                      <PythonLogo className="w-3.5 h-3.5" />
+                      <span>Python (.py)</span>
                     </button>
                   </div>
 
@@ -8602,16 +8627,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 </div>
               </div>
 
-              {/* Main Simulator Workspace Content: Left (Isolated Code/Blockly) + Right (Interactive Circuit + Console) */}
+              {/* Main Simulator Workspace Content: Left (Spacious Code/Blockly ~56%) + Right (Compact Simulator ~44%) */}
               <div className="flex-1 min-w-0 min-h-0 flex gap-3 overflow-hidden">
-                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace */}
+                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace (Spacious for comfortable coding) */}
                 {simViewMode !== 'circuit' && (
-                  <div className="w-[42%] min-w-[320px] max-w-[600px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
+                  <div className="w-[56%] min-w-[420px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
                         className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-2xl border border-indigo-500/20"
-                        style={{ height: simViewMode === 'split' ? '55%' : '100%' }}
+                        style={{ height: simViewMode === 'split' ? '56%' : '100%' }}
                       >
                         <BlocklyEditor
                           key={`sim_blockly_${simActiveFile}_${themeMode}_${simResetKey}`}
@@ -8947,13 +8972,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     <div className={`flex p-1 rounded-xl gap-1 ${themeMode === 'light' ? 'bg-slate-200/60' : 'bg-slate-900/60 border border-slate-800'}`}>
                       <button
                         onClick={() => { setLearningCategory('fundamental'); setActiveLessonIndex(0); }}
-                        className={`flex-1 py-1.5 text-[9px] font-bold rounded-lg transition select-none cursor-pointer text-center ${
+                        className={`flex-1 py-1.5 text-[9px] font-bold rounded-lg transition select-none cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                           learningCategory === 'fundamental'
                             ? 'bg-blue-600 text-white shadow'
                             : themeMode === 'light' ? 'text-slate-600 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {t(language, 'learning', 'pythonBasic')}
+                        <PythonLogo className="w-3.5 h-3.5" />
+                        <span>{t(language, 'learning', 'pythonBasic')}</span>
                       </button>
                       <button
                         onClick={() => { setLearningCategory('micropython'); setActiveLessonIndex(0); }}
@@ -9171,7 +9197,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             desc: 'Skrip Python untuk robotika, AI Vision & IoT',
             defaultBase: 'main',
             suggestions: ['main', 'robot_ai', 'sensor_node', 'vision'],
-            icon: <TerminalIcon className="w-4 h-4" />
+            icon: <PythonLogo className="w-4 h-4" />
           },
           {
             ext: 'h',
@@ -9618,6 +9644,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               selectedWifi={selectedWifi}
               onSelectedWifiChange={setSelectedWifi}
               wifiPassword={wifiPassword}
+              themeMode={themeMode}
               onWifiPasswordChange={setWifiPassword}
               onSensorDataChange={() => {}}
             />

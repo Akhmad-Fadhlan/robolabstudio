@@ -2996,6 +2996,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="logic_boolean"></block>
       </category>
       <category name="Loops" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
+        <block type="arduino_setup"></block>
+        <block type="arduino_loop"></block>
         <block type="controls_repeat_ext">
           <value name="TIMES">
             <block type="math_number">
@@ -3030,6 +3032,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       <category name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
         <category name="Basic" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
+          <block type="arduino_setup"></block>
+          <block type="arduino_loop"></block>
           <block type="basic_show_string">
             <value name="TEXT">
               <block type="text">
@@ -3108,6 +3112,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     let xml = `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
       <category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
+        <block type="arduino_setup"></block>
         <block type="robot_hw_setup"></block>
         <block type="robot_plan_container">
           <field name="PLAN_ID">1</field>
@@ -3161,6 +3166,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="logic_boolean"></block>
       </category>
       <category name="Loops" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
+        <block type="arduino_setup"></block>
         <block type="arduino_loop"></block>
         <block type="controls_repeat_ext">
           <value name="TIMES">
@@ -3219,6 +3225,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="arduino_delay"></block>
       </category>
       <category name="Arduino" colour="#14B8A6" css-container="cat-arduino" css-row="cat-arduino">
+        <block type="arduino_setup"></block>
+        <block type="arduino_loop"></block>
         <block type="arduino_serial_available"></block>
         <block type="arduino_serial_read"></block>
         <block type="arduino_pulsein"></block>

@@ -994,7 +994,7 @@ export function buildRobotPlanBlocklyXml(
     }
   };
 
-  let yPos = 120;
+  let yPos = 190;
   const planBlocksXml = plansWithBlockIds
     .map((plan) => {
       const chain = buildChainXml(plan.items, 0);
@@ -1008,21 +1008,25 @@ export function buildRobotPlanBlocklyXml(
     .join('\n');
 
   const xml = `<xml xmlns="https://developers.google.com/blockly/xml">
-  <block type="robot_hw_setup" id="block_robot_hw_setup" x="30" y="20">
-    <field name="PWM_L">${hw.pins.pwmL}</field>
-    <field name="PWM_R">${hw.pins.pwmR}</field>
-    <field name="MOTOR_RPM">${hw.motorRpm}</field>
-    <field name="SENSOR_COUNT">${hw.sensorCount}</field>
-    <field name="SENSOR_MODE">${hw.sensorMode}</field>
-    <field name="MUX_SIG">${hw.pins.muxSig}</field>
-    <field name="HAS_ENCODER">${hw.hasEncoder ? 'YES' : 'NO'}</field>
-    <field name="ENC_L">${hw.pins.encLA}</field>
-    <field name="ENC_R">${hw.pins.encRA}</field>
-    <next>
-      <block type="robot_run_plan" id="block_robot_run_plan">
-        <field name="PLAN_ID">${activePlanId}</field>
+  <block type="arduino_setup" id="block_arduino_setup" x="30" y="20">
+    <statement name="STACK">
+      <block type="robot_hw_setup" id="block_robot_hw_setup">
+        <field name="PWM_L">${hw.pins.pwmL}</field>
+        <field name="PWM_R">${hw.pins.pwmR}</field>
+        <field name="MOTOR_RPM">${hw.motorRpm}</field>
+        <field name="SENSOR_COUNT">${hw.sensorCount}</field>
+        <field name="SENSOR_MODE">${hw.sensorMode}</field>
+        <field name="MUX_SIG">${hw.pins.muxSig}</field>
+        <field name="HAS_ENCODER">${hw.hasEncoder ? 'YES' : 'NO'}</field>
+        <field name="ENC_L">${hw.pins.encLA}</field>
+        <field name="ENC_R">${hw.pins.encRA}</field>
+        <next>
+          <block type="robot_run_plan" id="block_robot_run_plan">
+            <field name="PLAN_ID">${activePlanId}</field>
+          </block>
+        </next>
       </block>
-    </next>
+    </statement>
   </block>
   ${planBlocksXml}
 </xml>`;

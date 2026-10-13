@@ -78,7 +78,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   onSyncToCodeAndBlocks,
   onHighlightChange,
   code = '',
+  theme = 'dark',
 }) => {
+  const isLight = theme === 'light';
   const [cameraMode, setCameraMode] = useState<CameraViewMode>('3d_persp');
   const [camYaw, setCamYaw] = useState<number>(-0.32); // radians
   const [camPitch, setCamPitch] = useState<number>(0.78); // tilt
@@ -906,10 +908,15 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       const ch = canvas.height;
       const s = simStateRef.current;
 
-      // Deep space background matching screenshot
+      // Background adapting to Light / Dark theme
       const bgGrad = ctx.createLinearGradient(0, 0, 0, ch);
-      bgGrad.addColorStop(0, '#07111f');
-      bgGrad.addColorStop(1, '#040912');
+      if (isLight) {
+        bgGrad.addColorStop(0, '#e0f2fe');
+        bgGrad.addColorStop(1, '#e2e8f0');
+      } else {
+        bgGrad.addColorStop(0, '#07111f');
+        bgGrad.addColorStop(1, '#040912');
+      }
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, cw, ch);
 
@@ -982,7 +989,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
       // Shadow under 3D table
       ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillStyle = isLight ? 'rgba(15, 23, 42, 0.18)' : 'rgba(0, 0, 0, 0.55)';
       ctx.beginPath();
       outerCornersBase.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 18) : ctx.lineTo(pt.sx, pt.sy + 18)));
       ctx.closePath();
@@ -991,7 +998,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       // Side extrusions of the 3D table border
       for (let i = 0; i < 4; i++) {
         const next = (i + 1) % 4;
-        ctx.fillStyle = i % 2 === 0 ? '#1e293b' : '#334155';
+        ctx.fillStyle = isLight
+          ? i % 2 === 0 ? '#94a3b8' : '#cbd5e1'
+          : i % 2 === 0 ? '#1e293b' : '#334155';
         ctx.beginPath();
         ctx.moveTo(outerCornersBase[i].sx, outerCornersBase[i].sy);
         ctx.lineTo(outerCornersBase[next].sx, outerCornersBase[next].sy);
@@ -1002,7 +1011,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       }
 
       // Top rim of the 3D arena border
-      ctx.fillStyle = '#3b4a63';
+      ctx.fillStyle = isLight ? '#cbd5e1' : '#3b4a63';
       ctx.beginPath();
       outerCornersTop.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
       ctx.closePath();
@@ -1506,6 +1515,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     sensorReadings,
     sampleSensorsAtPose,
     onHighlightChange,
+    isLight,
   ]);
 
   // Convert click on canvas to 2D track coordinates when placementTool is active
@@ -1559,7 +1569,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     <div
       className={`${
         isFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full relative'
-      } flex flex-col bg-[#060d18] text-slate-100 select-none overflow-hidden`}
+      } flex flex-col ${
+        isLight ? 'bg-slate-50 text-slate-800' : 'bg-[#060d18] text-slate-100'
+      } select-none overflow-hidden transition-colors`}
     >
       {/* Hidden File Input for PDF / Track Upload */}
       <input
@@ -1571,13 +1583,25 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       />
 
       {/* ── COMPACT KIDS-FRIENDLY TOP TOOLBAR (Row 1: Track + Robot Setup + PID + Sync) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1.5 bg-[#0b1526] border-b border-slate-800/90 text-xs shrink-0">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-1 px-2.5 py-1 border-b text-xs shrink-0 transition-colors ${
+          isLight
+            ? 'bg-white border-slate-200 text-slate-700'
+            : 'bg-[#0b1526] border-slate-800/90 text-slate-100'
+        }`}
+      >
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-extrabold text-sky-400">🗺️ Arena:</span>
+          <span className={`text-[11px] font-extrabold ${isLight ? 'text-sky-600' : 'text-sky-400'}`}>
+            🗺️ Arena:
+          </span>
           <select
             value={selectedTrackId}
             onChange={(e) => handleSelectTrack(e.target.value)}
-            className="bg-[#111e34] text-slate-100 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold outline-none hover:border-sky-400 cursor-pointer"
+            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold outline-none cursor-pointer border transition-colors ${
+              isLight
+                ? 'bg-slate-100 text-slate-800 border-slate-300 hover:border-sky-500'
+                : 'bg-[#111e34] text-slate-100 border-slate-700 hover:border-sky-400'
+            }`}
           >
             {tracks.map((t) => (
               <option key={t.id} value={t.id}>
@@ -1589,22 +1613,28 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <button
             type="button"
             onClick={() => pdfInputRef.current?.click()}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold text-[11px] cursor-pointer transition-all"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+              isLight
+                ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
+                : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border-sky-500/40'
+            }`}
             title="Upload file PDF lintasan untuk dijadikan track simulasi"
           >
-            <Upload className="w-3.5 h-3.5" /> Upload PDF
+            <Upload className="w-3 h-3" /> Upload PDF
           </button>
 
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'pdf_samples' ? 'none' : 'pdf_samples')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
               activeDrawer === 'pdf_samples'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-300'
-                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                : isLight
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
             }`}
           >
-            <Download className="w-3.5 h-3.5" /> Contoh PDF
+            <Download className="w-3 h-3" /> Contoh PDF
           </button>
 
           {selectedTrackId.startsWith('pdf_') && (
@@ -1614,58 +1644,76 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 setTracks((prev) => prev.filter((t) => t.id !== selectedTrackId));
                 handleSelectTrack('maze');
               }}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold text-[11px] cursor-pointer"
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer ${
+                isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-300'
+                  : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/30'
+              }`}
             >
-              <Trash2 className="w-3.5 h-3.5" /> Hapus
+              <Trash2 className="w-3 h-3" /> Hapus
             </button>
           )}
         </div>
 
         {/* Right side: Kids-Friendly Hardware, Pinout & Multi-PID Popover Triggers */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
               activeDrawer === 'hardware'
-                ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md'
-                : 'bg-[#132238] hover:bg-[#1a2e4a] text-amber-300 border-amber-500/30'
+                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                : isLight
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                  : 'bg-[#132238] hover:bg-[#1a2e4a] text-amber-300 border-amber-500/30'
             }`}
           >
-            <Cpu className="w-3.5 h-3.5" /> ⚙️ Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
+            <Cpu className="w-3 h-3" /> ⚙️ Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
           </button>
 
           <button
             type="button"
             onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
               activeDrawer === 'pid'
-                ? 'bg-fuchsia-500 text-white border-fuchsia-300 shadow-md'
-                : 'bg-[#132238] hover:bg-[#1a2e4a] text-fuchsia-300 border-fuchsia-500/30'
+                ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-sm'
+                : isLight
+                  ? 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300'
+                  : 'bg-[#132238] hover:bg-[#1a2e4a] text-fuchsia-300 border-fuchsia-500/30'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5" /> 🎛️ PID 1–5
+            <Sliders className="w-3 h-3" /> 🎛️ PID 1–5
           </button>
 
           <button
             type="button"
             onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-[11px] shadow-md cursor-pointer transition-all"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-[11px] shadow-sm cursor-pointer transition-all"
             title="Sinkronkan konfigurasi robot, pinout PWM/Mux/Encoder, dan PID ke Block & Kode (.ino / .py)"
           >
-            <Sparkles className="w-3.5 h-3.5" /> Sync ke Blok & Kode
+            <Sparkles className="w-3 h-3" /> Sync ke Blok & Kode
           </button>
         </div>
       </div>
 
       {/* ── COMPACT ROW 2: Camera View, Start/Finish & Robot Pose Controls + Fullscreen ── */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1 bg-[#091220] border-b border-slate-800/80 text-[11px] shrink-0">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-1 px-2.5 py-1 border-b text-[11px] shrink-0 transition-colors ${
+          isLight
+            ? 'bg-slate-100/90 border-slate-200 text-slate-700'
+            : 'bg-[#091220] border-slate-800/80 text-slate-200'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-1">
           {/* 3D Camera Perspective Selector */}
           <select
             value={cameraMode}
             onChange={(e) => setCameraMode(e.target.value as CameraViewMode)}
-            className="bg-[#111e34] text-sky-200 border border-slate-700 rounded-lg px-2 py-0.5 font-bold outline-none cursor-pointer"
+            className={`rounded-lg px-2 py-0.5 font-bold outline-none cursor-pointer border ${
+              isLight
+                ? 'bg-white text-sky-700 border-slate-300'
+                : 'bg-[#111e34] text-sky-200 border-slate-700'
+            }`}
           >
             <option value="3d_persp">🎥 3D Perspektif (Orbit)</option>
             <option value="2d_top">🗺️ 2D Atas (Top-Down)</option>
@@ -1676,7 +1724,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <button
             type="button"
             onClick={() => setCamYaw((y) => y + 0.35)}
-            className="px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            className={`px-2 py-0.5 rounded-lg border font-semibold cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
+                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-slate-200'
+            }`}
             title="Putar sudut pandang 3D"
           >
             ↻ Putar
@@ -1689,7 +1741,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               setCamPitch(0.78);
               setCamZoom(1.0);
             }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold cursor-pointer"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-semibold cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
+                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-slate-200'
+            }`}
             title="Reset Kamera"
           >
             <Camera className="w-3 h-3" /> Reset View
@@ -1702,12 +1758,16 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               const nextScale = scales[(scales.indexOf(hardwareConfig.robotScale) + 1) % scales.length] || 1.0;
               updateHardware({ robotScale: nextScale });
             }}
-            className="px-2 py-0.5 rounded-lg bg-[#111e34] hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold cursor-pointer"
+            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-50 border-slate-300 text-amber-700'
+                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-amber-300'
+            }`}
           >
             🔍 Robot {hardwareConfig.robotScale}x
           </button>
 
-          <div className="h-3.5 w-px bg-slate-800 mx-0.5" />
+          <div className={`h-3.5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
 
           <button
             type="button"
@@ -1715,7 +1775,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'start'
                 ? 'bg-purple-600 text-white border-purple-400'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-purple-300'
+                : isLight
+                  ? 'bg-white hover:bg-purple-50 border-slate-300 text-purple-700'
+                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-purple-300'
             }`}
           >
             🏁 Set Start
@@ -1727,7 +1789,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'finish'
                 ? 'bg-emerald-600 text-white border-emerald-400'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-emerald-300'
+                : isLight
+                  ? 'bg-white hover:bg-emerald-50 border-slate-300 text-emerald-700'
+                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-emerald-300'
             }`}
           >
             🎯 Set Finis
@@ -1739,7 +1803,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'robot'
                 ? 'bg-orange-500 text-slate-950 border-orange-300'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
+                : isLight
+                  ? 'bg-white hover:bg-orange-50 border-slate-300 text-orange-700'
+                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
             }`}
           >
             📍 Pindah Robot
@@ -1755,14 +1821,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               placementTool === 'draw_line'
                 ? 'bg-sky-600 text-white border-sky-400'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
+                : isLight
+                  ? 'bg-white hover:bg-sky-50 border-slate-300 text-sky-700'
+                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
             }`}
           >
             ✏️ Gambar Jalur
           </button>
 
-          <div className="flex items-center gap-1 bg-[#111e34] border border-slate-700 rounded-lg px-2 py-0.5">
-            <span className="text-slate-400">Arah:</span>
+          <div
+            className={`flex items-center gap-1 border rounded-lg px-2 py-0.5 ${
+              isLight ? 'bg-white border-slate-300' : 'bg-[#111e34] border-slate-700'
+            }`}
+          >
+            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Arah:</span>
             <input
               type="number"
               value={initialHeadingDeg}
@@ -1771,15 +1843,21 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 setInitialHeadingDeg(val);
                 resetRobotToStart(startPos.x, startPos.y, val);
               }}
-              className="w-11 bg-transparent text-amber-300 font-mono font-bold text-center outline-none"
+              className={`w-10 bg-transparent font-mono font-bold text-center outline-none ${
+                isLight ? 'text-amber-700' : 'text-amber-300'
+              }`}
             />
-            <span className="text-slate-400">°</span>
+            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>°</span>
           </div>
 
           <button
             type="button"
             onClick={() => resetRobotToStart()}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold cursor-pointer"
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+            }`}
           >
             <RotateCcw className="w-3 h-3" /> Reset Posisi
           </button>
@@ -1788,7 +1866,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             <button
               type="button"
               onClick={() => setCustomSegments([])}
-              className="px-2 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-bold cursor-pointer"
+              className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+                isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-300'
+                  : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/30'
+              }`}
             >
               Hapus Jalur
             </button>
@@ -1796,14 +1878,18 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         </div>
 
         {/* Right: Auto-Finish & Fullscreen Button (Now in toolbar so it never covers the track!) */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setAutoFinish((v) => !v)}
             className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
               autoFinish
-                ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                : 'bg-[#111e34] text-slate-400 border-slate-700'
+                ? isLight
+                  ? 'bg-teal-50 text-teal-700 border-teal-300'
+                  : 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                : isLight
+                  ? 'bg-white text-slate-500 border-slate-300'
+                  : 'bg-[#111e34] text-slate-400 border-slate-700'
             }`}
           >
             Finis Otomatis: {autoFinish ? 'ON' : 'OFF'}
@@ -1812,7 +1898,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <button
             type="button"
             onClick={() => setIsFullscreen((f) => !f)}
-            className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold cursor-pointer transition-transform active:scale-95"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold cursor-pointer transition-transform active:scale-95"
           >
             {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             {isFullscreen ? 'Perkecil' : 'Perbesar'}
@@ -1821,13 +1907,21 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       </div>
 
       {/* ── MAIN 3D ARENA VIEWPORT (100% Unobstructed Track!) ── */}
-      <div className="relative flex-1 w-full min-h-[340px] overflow-hidden">
+      <div className="relative flex-1 w-full min-h-[220px] overflow-hidden">
         {/* Floating Collapsible Drawers with Close Button */}
         {activeDrawer === 'pdf_samples' && (
-          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#0e1b30]/95 backdrop-blur-md border border-emerald-500/40 shadow-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div
+            className={`absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl backdrop-blur-md border shadow-2xl flex flex-wrap items-center justify-between gap-3 text-xs ${
+              isLight
+                ? 'bg-white/95 border-emerald-400 text-slate-800'
+                : 'bg-[#0e1b30]/95 border-emerald-500/40 text-slate-100'
+            }`}
+          >
             <div>
-              <div className="font-bold text-emerald-300">📄 Paket Contoh File PDF Track Siap Pakai</div>
-              <div className="text-slate-400 text-[11px]">
+              <div className={`font-bold ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
+                📄 Paket Contoh File PDF Track Siap Pakai
+              </div>
+              <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Klik nama track untuk langsung mencoba di arena, atau unduh file PDF-nya.
               </div>
             </div>
@@ -1839,7 +1933,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               ].map((sample) => (
                 <div
                   key={sample.id}
-                  className="flex items-center gap-1.5 bg-[#091220] border border-slate-700 rounded-lg px-2.5 py-1.5"
+                  className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 ${
+                    isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-700'
+                  }`}
                 >
                   <button
                     type="button"
@@ -1847,14 +1943,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                       handleSelectTrack(sample.id);
                       setActiveDrawer('none');
                     }}
-                    className="text-sky-300 hover:text-sky-200 font-bold cursor-pointer"
+                    className={`font-bold cursor-pointer ${
+                      isLight ? 'text-sky-600 hover:text-sky-700' : 'text-sky-300 hover:text-sky-200'
+                    }`}
                   >
                     {sample.label}
                   </button>
                   <a
                     href={sample.href}
                     download
-                    className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[10px]"
+                    className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                      isLight
+                        ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700'
+                        : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300'
+                    }`}
                   >
                     ⬇ PDF
                   </a>
@@ -1863,7 +1965,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveDrawer('none')}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
+                className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                  isLight
+                    ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
               >
                 ✕ Tutup
               </button>
@@ -1872,23 +1978,37 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         )}
 
         {activeDrawer === 'hardware' && (
-          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#0e1b30]/95 backdrop-blur-md border border-amber-500/40 shadow-2xl space-y-3 text-xs max-h-[85%] overflow-y-auto">
+          <div
+            className={`absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl backdrop-blur-md border shadow-2xl space-y-3 text-xs max-h-[85%] overflow-y-auto ${
+              isLight
+                ? 'bg-white/95 border-amber-400 text-slate-800'
+                : 'bg-[#0e1b30]/95 border-amber-500/40 text-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <div className="font-extrabold text-amber-300 flex items-center gap-2">
+              <div className={`font-extrabold flex items-center gap-2 ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
                 <Settings className="w-4 h-4" /> ⚙️ Konfigurasi Robot Real, Motor RPM & Smart Auto-Pinout
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => updateHardware({}, true, true)}
-                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] cursor-pointer"
+                  className={`px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer ${
+                    isLight
+                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                  }`}
                 >
                   ✨ Estimasi Pin & PID Otomatis
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveDrawer('none')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                  }`}
                 >
                   ✕ Tutup
                 </button>
@@ -1897,8 +2017,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
               {/* Robot Preset */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Robot</label>
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Jenis Robot
+                </label>
                 <select
                   value={hardwareConfig.preset}
                   onChange={(e) => {
@@ -1911,7 +2033,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                           : 'Robot Bebas';
                     updateHardware({ preset, robotName: name });
                   }}
-                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                  className={`w-full border rounded px-2 py-1 font-semibold ${
+                    isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-100 border-slate-700'
+                  }`}
                 >
                   <option value="line_follower">🏎️ Line Follower</option>
                   <option value="maze_solver">🧩 Maze Solver Pro</option>
@@ -1920,14 +2044,18 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Microcontroller */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Mikrokontroler</label>
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Mikrokontroler
+                </label>
                 <select
                   value={hardwareConfig.mcu}
                   onChange={(e) =>
                     updateHardware({ mcu: e.target.value as RobotMcuId }, true, false)
                   }
-                  className="w-full bg-[#111e34] text-sky-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                  className={`w-full border rounded px-2 py-1 font-bold ${
+                    isLight ? 'bg-white text-sky-700 border-slate-300' : 'bg-[#111e34] text-sky-300 border-slate-700'
+                  }`}
                 >
                   <option value="Arduino Uno">Arduino Uno</option>
                   <option value="Arduino Nano">Arduino Nano</option>
@@ -1938,8 +2066,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Jumlah Sensor Garis */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Jumlah Sensor Garis (0 / X)
                 </label>
                 <select
@@ -1950,7 +2078,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                       sc >= 6 ? 'mux_4067' : hardwareConfig.sensorMode;
                     updateHardware({ sensorCount: sc, sensorMode: mode }, true, true);
                   }}
-                  className="w-full bg-[#111e34] text-emerald-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                  className={`w-full border rounded px-2 py-1 font-bold ${
+                    isLight ? 'bg-white text-emerald-700 border-slate-300' : 'bg-[#111e34] text-emerald-300 border-slate-700'
+                  }`}
                 >
                   {[2, 4, 5, 6, 8, 12].map((n) => (
                     <option key={n} value={n}>
@@ -1961,8 +2091,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Mode Pembacaan Sensor (Direct vs Multiplexer) */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Mode Baca Sensor / Mux
                 </label>
                 <select
@@ -1970,7 +2100,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   onChange={(e) =>
                     updateHardware({ sensorMode: e.target.value as SensorReadMode }, true, false)
                   }
-                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                  className={`w-full border rounded px-2 py-1 font-semibold ${
+                    isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-100 border-slate-700'
+                  }`}
                 >
                   <option value="mux_4067">Multiplexer CD74HC4067 (S0..S3 + SIG)</option>
                   <option value="mux_4051">Multiplexer 74HC4051 (S0..S2 + SIG)</option>
@@ -1979,8 +2111,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Jenis Motor & RPM */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Jenis Motor DC</label>
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Jenis Motor DC
+                </label>
                 <select
                   value={hardwareConfig.motorPreset}
                   onChange={(e) => {
@@ -1996,7 +2130,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                       true
                     );
                   }}
-                  className="w-full bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                  className={`w-full border rounded px-2 py-1 font-bold ${
+                    isLight ? 'bg-white text-amber-700 border-slate-300' : 'bg-[#111e34] text-amber-300 border-slate-700'
+                  }`}
                 >
                   {Object.entries(MOTOR_PRESETS).map(([id, m]) => (
                     <option key={id} value={id}>
@@ -2007,8 +2143,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Input RPM Motor Manual */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Kecepatan Motor (RPM) & Ø Roda
                 </label>
                 <div className="flex items-center gap-1.5">
@@ -2027,9 +2163,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                         true
                       )
                     }
-                    className="w-20 bg-[#111e34] text-amber-300 border border-slate-700 rounded px-2 py-1 font-mono font-bold"
+                    className={`w-20 border rounded px-2 py-1 font-mono font-bold ${
+                      isLight ? 'bg-white text-amber-700 border-slate-300' : 'bg-[#111e34] text-amber-300 border-slate-700'
+                    }`}
                   />
-                  <span className="text-[10px] text-slate-400">RPM</span>
+                  <span className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>RPM</span>
                   <input
                     type="number"
                     min={20}
@@ -2040,21 +2178,25 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                         wheelDiameterMm: Math.max(20, parseInt(e.target.value, 10) || 34),
                       })
                     }
-                    className="w-14 bg-[#111e34] text-slate-200 border border-slate-700 rounded px-1.5 py-1 font-mono"
+                    className={`w-14 border rounded px-1.5 py-1 font-mono ${
+                      isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-200 border-slate-700'
+                    }`}
                   />
-                  <span className="text-[10px] text-slate-400">mm</span>
+                  <span className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>mm</span>
                 </div>
               </div>
 
               {/* Wheel Encoder Toggle */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Encoder Roda (L & R)
                 </label>
                 <select
                   value={hardwareConfig.hasEncoder ? 'yes' : 'no'}
                   onChange={(e) => updateHardware({ hasEncoder: e.target.value === 'yes' })}
-                  className="w-full bg-[#111e34] text-cyan-300 border border-slate-700 rounded px-2 py-1 font-bold"
+                  className={`w-full border rounded px-2 py-1 font-bold ${
+                    isLight ? 'bg-white text-cyan-700 border-slate-300' : 'bg-[#111e34] text-cyan-300 border-slate-700'
+                  }`}
                 >
                   <option value="yes">✅ Ada Encoder (ms / Enc L / Enc R)</option>
                   <option value="no">❌ Tidak Ada Encoder (Hanya ms)</option>
@@ -2062,8 +2204,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               </div>
 
               {/* Ultrasonic Sensor Toggle */}
-              <div className="bg-[#091220] p-2 rounded-lg border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+              <div className={`p-2 rounded-lg border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#091220] border-slate-800'}`}>
+                <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Sensor Ultrasonic
                 </label>
                 <select
@@ -2071,7 +2213,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   onChange={(e) =>
                     updateHardware({ ultrasonicMode: e.target.value as UltrasonicMode })
                   }
-                  className="w-full bg-[#111e34] text-slate-100 border border-slate-700 rounded px-2 py-1 font-semibold"
+                  className={`w-full border rounded px-2 py-1 font-semibold ${
+                    isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-100 border-slate-700'
+                  }`}
                 >
                   <option value="none">Tidak Pakai Ultrasonic</option>
                   <option value="front">1 Ultrasonic (Depan)</option>
@@ -2081,16 +2225,24 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             </div>
 
             {/* Pin Selector Row (PWM, Multiplexer S0..S3/SIG, Encoder Interrupt) */}
-            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-800 text-[11px]">
-              <span className="font-bold text-sky-400">🔌 Pilihan Pin Otomatis ({hardwareConfig.mcu}):</span>
+            <div
+              className={`flex flex-wrap items-center gap-3 pt-1 border-t text-[11px] ${
+                isLight ? 'border-slate-200' : 'border-slate-800'
+              }`}
+            >
+              <span className={`font-bold ${isLight ? 'text-sky-700' : 'text-sky-400'}`}>
+                🔌 Pilihan Pin Otomatis ({hardwareConfig.mcu}):
+              </span>
               <label className="flex items-center gap-1">
-                <span className="text-slate-400">PWM L:</span>
+                <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>PWM L:</span>
                 <select
                   value={hardwareConfig.pins.pwmL}
                   onChange={(e) =>
                     updateHardware({ pins: { ...hardwareConfig.pins, pwmL: e.target.value } })
                   }
-                  className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
+                  className={`border rounded px-1.5 py-0.5 font-mono ${
+                    isLight ? 'bg-white border-slate-300 text-amber-700' : 'bg-[#111e34] border-slate-700 text-amber-300'
+                  }`}
                 >
                   {boardPins.pwmPins.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -2098,13 +2250,15 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 </select>
               </label>
               <label className="flex items-center gap-1">
-                <span className="text-slate-400">PWM R:</span>
+                <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>PWM R:</span>
                 <select
                   value={hardwareConfig.pins.pwmR}
                   onChange={(e) =>
                     updateHardware({ pins: { ...hardwareConfig.pins, pwmR: e.target.value } })
                   }
-                  className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono"
+                  className={`border rounded px-1.5 py-0.5 font-mono ${
+                    isLight ? 'bg-white border-slate-300 text-amber-700' : 'bg-[#111e34] border-slate-700 text-amber-300'
+                  }`}
                 >
                   {boardPins.pwmPins.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -2114,18 +2268,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
               {hardwareConfig.sensorMode !== 'direct' && (
                 <>
-                  <span className="text-emerald-300 font-mono">
+                  <span className={`font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
                     Mux S0..S3: [{hardwareConfig.pins.muxS0}, {hardwareConfig.pins.muxS1}, {hardwareConfig.pins.muxS2}
                     {hardwareConfig.sensorMode === 'mux_4067' ? `, ${hardwareConfig.pins.muxS3}` : ''}]
                   </span>
                   <label className="flex items-center gap-1">
-                    <span className="text-slate-400">Mux SIG:</span>
+                    <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Mux SIG:</span>
                     <select
                       value={hardwareConfig.pins.muxSig}
                       onChange={(e) =>
                         updateHardware({ pins: { ...hardwareConfig.pins, muxSig: e.target.value } })
                       }
-                      className="bg-[#111e34] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono"
+                      className={`border rounded px-1.5 py-0.5 font-mono ${
+                        isLight ? 'bg-white border-slate-300 text-emerald-700' : 'bg-[#111e34] border-slate-700 text-emerald-300'
+                      }`}
                     >
                       {boardPins.analogPins.map((p) => (
                         <option key={p} value={p}>{p}</option>
@@ -2136,7 +2292,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               )}
 
               {hardwareConfig.hasEncoder && (
-                <span className="text-cyan-300 font-mono">
+                <span className={`font-mono ${isLight ? 'text-cyan-700' : 'text-cyan-300'}`}>
                   Interrupt Enc L/R: [{hardwareConfig.pins.encLA}, {hardwareConfig.pins.encRA}]
                 </span>
               )}
@@ -2145,10 +2301,16 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         )}
 
         {activeDrawer === 'pid' && (
-          <div className="absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl bg-[#12112a]/95 backdrop-blur-md border border-fuchsia-500/40 shadow-2xl space-y-2.5 text-xs">
+          <div
+            className={`absolute top-2 left-2 right-2 z-30 px-4 py-3 rounded-xl backdrop-blur-md border shadow-2xl space-y-2.5 text-xs ${
+              isLight
+                ? 'bg-white/95 border-fuchsia-400 text-slate-800'
+                : 'bg-[#12112a]/95 border-fuchsia-500/40 text-slate-100'
+            }`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span className="font-extrabold text-fuchsia-300">
+                <span className={`font-extrabold ${isLight ? 'text-fuchsia-700' : 'text-fuchsia-300'}`}>
                   🎛️ Kombinasi PID 1 – 5 (Menyesuaikan Motor {hardwareConfig.motorRpm} RPM & {hardwareConfig.sensorCount} Sensor)
                 </span>
               </div>
@@ -2160,14 +2322,22 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                       pids: computeAutoPidProfiles(hardwareConfig.motorRpm, hardwareConfig.sensorCount),
                     })
                   }
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border border-fuchsia-500/40 font-bold text-[11px] cursor-pointer"
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border font-bold text-[11px] cursor-pointer ${
+                    isLight
+                      ? 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300'
+                      : 'bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border-fuchsia-500/40'
+                  }`}
                 >
                   <Zap className="w-3.5 h-3.5" /> Reset Kombinasi Auto PID 1–5
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveDrawer('none')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold cursor-pointer"
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                  }`}
                 >
                   ✕ Tutup
                 </button>
@@ -2178,12 +2348,16 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               {hardwareConfig.pids.map((pid, idx) => (
                 <div
                   key={pid.id}
-                  className="bg-[#090d1a] border border-slate-800 rounded-lg p-2 space-y-1.5"
+                  className={`border rounded-lg p-2 space-y-1.5 ${
+                    isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#090d1a] border-slate-800'
+                  }`}
                 >
-                  <div className="font-bold text-fuchsia-300 text-[11px] truncate">{pid.label}</div>
+                  <div className={`font-bold text-[11px] truncate ${isLight ? 'text-fuchsia-700' : 'text-fuchsia-300'}`}>
+                    {pid.label}
+                  </div>
                   <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                     <label className="flex flex-col">
-                      <span className="text-slate-400">Kp</span>
+                      <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Kp</span>
                       <input
                         type="number"
                         step="0.5"
@@ -2193,11 +2367,13 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                           nextPids[idx] = { ...pid, kp: parseFloat(e.target.value) || 0 };
                           updateHardware({ pids: nextPids });
                         }}
-                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-amber-300 font-mono font-bold"
+                        className={`border rounded px-1.5 py-0.5 font-mono font-bold ${
+                          isLight ? 'bg-white border-slate-300 text-amber-700' : 'bg-[#11192e] border-slate-700 text-amber-300'
+                        }`}
                       />
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-slate-400">Ki</span>
+                      <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Ki</span>
                       <input
                         type="number"
                         step="0.01"
@@ -2207,11 +2383,13 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                           nextPids[idx] = { ...pid, ki: parseFloat(e.target.value) || 0 };
                           updateHardware({ pids: nextPids });
                         }}
-                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-emerald-300 font-mono font-bold"
+                        className={`border rounded px-1.5 py-0.5 font-mono font-bold ${
+                          isLight ? 'bg-white border-slate-300 text-emerald-700' : 'bg-[#11192e] border-slate-700 text-emerald-300'
+                        }`}
                       />
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-slate-400">Kd</span>
+                      <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Kd</span>
                       <input
                         type="number"
                         step="0.5"
@@ -2221,11 +2399,13 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                           nextPids[idx] = { ...pid, kd: parseFloat(e.target.value) || 0 };
                           updateHardware({ pids: nextPids });
                         }}
-                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-sky-300 font-mono font-bold"
+                        className={`border rounded px-1.5 py-0.5 font-mono font-bold ${
+                          isLight ? 'bg-white border-slate-300 text-sky-700' : 'bg-[#11192e] border-slate-700 text-sky-300'
+                        }`}
                       />
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-slate-400">dt (ms)</span>
+                      <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>dt (ms)</span>
                       <input
                         type="number"
                         min={1}
@@ -2236,7 +2416,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                           nextPids[idx] = { ...pid, dt: Math.max(1, parseInt(e.target.value, 10) || 10) };
                           updateHardware({ pids: nextPids });
                         }}
-                        className="bg-[#11192e] border border-slate-700 rounded px-1.5 py-0.5 text-purple-300 font-mono font-bold"
+                        className={`border rounded px-1.5 py-0.5 font-mono font-bold ${
+                          isLight ? 'bg-white border-slate-300 text-purple-700' : 'bg-[#11192e] border-slate-700 text-purple-300'
+                        }`}
                       />
                     </label>
                   </div>
@@ -2296,36 +2478,72 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       </div>
 
       {/* ── KIDS-FRIENDLY BOTTOM TELEMETRY & SENSOR STATUS DOCK (Never covers the Arena Track!) ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#0a1324] border-t border-slate-800/90 text-xs shrink-0">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 border-t text-xs shrink-0 transition-colors ${
+          isLight
+            ? 'bg-white border-slate-200 text-slate-700'
+            : 'bg-[#0a1324] border-slate-800/90 text-slate-100'
+        }`}
+      >
         {/* Left: Timer, RPM & Motor Speeds */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700/80 font-mono">
-            <span className="text-[10px] font-bold text-amber-400">⏱️ WAKTU</span>
-            <span className="text-white font-extrabold text-xs">{simElapsedSec.toFixed(2)}s</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-mono ${
+              isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-900 border-slate-700/80'
+            }`}
+          >
+            <span className={`text-[10px] font-bold ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>⏱️ WAKTU</span>
+            <span className={`font-extrabold text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              {simElapsedSec.toFixed(2)}s
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-300">
-            <span className="text-amber-300 font-bold">⚡ {hardwareConfig.motorRpm} RPM</span>
-            <span className="text-slate-600">|</span>
-            <span>PWM L/R: <b className="text-white">{liveSpeeds.l}</b> / <b className="text-white">{liveSpeeds.r}</b></span>
+          <div
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-mono text-[11px] ${
+              isLight
+                ? 'bg-slate-100 border-slate-300 text-slate-700'
+                : 'bg-slate-900 border-slate-800 text-slate-300'
+            }`}
+          >
+            <span className={`font-bold ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
+              ⚡ {hardwareConfig.motorRpm} RPM
+            </span>
+            <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+            <span>
+              PWM L/R:{' '}
+              <b className={isLight ? 'text-slate-900' : 'text-white'}>{liveSpeeds.l}</b> /{' '}
+              <b className={isLight ? 'text-slate-900' : 'text-white'}>{liveSpeeds.r}</b>
+            </span>
             {hardwareConfig.hasEncoder && (
               <>
-                <span className="text-slate-600">|</span>
-                <span className="text-cyan-300">Enc: <b>{encoderLeft}</b>/<b>{encoderRight}</b></span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+                <span className={isLight ? 'text-cyan-700' : 'text-cyan-300'}>
+                  Enc: <b>{encoderLeft}</b>/<b>{encoderRight}</b>
+                </span>
               </>
             )}
             {hardwareConfig.ultrasonicMode !== 'none' && (
               <>
-                <span className="text-slate-600">|</span>
-                <span className="text-sky-300">Ultra: <b>{ultrasonicCm}cm</b></span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+                <span className={isLight ? 'text-sky-700' : 'text-sky-300'}>
+                  Ultra: <b>{ultrasonicCm}cm</b>
+                </span>
               </>
             )}
           </div>
         </div>
 
         {/* Center: Kids-Friendly Live Sensor Array ('0' = Garis, 'X' = Luar Garis) */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-3 py-1 rounded-xl">
-          <span className="text-[10px] font-extrabold text-sky-300 uppercase tracking-wide">
+        <div
+          className={`flex items-center gap-1.5 border px-2.5 py-0.5 rounded-xl ${
+            isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-900/90 border-slate-800'
+          }`}
+        >
+          <span
+            className={`text-[10px] font-extrabold uppercase tracking-wide ${
+              isLight ? 'text-sky-700' : 'text-sky-300'
+            }`}
+          >
             👀 Sensor ({hardwareConfig.sensorCount}):
           </span>
           <div className="flex items-center gap-1">
@@ -2333,10 +2551,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               <span
                 key={i}
                 title={active ? `Sensor ${i + 1}: 0 (Membaca Garis)` : `Sensor ${i + 1}: X (Tidak Membaca Garis)`}
-                className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[11px] font-extrabold border transition-all ${
+                className={`w-4 h-4 rounded flex items-center justify-center font-mono text-[10px] font-extrabold border transition-all ${
                   active
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-[0_0_8px_rgba(34,197,94,0.85)] scale-105'
-                    : 'bg-slate-800 text-rose-400 border-slate-700'
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_6px_rgba(34,197,94,0.75)] scale-105'
+                    : isLight
+                      ? 'bg-white text-rose-600 border-slate-300'
+                      : 'bg-slate-800 text-rose-400 border-slate-700'
                 }`}
               >
                 {active ? '0' : 'X'}
@@ -2347,20 +2567,26 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
         {/* Right: Active Running Block / Step Index Status */}
         <div
-          className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold flex items-center gap-1.5 transition-all ${
+          className={`px-2.5 py-0.5 rounded-xl border text-[11px] font-extrabold flex items-center gap-1.5 transition-all ${
             execStatus.stoppedByInterrupt
-              ? 'bg-rose-950/90 border-rose-500 text-rose-200 animate-pulse'
+              ? isLight
+                ? 'bg-rose-50 border-rose-400 text-rose-700 animate-pulse'
+                : 'bg-rose-950/90 border-rose-500 text-rose-200 animate-pulse'
               : isRunning
-                ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
-                : 'bg-slate-900 border-slate-800 text-slate-300'
+                ? isLight
+                  ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
+                  : 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
+                : isLight
+                  ? 'bg-slate-100 border-slate-300 text-slate-600'
+                  : 'bg-slate-900 border-slate-800 text-slate-300'
           }`}
         >
           {execStatus.stoppedByInterrupt ? (
-            <OctagonAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <OctagonAlert className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-rose-600' : 'text-rose-400'}`} />
           ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
           )}
-          <span className="truncate max-w-[340px]">{execStatus.message}</span>
+          <span className="truncate max-w-[300px]">{execStatus.message}</span>
         </div>
       </div>
     </div>

@@ -148,7 +148,7 @@ const translations: Record<LangCode, Translations> = {
     learning: {
       title:        'Python & MicroPython Learning Portal',
       subtitle:     'Master Python programming from basic syntax to MicroPython implementation on IoT and robotics devices interactively.',
-      pythonBasic:  '🐍 Python Basic',
+      pythonBasic:  'Python Basic',
       microPython:  '🔌 MicroPython',
       moduleDetail: 'Module Detail',
       loadToEditor: 'Load Code to Editor ↗',
@@ -215,7 +215,7 @@ const translations: Record<LangCode, Translations> = {
     learning: {
       title:        'Portal Pembelajaran Python & MicroPython',
       subtitle:     'Kuasai pemrograman Python dari dasar sintaksis hingga implementasi MicroPython pada perangkat IoT dan robotika secara interaktif.',
-      pythonBasic:  '🐍 Python Dasar',
+      pythonBasic:  'Python Dasar',
       microPython:  '🔌 MicroPython',
       moduleDetail: 'Detail Modul',
       loadToEditor: 'Muat Kode ke Editor ↗',
@@ -282,7 +282,7 @@ const translations: Record<LangCode, Translations> = {
     learning: {
       title:        'Portal Pembelajaran Python & MicroPython',
       subtitle:     'Kuasai pengaturcaraan Python dari sintaks asas hingga pelaksanaan MicroPython pada peranti IoT dan robotik secara interaktif.',
-      pythonBasic:  '🐍 Python Asas',
+      pythonBasic:  'Python Asas',
       microPython:  '🔌 MicroPython',
       moduleDetail: 'Butiran Modul',
       loadToEditor: 'Muatkan Kod ke Editor ↗',
@@ -349,7 +349,7 @@ const translations: Record<LangCode, Translations> = {
     learning: {
       title:        'بوابة تعلم Python و MicroPython',
       subtitle:     'أتقن برمجة Python من الأساسيات حتى تطبيق MicroPython على أجهزة إنترنت الأشياء والروبوتات.',
-      pythonBasic:  '🐍 Python الأساسية',
+      pythonBasic:  'Python الأساسية',
       microPython:  '🔌 MicroPython',
       moduleDetail: 'تفاصيل الوحدة',
       loadToEditor: 'تحميل الكود إلى المحرر ↗',

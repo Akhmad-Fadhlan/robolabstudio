@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, ChevronRight, Link, FileCode2, Unplug } from 'lucide-react';
+import { PythonLogo } from './icons/PythonLogo';
 
 // Self-contained Monaco Editor component that uses direct ES module import
 // This completely bypasses @monaco-editor/react and its AMD loader (which conflicts with Electron)
@@ -321,7 +322,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                   ) : (filename.endsWith('.c') || filename.endsWith('.h') || filename.endsWith('.cpp') || filename.endsWith('.hpp')) ? (
                     <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'bg-sky-400/50'}`} />
                   ) : filename.endsWith('.py') ? (
-                    <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' : 'bg-amber-400/50'}`} />
+                    <PythonLogo className="w-3.5 h-3.5" />
                   ) : (
                     <FileCode2 className="w-3.5 h-3.5 opacity-70" />
                   )}

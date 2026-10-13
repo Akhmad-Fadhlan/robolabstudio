@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  FolderOpen, Save, Check, Upload, Package, Play, 
+  FolderOpen, Save, Check, Upload, Package, 
   MoreHorizontal, Cpu, Settings, 
   HelpCircle, Info, MessageSquare, Code, 
   Search, Sliders, RefreshCw, LogOut, Globe
 } from 'lucide-react';
 import type { LangCode } from '../../i18n';
 import { LANGUAGES, t } from '../../i18n';
+import { PythonLogo } from '../icons/PythonLogo';
 
 interface TopMenuBarProps {
   isSerialConnected: boolean;
@@ -224,12 +225,12 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={handleRunPython}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
                 isDark ? 'hover:bg-white/10 text-yellow-300' : 'hover:bg-slate-100 text-yellow-600'
               }`}
               title="Jalankan Kode Python"
             >
-              <Play className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400/20 flex-shrink-0" />
+              <PythonLogo className="w-3.5 h-3.5" />
               <span className="hidden 2xl:inline">{tb('runPython')}</span>
             </button>
 
