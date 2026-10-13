@@ -3374,32 +3374,227 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   }, [savedFiles]);
 
-  // Save active file & associated Blockly XML
-  const handleSaveFile = () => {
-    setSavedFiles(prev => ({ ...prev, [activeFile]: files[activeFile] }));
-    
-    // Save to Electron disk if in Electron mode
-    const absolutePath = filePaths[activeFile];
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (absolutePath && req) {
-      try {
-        const fs = req('fs');
-        fs.writeFileSync(absolutePath, files[activeFile] || '', 'utf-8');
-        
-        // Save XML sidecar file (activeFile + .xml) to retain exact user blocks
-        const currentXml = workspaceXmls[activeFile];
-        if (currentXml) {
-          fs.writeFileSync(absolutePath + '.xml', currentXml, 'utf-8');
-        }
-      } catch (err) {
-        console.error("Electron save error:", err);
+  // Helper: Encode & Decode RoboLab Block HEX (.hex) format (Intel HEX + Lossless UTF-8 Base64 Blockly XML, Arduino & Python metadata)
+  const toBase64Utf8 = (str: string): string => {
+    try {
+      const bytes = new TextEncoder().encode(str);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
       }
-    } else if (!req && activeFile) {
-      // Web Browser Mode: download file to user's computer
-      downloadFileInBrowser(activeFile, files[activeFile] || '');
+      return btoa(binary);
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const fromBase64Utf8 = (b64: string): string => {
+    try {
+      const binary = atob(b64.trim());
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder().decode(bytes);
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const buildRoboLabBlockHex = (payload: { xml: string; ino: string; py: string; board: string }): string => {
+    const lines: string[] = [
+      '; ROBOLAB_BLOCK_HEX_V1',
+      `; BOARD: ${payload.board || 'Arduino Uno'}`,
+      `; XML_BASE64: ${toBase64Utf8(payload.xml || '')}`,
+      `; INO_BASE64: ${toBase64Utf8(payload.ino || '')}`,
+      `; PY_BASE64: ${toBase64Utf8(payload.py || '')}`,
+    ];
+
+    // Encode Blockly XML payload as standard Intel HEX records (:LLAAAATTDD...CC)
+    const dataBytes = new TextEncoder().encode(payload.xml || '');
+    let highAddress = -1;
+    for (let offset = 0; offset < dataBytes.length; offset += 16) {
+      const currentHigh = (offset >>> 16) & 0xffff;
+      if (currentHigh !== highAddress) {
+        highAddress = currentHigh;
+        const hiByte = (highAddress >>> 8) & 0xff;
+        const loByte = highAddress & 0xff;
+        const extSum = (0x02 + 0x00 + 0x00 + 0x04 + hiByte + loByte) & 0xff;
+        const extChecksum = ((~extSum + 1) & 0xff).toString(16).toUpperCase().padStart(2, '0');
+        lines.push(`:02000004${hiByte.toString(16).toUpperCase().padStart(2, '0')}${loByte.toString(16).toUpperCase().padStart(2, '0')}${extChecksum}`);
+      }
+      const chunk = dataBytes.subarray(offset, Math.min(offset + 16, dataBytes.length));
+      const byteCount = chunk.length;
+      const addr16 = offset & 0xffff;
+      const addrHi = (addr16 >>> 8) & 0xff;
+      const addrLo = addr16 & 0xff;
+      let sum = byteCount + addrHi + addrLo + 0x00;
+      let dataHex = '';
+      for (let i = 0; i < chunk.length; i++) {
+        sum += chunk[i];
+        dataHex += chunk[i].toString(16).toUpperCase().padStart(2, '0');
+      }
+      const checksum = ((~sum + 1) & 0xff).toString(16).toUpperCase().padStart(2, '0');
+      lines.push(
+        `:${byteCount.toString(16).toUpperCase().padStart(2, '0')}${addr16.toString(16).toUpperCase().padStart(4, '0')}00${dataHex}${checksum}`
+      );
+    }
+    lines.push(':00000001FF');
+    return lines.join('\n') + '\n';
+  };
+
+  const parseRoboLabBlockHex = (content: string): { xml: string; ino: string; py: string; board: string | null } => {
+    let xml = '';
+    let ino = '';
+    let py = '';
+    let detectedBoard: string | null = null;
+
+    const boardMatch = content.match(/^;\s*BOARD:\s*(.+)$/m);
+    if (boardMatch && boardMatch[1]) {
+      detectedBoard = boardMatch[1].trim();
+    }
+    const xmlB64Match = content.match(/^;\s*XML_BASE64:\s*([A-Za-z0-9+/=]+)\s*$/m);
+    if (xmlB64Match && xmlB64Match[1]) {
+      xml = fromBase64Utf8(xmlB64Match[1]);
+    }
+    const inoB64Match = content.match(/^;\s*INO_BASE64:\s*([A-Za-z0-9+/=]+)\s*$/m);
+    if (inoB64Match && inoB64Match[1]) {
+      ino = fromBase64Utf8(inoB64Match[1]);
+    }
+    const pyB64Match = content.match(/^;\s*PY_BASE64:\s*([A-Za-z0-9+/=]+)\s*$/m);
+    if (pyB64Match && pyB64Match[1]) {
+      py = fromBase64Utf8(pyB64Match[1]);
     }
 
-    setTerminalLogs(prev => [...prev, { text: `✓ File '${activeFile}' & struktur blok disimpan.`, type: 'success' }]);
+    // Fallback 1: Direct embedded <xml>...</xml>
+    if (!xml || !xml.includes('<block')) {
+      const rawXmlMatch = content.match(/<xml[\s\S]*?<\/xml>/i);
+      if (rawXmlMatch) {
+        xml = rawXmlMatch[0];
+      }
+    }
+
+    // Fallback 2: Decode Intel HEX data records (:LLAAAATTDD...CC)
+    if (!xml || !xml.includes('<block')) {
+      try {
+        const bytes: number[] = [];
+        const hexLines = content.split(/\r?\n/);
+        for (const line of hexLines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith(':') || trimmed.length < 11) continue;
+          const byteCount = parseInt(trimmed.slice(1, 3), 16);
+          const recordType = parseInt(trimmed.slice(7, 9), 16);
+          if (recordType === 0x00 && !isNaN(byteCount) && trimmed.length >= 9 + byteCount * 2) {
+            for (let i = 0; i < byteCount; i++) {
+              const b = parseInt(trimmed.slice(9 + i * 2, 11 + i * 2), 16);
+              if (!isNaN(b)) bytes.push(b);
+            }
+          }
+        }
+        if (bytes.length > 0) {
+          const decodedText = new TextDecoder().decode(new Uint8Array(bytes));
+          const decodedXmlMatch = decodedText.match(/<xml[\s\S]*?<\/xml>/i);
+          if (decodedXmlMatch) {
+            xml = decodedXmlMatch[0];
+          } else if (/void\s+(setup|loop)\s*\(/.test(decodedText)) {
+            ino = ino || decodedText;
+            xml = arduinoToBlocklyXml(decodedText);
+          } else if (/\b(import|def|while\s+True)\b/.test(decodedText)) {
+            py = py || decodedText;
+            xml = pythonToBlocklyXml(decodedText);
+          }
+        }
+      } catch (e) {
+        // Ignore Intel HEX decode errors
+      }
+    }
+
+    // Fallback 3: Convert from ino or py if XML is still empty
+    if ((!xml || !xml.includes('<block')) && ino) {
+      try {
+        xml = arduinoToBlocklyXml(ino);
+      } catch (_) {}
+    }
+    if ((!xml || !xml.includes('<block')) && py) {
+      try {
+        xml = pythonToBlocklyXml(py);
+      } catch (_) {}
+    }
+
+    return { xml, ino, py, board: detectedBoard };
+  };
+
+  // Save active workspace as Block HEX (.hex) containing Blockly XML + Arduino + Python
+  const handleSaveFile = async () => {
+    const isSim = currentTab === 'simulator';
+    const targetFiles = isSim ? simFiles : files;
+    const targetXmls = isSim ? simWorkspaceXmls : workspaceXmls;
+    const targetActive = isSim ? simActiveFile : activeFile;
+    const targetBoard = isSim ? simBoard : board;
+
+    const inoCode = targetFiles['firmware/main.ino'] || (targetActive.endsWith('.ino') ? targetFiles[targetActive] : '') || '';
+    const pyCode = targetFiles['python/main.py'] || (targetActive.endsWith('.py') ? targetFiles[targetActive] : '') || '';
+    let currentXml = targetXmls[targetActive] || targetXmls['firmware/main.ino'] || targetXmls['python/main.py'] || '';
+
+    if (!currentXml || !currentXml.includes('<block')) {
+      try {
+        if (targetActive.endsWith('.py') && pyCode.trim()) {
+          currentXml = pythonToBlocklyXml(pyCode);
+        } else if (inoCode.trim()) {
+          currentXml = arduinoToBlocklyXml(inoCode);
+        } else if (pyCode.trim()) {
+          currentXml = pythonToBlocklyXml(pyCode);
+        }
+      } catch (e) {
+        console.warn('Fallback XML generation on save failed:', e);
+      }
+    }
+
+    const hexContent = buildRoboLabBlockHex({
+      xml: currentXml,
+      ino: inoCode,
+      py: pyCode,
+      board: targetBoard,
+    });
+
+    const rawBaseName =
+      (projectName && projectName !== 'PROYEK' ? projectName : '') ||
+      targetActive.split('/').pop()?.replace(/\.[^.]+$/, '') ||
+      'robolab_blocks';
+    const safeBaseName = rawBaseName.toLowerCase().replace(/[^a-z0-9_-]+/g, '_') || 'robolab_blocks';
+    const hexFilename = `${safeBaseName}.hex`;
+
+    setSavedFiles(prev => ({
+      ...prev,
+      [activeFile]: files[activeFile] || '',
+      'firmware/main.ino': files['firmware/main.ino'] || '',
+      'python/main.py': files['python/main.py'] || '',
+    }));
+
+    const req = (window as any).__electronRequire || (window as any).require;
+    if (req) {
+      try {
+        const electron = req('electron');
+        const saved = await electron.ipcRenderer.invoke('save-file', {
+          defaultPath: hexFilename,
+          content: hexContent,
+        });
+        if (saved && saved.name) {
+          setTerminalLogs(prev => [
+            ...prev,
+            { text: `✓ Block HEX '${saved.name}' berhasil disimpan (Blok Visual + Arduino + Python).`, type: 'success' },
+          ]);
+        }
+      } catch (err) {
+        console.error("Electron save-file error:", err);
+      }
+    } else {
+      await downloadFileInBrowser(hexFilename, hexContent);
+      setTerminalLogs(prev => [
+        ...prev,
+        { text: `✓ Block HEX '${hexFilename}' berhasil diunduh (Blok Visual + Arduino + Python).`, type: 'success' },
+      ]);
+    }
   };
 
   // Layout mode
@@ -3480,12 +3675,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const saved = localStorage.getItem('robolab_sim_workspaceXmls_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (
-          parsed &&
-          parsed['firmware/main.ino'] &&
-          parsed['firmware/main.ino'].includes('arduino_setup')
-        ) {
-          return parsed;
+        const sharedXml = parsed?.['firmware/main.ino'] || parsed?.['python/main.py'];
+        if (sharedXml && sharedXml.includes('arduino_setup')) {
+          return {
+            ...parsed,
+            'firmware/main.ino': sharedXml,
+            'python/main.py': sharedXml,
+          };
         }
       }
     } catch (e) {}
@@ -4553,18 +4749,85 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleOpenFileAction = (filename: string, content: string, _absolutePath?: string) => {
     setShowExplorer(true);
-    if (!projectName) {
-      const baseName = filename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'PROYEK';
-      setProjectName(baseName.toUpperCase());
-    }
+    const baseName = filename.split('/').pop()?.replace(/\.[^.]+$/, '') || 'PROYEK';
+    setProjectName(baseName.toUpperCase());
     const extension = filename.split('.').pop()?.toLowerCase();
     
-    let updatedFiles: { [key: string]: string } = { [filename]: content };
+    let updatedFiles: { [key: string]: string } = {};
     let updatedXmls: { [key: string]: string } = {};
-    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
-    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
+    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
+    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
     
-    if (extension === 'ino' || ((extension === 'cpp' || extension === 'c') && /void\s+(setup|loop)\s*\(/.test(content))) {
+    let detectedBoard: 'Arduino Uno' | 'ESP32 DevKit V1' | 'BBC micro:bit' | null = null;
+
+    if (extension === 'hex') {
+      const parsedHex = parseRoboLabBlockHex(content);
+      let xml = parsedHex.xml;
+      const inoCode = parsedHex.ino || files[inoFilename] || 'void setup() {\n}\n\nvoid loop() {\n}\n';
+      const pyCode = parsedHex.py || files[pyFilename] || '# RoboLab Studio - Auto Synced Python\n';
+
+      if (!xml || !xml.includes('<block')) {
+        try {
+          xml = arduinoToBlocklyXml(inoCode);
+        } catch (err) {
+          console.warn("Failed to parse fallback XML from HEX:", err);
+        }
+      }
+
+      updatedFiles[inoFilename] = inoCode;
+      updatedFiles[pyFilename] = pyCode;
+
+      if (xml && xml.includes('<block')) {
+        updatedXmls[filename] = xml;
+        updatedXmls[inoFilename] = xml;
+        updatedXmls[pyFilename] = xml;
+      }
+
+      // Enable block sync so BlocklyEditor loads the XML blocks and automatically generates/syncs both Arduino (.ino) and Python (.py)
+      setSyncStatuses(prev => ({
+        ...prev,
+        [filename]: true,
+        [inoFilename]: true,
+        [pyFilename]: true,
+      }));
+
+      // Also sync into Simulator workspace so blocks are ready if user is in or switches to Simulator
+      if (xml && xml.includes('<block')) {
+        setSimWorkspaceXmls(prev => ({
+          ...prev,
+          'firmware/main.ino': xml,
+          'python/main.py': xml,
+        }));
+        setSimSyncStatuses(prev => ({
+          ...prev,
+          'firmware/main.ino': true,
+          'python/main.py': true,
+        }));
+        setSimFiles(prev => ({
+          ...prev,
+          ...(parsedHex.ino ? { 'firmware/main.ino': parsedHex.ino } : {}),
+          ...(parsedHex.py ? { 'python/main.py': parsedHex.py } : {}),
+        }));
+        setSimResetKey(prev => prev + 1);
+      }
+
+      if (parsedHex.board === 'Arduino Uno' || parsedHex.board === 'ESP32 DevKit V1' || parsedHex.board === 'BBC micro:bit') {
+        detectedBoard = parsedHex.board;
+      } else if (filename.toLowerCase().includes('esp32')) {
+        detectedBoard = 'ESP32 DevKit V1';
+      } else if (filename.toLowerCase().includes('microbit') || filename.toLowerCase().includes('soccer')) {
+        detectedBoard = 'BBC micro:bit';
+      }
+
+      setIsBlocklyCollapsed(false);
+      setIsEditorCollapsed(false);
+      setTerminalLogs(prev => [
+        ...prev,
+        { text: `✓ Block HEX '${filename}' dimuat. Blok visual serta kode Arduino & Python otomatis disesuaikan.`, type: 'success' }
+      ]);
+    }
+    else if (extension === 'ino' || ((extension === 'cpp' || extension === 'c') && /void\s+(setup|loop)\s*\(/.test(content))) {
+      updatedFiles[filename] = content;
       let xml = '';
       try {
         xml = arduinoToBlocklyXml(content);
@@ -4575,37 +4838,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         updatedXmls[filename] = xml;
         updatedXmls[inoFilename] = xml;
         updatedXmls[pyFilename] = xml;
+        setSyncStatuses(prev => ({ ...prev, [filename]: true, [inoFilename]: true, [pyFilename]: true }));
+      } else {
+        setSyncStatuses(prev => ({ ...prev, [filename]: false, [inoFilename]: false, [pyFilename]: false }));
       }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false, [inoFilename]: false, [pyFilename]: false }));
-      setIsBlocklyCollapsed(false);
-      setIsEditorCollapsed(false);
-    }
-    else if (extension === 'hex') {
-      const pythonCode = `# RoboLab Studio - Auto Generated from HEX: ${filename}\nimport robolab as robot\nimport time\n\ndef run_hex():\n    print("Executing HEX program...")\n    while True:\n        robot.send("FORWARD")\n        time.sleep(0.5)\n\nif __name__ == "__main__":\n    run_hex()\n`;
-      
-      let xml = '';
-      try {
-        xml = pythonToBlocklyXml(pythonCode);
-      } catch (err) {
-        console.warn("Failed to parse Python to Blockly XML:", err);
-      }
-
-      if (!files[pyFilename]) {
-        updatedFiles[pyFilename] = pythonCode;
-        if (xml && xml.includes('<block')) {
-          updatedXmls[pyFilename] = xml;
-        }
-      }
-
-      if (xml && xml.includes('<block')) {
-        updatedXmls[filename] = xml;
-        updatedXmls[pyFilename] = xml;
-      }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false, [pyFilename]: false }));
       setIsBlocklyCollapsed(false);
       setIsEditorCollapsed(false);
     }
     else if (extension === 'py') {
+      updatedFiles[filename] = content;
       let xml = '';
       try {
         xml = pythonToBlocklyXml(content);
@@ -4616,30 +4857,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         updatedXmls[filename] = xml;
         updatedXmls[pyFilename] = xml;
         updatedXmls[inoFilename] = xml;
+        setSyncStatuses(prev => ({ ...prev, [filename]: true, [pyFilename]: true, [inoFilename]: true }));
+      } else {
+        setSyncStatuses(prev => ({ ...prev, [filename]: false, [pyFilename]: false, [inoFilename]: false }));
       }
-      setSyncStatuses(prev => ({ ...prev, [filename]: false, [pyFilename]: false, [inoFilename]: false }));
       setIsBlocklyCollapsed(false);
       setIsEditorCollapsed(false);
     } else {
+      updatedFiles[filename] = content;
       setIsEditorCollapsed(false);
     }
 
     // Auto-detect board target based on analog pin usage or metadata
-    let detectedBoard: 'Arduino Uno' | 'ESP32 DevKit V1' | 'BBC micro:bit' | null = null;
-    if (extension === 'ino' || extension === 'py') {
+    if (!detectedBoard && (extension === 'ino' || extension === 'py')) {
       const hasEsp32Pins = /\b(32|33|34|35|36|39)\b/.test(content);
       const hasAnalogRead = /analogRead|analog_read/i.test(content);
       if (hasEsp32Pins && hasAnalogRead) {
         detectedBoard = 'ESP32 DevKit V1';
       } else if (/A0|A1|A2|A3|A4|A5/i.test(content) && hasAnalogRead) {
-        detectedBoard = 'Arduino Uno';
-      }
-    } else if (extension === 'hex') {
-      if (filename.toLowerCase().includes('esp32')) {
-        detectedBoard = 'ESP32 DevKit V1';
-      } else if (filename.toLowerCase().includes('microbit') || filename.toLowerCase().includes('soccer')) {
-        detectedBoard = 'BBC micro:bit';
-      } else {
         detectedBoard = 'Arduino Uno';
       }
     }
@@ -4659,7 +4894,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setStudentSubMode('code');
       }
     } else {
-      if (workspaceMode === 'blockly') {
+      if (workspaceMode === 'blockly' || workspaceMode === 'code') {
         setWorkspaceMode('split');
       }
       if (uiMode === 'student') {
@@ -4667,10 +4902,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     }
 
-    // Redirect .hex active view to its .py companion
-    const activeFileToSet = extension === 'hex' ? pyFilename : filename;
+    // Redirect .hex active view to firmware/main.ino (or python/main.py for micro:bit)
+    const activeFileToSet = extension === 'hex'
+      ? (detectedBoard === 'BBC micro:bit' ? pyFilename : inoFilename)
+      : filename;
     setActiveFile(activeFileToSet);
-    setCurrentTab('ide');
+    if (currentTab !== 'simulator') {
+      setCurrentTab('ide');
+    }
   };
 
   const handleFileSelect = (filename: string, explicitFilesMap?: { [key: string]: string }) => {
@@ -4680,13 +4919,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     const extension = filename.split('.').pop()?.toLowerCase();
     let updatedFiles: { [key: string]: string } = {};
     let updatedXmls: { [key: string]: string } = {};
-    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
-    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
+    const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
+    const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
+    const existingSharedXml = workspaceXmls[filename] || workspaceXmls[inoFilename] || workspaceXmls[pyFilename] || '';
     
     if (extension === 'ino') {
-      let xml = workspaceXmls[filename] || '';
-      // Always re-parse from text code if sync is manual or if no XML exists yet
-      if ((syncStatuses[filename] === false || !xml || explicitFilesMap) && content.trim()) {
+      let xml = existingSharedXml;
+      // Only re-parse from text code if sync is manual (false) or if no valid XML exists yet
+      if ((syncStatuses[filename] === false || !xml.includes('<block') || explicitFilesMap) && content.trim()) {
         try {
           const parsedXml = arduinoToBlocklyXml(content);
           if (parsedXml && parsedXml.includes('<block')) {
@@ -4698,39 +4938,31 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         } catch (e) {
           console.warn("Failed to parse Arduino to Blockly XML on select:", e);
         }
+      } else if (xml.includes('<block') && !workspaceXmls[filename]) {
+        updatedXmls[filename] = xml;
       }
 
-      const effectiveXml = updatedXmls[filename] || workspaceXmls[filename] || '';
+      const effectiveXml = updatedXmls[filename] || xml || '';
       if (!effectiveXml.includes('<block') && content.trim().length > 0) {
         setSyncStatuses(prev => ({ ...prev, [filename]: false }));
       }
     }
     else if (extension === 'hex') {
-      const hasPy = !!sourceFiles[pyFilename];
-      const hasXml = !!workspaceXmls[filename];
-
-      let xml = workspaceXmls[filename] || '';
-      const pythonCode = `# RoboLab Studio - Auto Generated from HEX: ${filename}\nimport robolab as robot\nimport time\n\ndef run_hex():\n    print("Executing HEX program...")\n    while True:\n        robot.send("FORWARD")\n        time.sleep(0.5)\n\nif __name__ == "__main__":\n    run_hex()\n`;
-
-      if (!hasXml || explicitFilesMap) {
-        try {
-          xml = pythonToBlocklyXml(pythonCode);
-          if (xml) updatedXmls[filename] = xml;
-        } catch (e) {
-          console.warn("Failed to parse Python to Blockly XML on select:", e);
-        }
+      const parsedHex = parseRoboLabBlockHex(content);
+      const xml = parsedHex.xml || existingSharedXml;
+      if (xml && xml.includes('<block')) {
+        updatedXmls[filename] = xml;
+        updatedXmls[inoFilename] = xml;
+        updatedXmls[pyFilename] = xml;
       }
-
-      if (!hasPy) {
-        updatedFiles[pyFilename] = pythonCode;
-        if (xml) {
-          updatedXmls[pyFilename] = xml;
-        }
-      }
+      if (parsedHex.ino) updatedFiles[inoFilename] = parsedHex.ino;
+      if (parsedHex.py) updatedFiles[pyFilename] = parsedHex.py;
+      setSyncStatuses(prev => ({ ...prev, [filename]: true, [inoFilename]: true, [pyFilename]: true }));
     }
     else if (extension === 'py') {
-      let xml = workspaceXmls[filename] || '';
-      if ((syncStatuses[filename] === false || !xml || explicitFilesMap) && content.trim()) {
+      let xml = existingSharedXml;
+      // Do NOT overwrite existing synced blocks when switching to the Python tab
+      if ((syncStatuses[filename] === false || !xml.includes('<block') || explicitFilesMap) && content.trim()) {
         try {
           const parsedXml = pythonToBlocklyXml(content);
           if (parsedXml && parsedXml.includes('<block')) {
@@ -4742,6 +4974,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         } catch (e) {
           console.warn("Failed to parse Python to Blockly XML on select:", e);
         }
+      } else if (xml.includes('<block') && !workspaceXmls[filename]) {
+        updatedXmls[filename] = xml;
       }
     }
 
@@ -4787,7 +5021,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setWorkspaceMode('split');
     }
 
-    const activeFileToSet = extension === 'hex' ? pyFilename : filename;
+    const activeFileToSet = extension === 'hex' ? inoFilename : filename;
     setActiveFile(activeFileToSet);
   };
 
@@ -7907,12 +8141,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             }}
                           >
                             <BlocklyEditor 
-                              key={projectName + "_" + activeFile + "_" + themeMode + "_" + learningLessonLoadedCount}
+                              key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount}
                               codeType={activeFile.endsWith('.py') ? 'python' : 'arduino'} 
                               board={board}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
                               isSyncWithBlocks={(activeFile.endsWith('.ino') || activeFile.endsWith('.py')) && syncStatuses[activeFile] === true}
-                              workspaceXml={workspaceXmls[activeFile] || null}
+                              workspaceXml={workspaceXmls[activeFile] || workspaceXmls['firmware/main.ino'] || workspaceXmls['python/main.py'] || null}
                               onWorkspaceChange={(xmlText) => {
                                 const pyFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'python/main.py' : activeFile.replace(/\.(ino|hex)$/i, '.py');
                                 const inoFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'firmware/main.ino' : activeFile.replace(/\.py$/i, '.ino');
@@ -8628,22 +8862,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
               {/* Main Simulator Workspace Content: Left (Spacious Code/Blockly ~56%) + Right (Compact Simulator ~44%) */}
               <div className="flex-1 min-w-0 min-h-0 flex gap-3 overflow-hidden">
-                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace (Spacious for comfortable coding) */}
+                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace (Circuit uses original 42% layout; Robot uses spacious 56% layout) */}
                 {simViewMode !== 'circuit' && (
-                  <div className="w-[56%] min-w-[420px] h-full flex flex-col gap-2 min-h-0 flex-shrink-0">
+                  <div className={`${simulatorMode === 'circuit' ? 'w-[42%] min-w-[340px]' : 'w-[56%] min-w-[420px]'} h-full flex flex-col gap-2 min-h-0 flex-shrink-0`}>
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
                         className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-2xl border border-indigo-500/20"
-                        style={{ height: simViewMode === 'split' ? '56%' : '100%' }}
+                        style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
                       >
                         <BlocklyEditor
-                          key={`sim_blockly_${simActiveFile}_${themeMode}_${simResetKey}`}
+                          key={`sim_blockly_${themeMode}_${simResetKey}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
                           installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
                           isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
-                          workspaceXml={simWorkspaceXmls[simActiveFile] || null}
+                          workspaceXml={simWorkspaceXmls[simActiveFile] || simWorkspaceXmls['firmware/main.ino'] || simWorkspaceXmls['python/main.py'] || null}
                           onWorkspaceChange={(xmlText) => {
                             const pyFile = 'python/main.py';
                             const inoFile = 'firmware/main.ino';
@@ -8718,16 +8952,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     {(simViewMode === 'code' || simViewMode === 'split') && (
                       <div
                         className="panel-3d panel-code min-w-0 relative overflow-hidden rounded-2xl glass-panel border border-cyan-500/20"
-                        style={{ height: simViewMode === 'split' ? '42%' : '100%' }}
+                        style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '46%' : '42%') : '100%' }}
                       >
                         <CodeEditor
                           files={simFiles}
                           activeFile={simActiveFile}
                           onSaveFile={() => {
-                            const content = simFiles[simActiveFile] || '';
-                            if (!isElectronEnv()) {
-                              downloadFileInBrowser(simActiveFile.split('/').pop() || simActiveFile, content);
-                            }
+                            handleSaveFile();
                           }}
                           isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
                           onSyncToggle={(sync) => {
@@ -8779,23 +9010,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             }
                           }}
                           onTabChange={(filename) => {
+                            // Jangan ubah atau timpa blok visual yang sudah dibuat ketika berpindah tab C++ <-> Python
                             setSimActiveFile(filename);
-                            const content = simFiles[filename];
-                            if (content) {
-                              const inoFile = Object.keys(simFiles).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
-                              const pyFile = Object.keys(simFiles).find(f => f.endsWith('.py')) || 'python/main.py';
-                              try {
-                                if (filename.endsWith('.ino')) {
-                                  const xml = arduinoToBlocklyXml(content);
-                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
-                                } else if (filename.endsWith('.py')) {
-                                  const xml = pythonToBlocklyXml(content);
-                                  setSimWorkspaceXmls(prev => ({ ...prev, [filename]: xml, [inoFile]: xml, [pyFile]: xml }));
-                                }
-                              } catch (err) {
-                                console.warn('Failed to parse simulator tab code to blocks:', err);
-                              }
-                            }
                           }}
                           isRunning={isRunning}
                           onRunSimulator={() => {

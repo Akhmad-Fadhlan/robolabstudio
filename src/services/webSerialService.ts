@@ -1597,9 +1597,9 @@ export async function openFileInBrowser(): Promise<{ name: string; content: stri
         multiple: false,
         types: [
           {
-            description: 'RoboLab Code Files (.ino, .py, .cpp, .c, .h, .hex)',
+            description: 'RoboLab Block HEX & Code Files (.hex, .ino, .py, .cpp, .c, .h)',
             accept: {
-              'text/plain': ['.ino', '.py', '.cpp', '.c', '.h', '.hpp', '.hex', '.json', '.md'],
+              'text/plain': ['.hex', '.ino', '.py', '.cpp', '.c', '.h', '.hpp', '.json', '.md'],
             },
           },
         ],
@@ -1616,7 +1616,7 @@ export async function openFileInBrowser(): Promise<{ name: string; content: stri
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ino,.py,.cpp,.c,.h,.hpp,.hex,.json,.md,.txt';
+    input.accept = '.hex,.ino,.py,.cpp,.c,.h,.hpp,.json,.md,.txt';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
@@ -1703,7 +1703,7 @@ export async function openFolderInBrowser(): Promise<{
 }
 
 export async function downloadFileInBrowser(filename: string, content: string): Promise<void> {
-  const cleanName = filename.split('/').pop() || 'main.ino';
+  const cleanName = filename.split('/').pop() || 'robolab_blocks.hex';
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

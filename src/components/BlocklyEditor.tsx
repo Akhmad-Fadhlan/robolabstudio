@@ -1796,9 +1796,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const isLoadingXmlRef = useRef(false);
   const latestCodeRef = useRef<string>('');
   const generatedXmlsRef = useRef<Set<string>>(new Set());
-  // boardRef: selalu sinkron dengan prop board terbaru untuk menghindari stale closure
+  // boardRef & codeTypeRef: selalu sinkron dengan prop terbaru untuk menghindari stale closure & re-mount saat pindah tab C++/Python
   const boardRef = useRef<string>(board);
   boardRef.current = board;
+  const codeTypeRef = useRef<'arduino' | 'python'>(codeType);
+  codeTypeRef.current = codeType;
 
   const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -3648,12 +3650,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     const updateCode = () => {
       if (isLoadingXmlRef.current) return;
       try {
-        // Baca board dari ref agar selalu dapat nilai terbaru (hindari stale closure)
+        // Baca board & codeType dari ref agar selalu dapat nilai terbaru (hindari stale closure)
         const currentBoard = boardRef.current;
-        const generatedCode = generateCodeForLang(codeType, currentBoard);
+        const currentCodeType = codeTypeRef.current;
+        const generatedCode = generateCodeForLang(currentCodeType, currentBoard);
         latestCodeRef.current = generatedCode;
         
-        const otherLang = codeType === 'arduino' ? 'python' : 'arduino';
+        const otherLang = currentCodeType === 'arduino' ? 'python' : 'arduino';
         const otherCode = generateCodeForLang(otherLang, currentBoard);
         if (onCodeChangeRef.current) {
           onCodeChangeRef.current(generatedCode, otherCode);
@@ -3700,7 +3703,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (isSyncWithBlocksRef.current) {
         updateCode(); // Initial generation after resize
       } else {
-        latestCodeRef.current = generateCodeForLang(codeType, boardRef.current);
+        latestCodeRef.current = generateCodeForLang(codeTypeRef.current, boardRef.current);
         if (boardRef.current === 'BBC micro:bit' && onMicrobitPreviewRef.current) {
           onMicrobitPreviewRef.current(extractMicrobitFrames());
         }
@@ -3724,7 +3727,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       workspace.dispose();
       workspaceRef.current = null;
     };
-  }, [codeType, activeFile]);
+  }, []);
+
+  // Re-generate code without destroying workspace when switching between C++ and Python tabs
+  useEffect(() => {
+    if (workspaceRef.current) {
+      latestCodeRef.current = generateCodeForLang(codeType, boardRef.current);
+      if (isSyncWithBlocksRef.current && updateCodeRef.current) {
+        updateCodeRef.current();
+      }
+    }
+  }, [codeType]);
 
   // Re-generate code whenever board prop changes (e.g., user switches board)
   useEffect(() => {

@@ -234,7 +234,8 @@ ipcMain.handle('open-file', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'RoboLab Files', extensions: ['ino', 'py', 'json', 'md', 'txt', 'hex'] }
+      { name: 'RoboLab Block & Code Files', extensions: ['hex', 'ino', 'py', 'json', 'md', 'txt'] },
+      { name: 'Block HEX Files (*.hex)', extensions: ['hex'] }
     ]
   });
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -246,6 +247,33 @@ ipcMain.handle('open-file', async () => {
     return { name: fileName, content, path: filePath };
   } catch (e) {
     console.error("Failed to read file:", e);
+    return null;
+  }
+});
+
+ipcMain.handle('save-file', async (event, payload) => {
+  const defaultPath = (payload && payload.defaultPath) ? payload.defaultPath : 'robolab_blocks.hex';
+  const content = (payload && typeof payload.content === 'string') ? payload.content : '';
+  const result = await dialog.showSaveDialog({
+    title: 'Simpan Block HEX (.hex)',
+    defaultPath,
+    filters: [
+      { name: 'RoboLab Block HEX (*.hex)', extensions: ['hex'] },
+      { name: 'All Files (*.*)', extensions: ['*'] }
+    ]
+  });
+  if (result.canceled || !result.filePath) return null;
+
+  let filePath = result.filePath;
+  if (!filePath.toLowerCase().endsWith('.hex')) {
+    filePath += '.hex';
+  }
+  const fileName = path.basename(filePath);
+  try {
+    await fs.promises.writeFile(filePath, content, 'utf-8');
+    return { name: fileName, path: filePath };
+  } catch (e) {
+    console.error("Failed to save file:", e);
     return null;
   }
 });
