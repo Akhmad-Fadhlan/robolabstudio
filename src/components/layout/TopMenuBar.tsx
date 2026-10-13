@@ -437,9 +437,15 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             </select>
             {onRefreshPorts && (
               <button
-                onClick={onRefreshPorts}
-                title="Refresh / Pilih Port USB"
-                className={`p-0.5 rounded transition-colors hover:text-cyan-400 ${
+                onClick={() => {
+                  if (onRequestWebPort) {
+                    onRequestWebPort();
+                  } else {
+                    onRefreshPorts();
+                  }
+                }}
+                title={onRequestWebPort ? 'Pilih / Hubungkan Port USB (CH340 / CP2102)' : 'Refresh Port USB'}
+                className={`p-0.5 rounded transition-colors hover:text-cyan-400 cursor-pointer ${
                   isDark ? 'text-slate-400 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200'
                 }`}
                 style={{ lineHeight: 0 }}
