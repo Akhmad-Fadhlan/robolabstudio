@@ -185,6 +185,15 @@ async function listBrowserAuthorizedSerialPorts(): Promise<WebSerialPortEntry[]>
   try {
     const serial = (navigator as any).serial;
     const ports: any[] = await serial.getPorts();
+    // Sort so genuine USB-Serial adapters (with usbVendorId) come after generic/Bluetooth ports
+    // or are prioritized when picking a default port
+    ports.sort((a, b) => {
+      const infoA = typeof a.getInfo === 'function' ? a.getInfo() : {};
+      const infoB = typeof b.getInfo === 'function' ? b.getInfo() : {};
+      const hasVidA = infoA.usbVendorId ? 1 : 0;
+      const hasVidB = infoB.usbVendorId ? 1 : 0;
+      return hasVidA - hasVidB;
+    });
     portRegistry.clear();
     ports.forEach((p, idx) => {
       const meta = buildPortLabel(p, idx);
@@ -272,24 +281,136 @@ export async function requestWebSerialPort(): Promise<WebSerialPortEntry | null>
 }
 
 /**
- * Retrieves a registered SerialPort instance by its virtual address, or requests one if none exists.
- * Avoids any network calls before requestPort() so transient user gesture activation is always preserved.
+ * Safely closes any active browser WebSerial monitor reader/port immediately without network calls
+ * so user gesture activation is preserved.
  */
-export async function ensureWebSerialPort(portAddress: string): Promise<{ port: any; address: string } | null> {
-  if (portAddress && portAddress !== 'none' && portRegistry.has(portAddress)) {
-    const regPort = portRegistry.get(portAddress);
-    if (regPort) return { port: regPort, address: portAddress };
+async function releaseBrowserSerialMonitorLocks(): Promise<void> {
+  activeMonitorKeepReading = false;
+  try {
+    if (activeMonitorReader) {
+      await activeMonitorReader.cancel().catch(() => {});
+      activeMonitorReader.releaseLock();
+      activeMonitorReader = null;
+    }
+  } catch {}
+  try {
+    if (activeMonitorPort) {
+      await activeMonitorPort.close().catch(() => {});
+      activeMonitorPort = null;
+    }
+  } catch {}
+}
+
+/**
+ * Attempts to open a Web SerialPort with automatic stream lock cleanup and retry.
+ */
+async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 2): Promise<boolean> {
+  if (!rawPort) return false;
+  // If port is already open and its streams are not locked, reuse it directly
+  if (rawPort.readable && rawPort.writable && !rawPort.readable.locked && !rawPort.writable.locked) {
+    return true;
   }
+  // If port is open or partially open, try closing it first
+  if (rawPort.readable || rawPort.writable) {
+    try {
+      await rawPort.close();
+      await new Promise((r) => setTimeout(r, 120));
+    } catch {}
+  }
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await rawPort.open({ baudRate, bufferSize: 8192 });
+      return true;
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      if (msg.includes('already open') && rawPort.readable && rawPort.writable) {
+        return true;
+      }
+      if (attempt + 1 < maxAttempts) {
+        try {
+          await rawPort.close();
+        } catch {}
+        await new Promise((r) => setTimeout(r, 180));
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Retrieves a registered SerialPort instance by its virtual address, or requests one if none exists.
+ * When `verifyOpen` is true, tests opening candidate ports immediately while user gesture activation
+ * is still active, falling back to `requestWebSerialPort()` if cached ports are stale/unavailable.
+ */
+export async function ensureWebSerialPort(
+  portAddress: string,
+  verifyOpen = false,
+  baudRate = 115200
+): Promise<{ port: any; address: string; openError?: string } | null> {
+  await releaseBrowserSerialMonitorLocks();
+
   const webOnly = await listBrowserAuthorizedSerialPorts();
-  if (webOnly.length > 0) {
-    const found = webOnly.find((e) => e.address === portAddress) || webOnly[webOnly.length - 1];
-    return { port: found.rawPort, address: found.address };
+  const candidates: WebSerialPortEntry[] = [];
+
+  if (portAddress && portAddress !== 'none') {
+    const exact = webOnly.find((e) => e.address === portAddress);
+    if (exact) candidates.push(exact);
   }
+  // Prioritize ports with USB Vendor ID (CP210x, CH340, Espressif, FTDI, Arduino) from newest to oldest
+  for (let i = webOnly.length - 1; i >= 0; i--) {
+    const entry = webOnly[i];
+    if (!candidates.some((c) => c.rawPort === entry.rawPort)) {
+      candidates.push(entry);
+    }
+  }
+
+  if (!verifyOpen) {
+    if (candidates.length > 0) {
+      return { port: candidates[0].rawPort, address: candidates[0].address };
+    }
+    const requested = await requestWebSerialPort();
+    if (requested && requested.rawPort) {
+      return { port: requested.rawPort, address: requested.address };
+    }
+    return null;
+  }
+
+  // Test opening cached ports while browser user gesture activation is still valid
+  for (const cand of candidates) {
+    if (await tryOpenSerialPort(cand.port || cand.rawPort, baudRate, 1)) {
+      return { port: cand.rawPort, address: cand.address };
+    }
+  }
+
+  // None of the cached ports could be opened (or none existed) — prompt user with native port chooser!
   const requested = await requestWebSerialPort();
-  if (requested && requested.rawPort) {
+  if (!requested || !requested.rawPort) {
+    return null;
+  }
+
+  // Try opening the newly selected port (with retries and local bridge serial stop if needed)
+  if (await tryOpenSerialPort(requested.rawPort, baudRate, 2)) {
     return { port: requested.rawPort, address: requested.address };
   }
-  return null;
+
+  // Ask local bridge to release serial port if it was holding it, then retry
+  try {
+    await fetchCompilerApi('/api/serial-stop', { method: 'POST' });
+  } catch {}
+  await new Promise((r) => setTimeout(r, 250));
+
+  if (await tryOpenSerialPort(requested.rawPort, baudRate, 3)) {
+    return { port: requested.rawPort, address: requested.address };
+  }
+
+  return {
+    port: requested.rawPort,
+    address: requested.address,
+    openError:
+      `Port ${requested.address} tidak dapat dibuka (Failed to open serial port). ` +
+      `Pastikan port COM tersebut tidak sedang dipakai oleh aplikasi lain (seperti Arduino IDE, Serial Monitor lain, atau tab browser lain), lalu cabut-pasang kabel USB ESP32 Anda.`,
+  };
 }
 
 async function openAvailableWebSerialPort(preferredPort: any, baudRate: number): Promise<{ port: any; address?: string }> {
@@ -309,15 +430,38 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
   }
   let lastErr: any = null;
   for (const cand of candidates) {
-    try {
-      await cand.port.open({ baudRate });
+    // If already open and streams are unlocked, reuse directly!
+    if (cand.port.readable && cand.port.writable && !cand.port.readable.locked && !cand.port.writable.locked) {
       return cand;
-    } catch (err: any) {
-      if (err?.message?.includes('already open')) {
-        return cand;
-      }
-      lastErr = err;
     }
+    // If open with locked streams, try closing first
+    if (cand.port.readable || cand.port.writable) {
+      try {
+        await cand.port.close();
+        await new Promise((r) => setTimeout(r, 150));
+      } catch {}
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await cand.port.open({ baudRate, bufferSize: 8192 });
+        return cand;
+      } catch (err: any) {
+        if (err?.message?.includes('already open') && cand.port.readable && cand.port.writable) {
+          return cand;
+        }
+        lastErr = err;
+        try {
+          await cand.port.close();
+        } catch {}
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  }
+  const rawMsg = lastErr?.message || 'Gagal membuka port Web Serial.';
+  if (String(rawMsg).includes('Failed to open serial port')) {
+    throw new Error(
+      `${rawMsg} — Pastikan port COM tidak sedang dibuka oleh aplikasi lain (Arduino IDE / Serial Monitor / tab browser lain) dan kabel USB terhubung dengan baik.`
+    );
   }
   throw lastErr || new Error('Gagal membuka port Web Serial.');
 }
@@ -330,7 +474,8 @@ let activeLocalStreamAbort: AbortController | null = null;
 
 export async function stopWebSerialMonitor(): Promise<void> {
   activeMonitorKeepReading = false;
-  let wasOpen = false;
+  let wasOpen = Boolean(activeMonitorPort);
+  await releaseBrowserSerialMonitorLocks();
   if (activeLocalStreamAbort) {
     try {
       activeLocalStreamAbort.abort();
@@ -341,24 +486,9 @@ export async function stopWebSerialMonitor(): Promise<void> {
     } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
-  try {
-    if (activeMonitorReader) {
-      await activeMonitorReader.cancel().catch(() => {});
-      activeMonitorReader.releaseLock();
-      activeMonitorReader = null;
-    }
-  } catch {}
-
-  try {
-    if (activeMonitorPort) {
-      wasOpen = true;
-      await activeMonitorPort.close().catch(() => {});
-      activeMonitorPort = null;
-    }
-  } catch {}
 
   if (wasOpen) {
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 250));
   }
 }
 
@@ -691,7 +821,17 @@ export async function flashAvrHexViaWebSerial(
         type: 'info',
       });
 
-      await port.open({ baudRate });
+      if (port.readable || port.writable) {
+        if (baudRate !== 115200 || port.readable?.locked || port.writable?.locked) {
+          try {
+            await port.close();
+            await sleep(150);
+          } catch {}
+          await port.open({ baudRate, bufferSize: 8192 });
+        }
+      } else {
+        await port.open({ baudRate, bufferSize: 8192 });
+      }
       writer = port.writable.getWriter();
       reader = port.readable.getReader();
 
@@ -997,7 +1137,7 @@ export async function flashEspViaWebSerial(
         await sleep(75);
         await port.setSignals({ dataTerminalReady: false, requestToSend: false });
         await sleep(80);
-      } else {
+      } else if (strategy === 1) {
         // Direct DTR->GPIO0, RTS->EN reset sequence
         await port.setSignals({ dataTerminalReady: true, requestToSend: true });
         await sleep(100);
@@ -1005,6 +1145,14 @@ export async function flashEspViaWebSerial(
         await sleep(100);
         await port.setSignals({ dataTerminalReady: false, requestToSend: false });
         await sleep(80);
+      } else {
+        // Extended hold for ESP32 DevKit V1 boards with larger EN capacitor (1uF-10uF)
+        await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+        await sleep(250);
+        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+        await sleep(200);
+        await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+        await sleep(100);
       }
     };
 
@@ -1021,7 +1169,7 @@ export async function flashEspViaWebSerial(
     onLog({ text: 'Connecting........', type: 'stdout' });
 
     let synced = false;
-    for (let strat = 0; strat < 2 && !synced; strat++) {
+    for (let strat = 0; strat < 3 && !synced; strat++) {
       await triggerBootloaderReset(strat);
       rxBuffer.length = 0;
       for (let attempt = 0; attempt < 7; attempt++) {
@@ -1190,12 +1338,12 @@ export async function executeWebHardwareAction(params: {
   const isPython = fileExt === 'py';
   const isLocalComPort = Boolean(port && /^COM\d+$/i.test(port));
 
-  // 1. If action requires a hardware port ('upload' or 'flash-firmware'), ensure Web Serial port is selected
-  // IMPORTANT: Request Web Serial port BEFORE any network/timer awaits so browser user gesture activation is preserved!
-  let targetWebPort: { port: any; address: string } | null = null;
+  // 1. If action requires a hardware port ('upload' or 'flash-firmware'), ensure Web Serial port is selected & verified
+  // IMPORTANT: Verify/open Web Serial port BEFORE any network/timer awaits so browser user gesture activation is preserved!
+  let targetWebPort: { port: any; address: string; openError?: string } | null = null;
   if (action === 'upload' || action === 'flash-firmware') {
     if (!isLocalComPort || isRemoteWebOrigin() || isPython || action === 'flash-firmware') {
-      targetWebPort = await ensureWebSerialPort(port);
+      targetWebPort = await ensureWebSerialPort(port, true, 115200);
     }
     await stopWebSerialMonitor();
     if (!targetWebPort && (isPython || action === 'flash-firmware') && !(boardLower.includes('micro:bit') && isPython)) {
@@ -1207,6 +1355,13 @@ export async function executeWebHardwareAction(params: {
     }
     if (targetWebPort && onPortSelected) {
       onPortSelected(targetWebPort.address);
+    }
+    if (targetWebPort?.openError && (isRemoteWebOrigin() || isPython || action === 'flash-firmware')) {
+      onLog({
+        text: `❌ [WebSerial] ${targetWebPort.openError}`,
+        type: 'error',
+      });
+      return { success: false, error: targetWebPort.openError, selectedPort: targetWebPort.address };
     }
   }
 
@@ -1279,6 +1434,9 @@ export async function executeWebHardwareAction(params: {
         return { ...flashRes, selectedPort: targetWebPort.address };
       }
     } catch (err: any) {
+      if (targetWebPort?.port) {
+        try { await targetWebPort.port.close(); } catch {}
+      }
       onLog({
         text: `❌ Gagal mem-flash firmware via Web Serial: ${err?.message || err}`,
         type: 'error',
@@ -1318,6 +1476,9 @@ export async function executeWebHardwareAction(params: {
     }
 
     if (!result.success) {
+      if (targetWebPort?.port) {
+        try { await targetWebPort.port.close(); } catch {}
+      }
       onProgress?.(100);
       return { success: false, error: result.error || 'Kompilasi gagal.' };
     }
@@ -1384,6 +1545,15 @@ export async function executeWebHardwareAction(params: {
       return { success: false, error: 'Port Web Serial belum dipilih.' };
     }
 
+    if (targetWebPort.openError && !targetWebPort.port?.readable) {
+      onLog({
+        text: `❌ [esptool-web] ${targetWebPort.openError}`,
+        type: 'error',
+      });
+      onProgress?.(100);
+      return { success: false, error: targetWebPort.openError, selectedPort: targetWebPort.address };
+    }
+
     if (result.binaryType === 'avr-hex' && result.hexData) {
       const avrRes = await flashAvrHexViaWebSerial(targetWebPort.port, result.hexData, board, onLog);
       onProgress?.(100);
@@ -1394,12 +1564,18 @@ export async function executeWebHardwareAction(params: {
       return { ...espRes, selectedPort: targetWebPort.address };
     }
 
+    if (targetWebPort?.port) {
+      try { await targetWebPort.port.close(); } catch {}
+    }
     onProgress?.(100);
     return {
       success: false,
       error: 'Gagal mengunggah ke board. Pastikan kabel USB terpasang dan port yang dipilih benar.',
     };
   } catch (err: any) {
+    if (targetWebPort?.port) {
+      try { await targetWebPort.port.close(); } catch {}
+    }
     onLog({
       text: `❌ Gagal menghubungi Cloud Compiler: ${err?.message || err}`,
       type: 'error',

@@ -683,20 +683,21 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
           const hasDurationElapsed = (targetVal: number, unit: 'ms' | 'enc_l' | 'enc_r'): boolean => {
             if (targetVal <= 0) return true;
-            if (hardwareConfig.hasEncoder && unit === 'enc_l') {
+            if (unit === 'enc_l') {
               return s.encL - s.stageStartEncL >= targetVal;
             }
-            if (hardwareConfig.hasEncoder && unit === 'enc_r') {
+            if (unit === 'enc_r') {
               return s.encR - s.stageStartEncR >= targetVal;
             }
             return s.elapsedMs - s.stageStartMs >= targetVal;
           };
 
           if (s.subStage === 'ACTION') {
+            const trigVal = step.triggerValue ?? 100;
             setExecStatus({
               stepIndex: step.index,
               stage: 'ACTION',
-              message: `▶ Index #${step.index} [ACTION: ${step.action}] · Jika ${step.triggerMode === 'MOTION' ? 'MOTION' : `${step.sensorPattern} (${step.logicOp})`} · PID ${step.pidId || 'OFF'}`,
+              message: `▶ Index #${step.index} [ACTION: ${step.action} ${trigVal} ${step.triggerUnit.toUpperCase()}] · Jika ${step.triggerMode === 'MOTION' ? 'MOTION' : `${step.sensorPattern} (${step.logicOp})`} · PID ${step.pidId || 'OFF'}`,
               stoppedByInterrupt: false,
             });
 
@@ -709,11 +710,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               cmdSpeedR = Math.max(-255, Math.min(255, step.speedR - pidCorr));
             }
 
-            // Check if Action trigger condition is satisfied
-            const minGuardElapsed = s.elapsedMs - s.stageStartMs > 120;
+            // Check if Action duration / encoder count & sensor trigger condition are satisfied
+            const trigDurationDone = hasDurationElapsed(trigVal, step.triggerUnit);
+            const minGuardElapsed = trigVal > 0 ? trigDurationDone : s.elapsedMs - s.stageStartMs > 120;
             const patternMatched =
               step.triggerMode === 'MOTION'
-                ? true
+                ? trigDurationDone
                 : minGuardElapsed &&
                   evaluateSensorPatternMatch(
                     sensors,
@@ -901,6 +903,15 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       const canvas = viewportCanvasRef.current;
       const trackSurface = trackSurfaceCanvasRef.current;
       if (!canvas || !trackSurface) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 100 && rect.height > 100) {
+        const targetW = Math.round(rect.width);
+        const targetH = Math.round(rect.height);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+        }
+      }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -950,7 +961,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           };
         }
 
-        // Default: 3D Perspective Orbit (centered with generous margin so track is never clipped)
+        // Default: 3D Axonometric Orbit (matches affine floor surface 100% pixel-for-pixel)
         const cx = wx - TRACK_W / 2;
         const cy = wy - TRACK_H / 2;
         const cosY = Math.cos(camYaw);
@@ -959,10 +970,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         const ry = cx * sinY + cy * cosY;
 
         const baseScale = Math.min(cw / 1420, ch / 860) * camZoom;
-        const persp = 1 / Math.max(0.45, 1 + (ry / 2200) * Math.sin(camPitch));
-        const sx = cw * 0.50 + rx * baseScale * persp;
-        const sy = ch * 0.50 + ry * Math.cos(camPitch) * baseScale * persp - wz * baseScale * persp;
-        return { sx, sy, scale: baseScale * persp };
+        const sx = cw * 0.50 + rx * baseScale;
+        const sy = ch * 0.50 + ry * Math.cos(camPitch) * baseScale - wz * baseScale;
+        return { sx, sy, scale: baseScale };
       };
 
       // Draw 3D Arena Outer Frame / Walls
@@ -1518,16 +1528,78 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     isLight,
   ]);
 
-  // Convert click on canvas to 2D track coordinates when placementTool is active
+  // Convert click on canvas to exact 2D track coordinates (inverting the 3D/2D camera floor projection)
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (placementTool === 'none') return;
     const canvas = viewportCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const clickX = ((e.clientX - rect.left) / rect.width) * TRACK_W;
-    const clickY = ((e.clientY - rect.top) / rect.height) * TRACK_H;
-    const tx = Math.max(50, Math.min(TRACK_W - 50, Math.round(clickX)));
-    const ty = Math.max(50, Math.min(TRACK_H - 50, Math.round(clickY)));
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const sx = ((e.clientX - rect.left) / rect.width) * cw;
+    const sy = ((e.clientY - rect.top) / rect.height) * ch;
+    const s = simStateRef.current;
+
+    const projectFloorPoint = (wx: number, wy: number): { sx: number; sy: number } => {
+      if (cameraMode === '2d_top') {
+        const fitScale = Math.min((cw - 60) / TRACK_W, (ch - 60) / TRACK_H) * camZoom;
+        return {
+          sx: cw / 2 + (wx - TRACK_W / 2) * fitScale,
+          sy: ch / 2 + (wy - TRACK_H / 2) * fitScale,
+        };
+      }
+      if (cameraMode === 'chase_cam' || cameraMode === 'pov_cam') {
+        const forwardDist = cameraMode === 'pov_cam' ? -30 : 190;
+        const camX = s.x - Math.cos(s.theta) * forwardDist;
+        const camY = s.y - Math.sin(s.theta) * forwardDist;
+        const dx = wx - camX;
+        const dy = wy - camY;
+        const forward = dx * Math.cos(s.theta) + dy * Math.sin(s.theta);
+        const right = -dx * Math.sin(s.theta) + dy * Math.cos(s.theta);
+        const depth = Math.max(40, forward + 160);
+        const fov = (cameraMode === 'pov_cam' ? 520 : 620) * camZoom;
+        const camHeight = cameraMode === 'pov_cam' ? 65 : 190;
+        return {
+          sx: cw / 2 + (right / depth) * fov,
+          sy: ch * 0.34 + (camHeight / depth) * fov,
+        };
+      }
+      const cx = wx - TRACK_W / 2;
+      const cy = wy - TRACK_H / 2;
+      const cosY = Math.cos(camYaw);
+      const sinY = Math.sin(camYaw);
+      const rx = cx * cosY - cy * sinY;
+      const ry = cx * sinY + cy * cosY;
+      const baseScale = Math.min(cw / 1420, ch / 860) * camZoom;
+      return {
+        sx: cw * 0.50 + rx * baseScale,
+        sy: ch * 0.50 + ry * Math.cos(camPitch) * baseScale,
+      };
+    };
+
+    const p00 = projectFloorPoint(0, 0);
+    const p10 = projectFloorPoint(TRACK_W, 0);
+    const p01 = projectFloorPoint(0, TRACK_H);
+
+    const a = (p10.sx - p00.sx) / TRACK_W;
+    const b = (p10.sy - p00.sy) / TRACK_W;
+    const c = (p01.sx - p00.sx) / TRACK_H;
+    const d = (p01.sy - p00.sy) / TRACK_H;
+    const det = a * d - b * c;
+
+    let clickX = ((e.clientX - rect.left) / rect.width) * TRACK_W;
+    let clickY = ((e.clientY - rect.top) / rect.height) * TRACK_H;
+    if (Math.abs(det) > 1e-8) {
+      const dx = sx - p00.sx;
+      const dy = sy - p00.sy;
+      clickX = (d * dx - c * dy) / det;
+      clickY = (-b * dx + a * dy) / det;
+    }
+
+    const tx = Math.max(36, Math.min(TRACK_W - 36, Math.round(clickX)));
+    const ty = Math.max(36, Math.min(TRACK_H - 36, Math.round(clickY)));
 
     if (placementTool === 'start') {
       setStartPos({ x: tx, y: ty });
@@ -2452,7 +2524,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           onWheel={(e) => {
             setCamZoom((z) => Math.max(0.55, Math.min(2.2, z - e.deltaY * 0.0008)));
           }}
-          className={`w-full h-full object-cover ${
+          className={`w-full h-full block ${
             placementTool !== 'none' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
           }`}
         />

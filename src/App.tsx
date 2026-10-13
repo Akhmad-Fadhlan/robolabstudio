@@ -6383,7 +6383,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
       try {
         if (isSerialConnected) {
-          await stopWebSerialMonitor();
           setIsSerialConnected(false);
         }
 

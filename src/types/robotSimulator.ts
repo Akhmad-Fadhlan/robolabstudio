@@ -86,6 +86,8 @@ export interface RobotPlanStep {
   blockId?: string;
   index: number;
   action: PlanActionType;
+  triggerValue: number;
+  triggerUnit: PlanDurationUnit;
   triggerMode: PlanTriggerMode;
   /**
    * Strictly '0' and 'x' (length === sensorCount).
@@ -97,7 +99,6 @@ export interface RobotPlanStep {
   brake: number; // default 0 (ms brake)
   speedL: number;
   speedR: number;
-  triggerUnit: PlanDurationUnit;
   pidId: 0 | 1 | 2 | 3 | 4 | 5;
   speedA: number;
   timerValue: number;
@@ -434,13 +435,14 @@ export function createDefaultRobotPlans(sensorCount: SensorCount = 6): RobotPlan
           type: 'step',
           index: 0,
           action: 'MAJU',
+          triggerValue: 100,
+          triggerUnit: 'ms',
           triggerMode: 'SENSOR',
           sensorPattern: patCross,
           logicOp: 'EQUAL',
           brake: 20,
           speedL: 160,
           speedR: 160,
-          triggerUnit: 'ms',
           pidId: 2,
           speedA: 120,
           timerValue: 150,
@@ -451,13 +453,14 @@ export function createDefaultRobotPlans(sensorCount: SensorCount = 6): RobotPlan
           type: 'step',
           index: 1,
           action: 'RIGHT',
+          triggerValue: 80,
+          triggerUnit: 'ms',
           triggerMode: 'SENSOR',
           sensorPattern: patCenter,
           logicOp: 'OR',
           brake: 15,
           speedL: 140,
           speedR: -140,
-          triggerUnit: 'ms',
           pidId: 3,
           speedA: 130,
           timerValue: 120,
@@ -468,13 +471,14 @@ export function createDefaultRobotPlans(sensorCount: SensorCount = 6): RobotPlan
           type: 'step',
           index: 2,
           action: 'MAJU',
+          triggerValue: 100,
+          triggerUnit: 'ms',
           triggerMode: 'SENSOR',
           sensorPattern: patCross,
           logicOp: 'EQUAL',
           brake: 30,
           speedL: 170,
           speedR: 170,
-          triggerUnit: 'ms',
           pidId: 4,
           speedA: 0,
           timerValue: 100,
@@ -586,12 +590,13 @@ long readUltrasonicCm() {
             nextItem && nextItem.type === 'stop_here' && nextItem.stage === 'ACTION';
           const stopAtSpeedA =
             nextItem && nextItem.type === 'stop_here' && nextItem.stage === 'SPEED_A';
+          const trigVal = item.triggerValue ?? 100;
 
           bodyLines.push(
-            `  // Index ${item.index}: ${item.action} | Jika ${item.triggerMode === 'MOTION' ? 'MOTION' : `${item.sensorPattern} (${item.logicOp})`} | PID ${item.pidId} | Garis ${item.lineColor}`
+            `  // Index ${item.index}: ${item.action} (${trigVal} ${item.triggerUnit}) | Jika ${item.triggerMode === 'MOTION' ? 'MOTION' : `${item.sensorPattern} (${item.logicOp})`} | PID ${item.pidId} | Garis ${item.lineColor}`
           );
           bodyLines.push(
-            `  runStep(${item.index}, ACT_${item.action}, "${item.triggerMode === 'MOTION' ? 'MOTION' : normalizeSensorPattern(item.sensorPattern, hw.sensorCount)}", OP_${item.logicOp}, ${item.brake}, ${item.speedL}, ${item.speedR}, UNIT_${item.triggerUnit.toUpperCase()}, ${item.pidId}, ${item.speedA}, ${item.timerValue}, UNIT_${item.timerUnit.toUpperCase()}, LINE_${item.lineColor}${stopAtAction ? ', STOP_AT_ACTION' : stopAtSpeedA ? ', STOP_AT_SPEED_A' : ', STOP_NONE'});`
+            `  runStep(${item.index}, ACT_${item.action}, ${trigVal}, UNIT_${item.triggerUnit.toUpperCase()}, "${item.triggerMode === 'MOTION' ? 'MOTION' : normalizeSensorPattern(item.sensorPattern, hw.sensorCount)}", OP_${item.logicOp}, ${item.brake}, ${item.speedL}, ${item.speedR}, ${item.pidId}, ${item.speedA}, ${item.timerValue}, UNIT_${item.timerUnit.toUpperCase()}, LINE_${item.lineColor}${stopAtAction ? ', STOP_AT_ACTION' : stopAtSpeedA ? ', STOP_AT_SPEED_A' : ', STOP_NONE'});`
           );
           if (stopAtAction || stopAtSpeedA) {
             bodyLines.push(
@@ -709,20 +714,23 @@ ${
 }
 
 void runStep(
-  int idx, ActionType act, const char* pattern, LogicOp op,
-  int brakeMs, int speedL, int speedR, DurationUnit trigUnit,
+  int idx, ActionType act, long trigVal, DurationUnit trigUnit,
+  const char* pattern, LogicOp op,
+  int brakeMs, int speedL, int speedR,
   int pidId, int speedA, long timerVal, DurationUnit timerUnit,
   LineColor lineColor, StopStage stopStage = STOP_NONE
 ) {
   if (act == ACT_PAUSE) {
     stopMotors();
-    waitDuration(timerVal, timerUnit);
+    waitDuration(trigVal > 0 ? trigVal : timerVal, trigVal > 0 ? trigUnit : timerUnit);
     return;
   }
-  // Tahap 1: Action & Sensor / PID
-  if (pattern[0] == 'M') {
-    setMotorSpeed(speedL, speedR);
-  } else {
+  // Tahap 1: Action & Durasi Aksi (ms / Encoder L / Encoder R) / Sensor PID
+  setMotorSpeed(speedL, speedR);
+  if (trigVal > 0) {
+    waitDuration(trigVal, trigUnit);
+  }
+  if (pattern[0] != 'M') {
     while (!matchSensorPattern(pattern, op, lineColor)) {
       setMotorSpeed(speedL, speedR);
       delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
@@ -814,11 +822,12 @@ export function generateRobotPlanPythonCode(
           const nextItem = plan.items[i + 1];
           const stopStage =
             nextItem && nextItem.type === 'stop_here' ? nextItem.stage : 'NONE';
+          const trigVal = item.triggerValue ?? 100;
           lines.push(
-            `    # Index ${item.index}: ${item.action} | Jika ${item.triggerMode === 'MOTION' ? 'MOTION' : item.sensorPattern} (${item.logicOp})`
+            `    # Index ${item.index}: ${item.action} (${trigVal} ${item.triggerUnit}) | Jika ${item.triggerMode === 'MOTION' ? 'MOTION' : item.sensorPattern} (${item.logicOp})`
           );
           lines.push(
-            `    run_step(${item.index}, "${item.action}", "${item.triggerMode === 'MOTION' ? 'MOTION' : normalizeSensorPattern(item.sensorPattern, hw.sensorCount)}", "${item.logicOp}", ${item.brake}, ${item.speedL}, ${item.speedR}, "${item.triggerUnit}", ${item.pidId}, ${item.speedA}, ${item.timerValue}, "${item.timerUnit}", "${item.lineColor}", "${stopStage}")`
+            `    run_step(${item.index}, "${item.action}", ${trigVal}, "${item.triggerUnit}", "${item.triggerMode === 'MOTION' ? 'MOTION' : normalizeSensorPattern(item.sensorPattern, hw.sensorCount)}", "${item.logicOp}", ${item.brake}, ${item.speedL}, ${item.speedR}, ${item.pidId}, ${item.speedA}, ${item.timerValue}, "${item.timerUnit}", "${item.lineColor}", "${stopStage}")`
           );
           if (stopStage !== 'NONE') {
             lines.push(`    stop_motors()`);
@@ -854,9 +863,11 @@ def set_motor_speed(speed_l, speed_r):
 def stop_motors():
     set_motor_speed(0, 0)
 
-def run_step(idx, action, pattern, logic_op, brake_ms, speed_l, speed_r, trig_unit, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
+def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, speed_l, speed_r, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
     # Pola Sensor: '0' = membaca sensor, 'x' = tidak membaca sensor
     set_motor_speed(speed_l, speed_r)
+    if trig_val > 0:
+        time.sleep_ms(trig_val)
     if brake_ms > 0:
         time.sleep_ms(brake_ms)
     if stop_stage == "ACTION":
@@ -895,40 +906,81 @@ export function parseRobotPlansFromCode(
     const planId = parseInt(match[1], 10);
     const body = match[2];
     const items: RobotPlanItem[] = [];
-    const stepRegex =
-      /runStep\(\s*(\d+)\s*,\s*ACT_(\w+)\s*,\s*"([^"]*)"\s*,\s*OP_(\w+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*UNIT_(\w+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*UNIT_(\w+)\s*,\s*LINE_(\w+)(?:\s*,\s*STOP_(\w+))?\s*\)/g;
+    // New format: runStep(idx, ACT_..., trigVal, UNIT_..., "pattern", OP_..., brake, speedL, speedR, pidId, speedA, timerVal, UNIT_..., LINE_..., STOP_...)
+    const newStepRegex =
+      /runStep\(\s*(\d+)\s*,\s*ACT_(\w+)\s*,\s*(-?\d+)\s*,\s*UNIT_(\w+)\s*,\s*"([^"]*)"\s*,\s*OP_(\w+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*UNIT_(\w+)\s*,\s*LINE_(\w+)(?:\s*,\s*STOP_(\w+))?\s*\)/g;
     let sm: RegExpExecArray | null;
-    while ((sm = stepRegex.exec(body)) !== null) {
-      const rawPat = sm[3];
+    while ((sm = newStepRegex.exec(body)) !== null) {
+      const rawPat = sm[5];
       const trigMode: PlanTriggerMode = rawPat === 'MOTION' ? 'MOTION' : 'SENSOR';
       const step: RobotPlanStep = {
         type: 'step',
         index: parseInt(sm[1], 10),
         action: (sm[2] as PlanActionType) || 'MAJU',
+        triggerValue: parseInt(sm[3], 10) || 0,
+        triggerUnit: (sm[4].toLowerCase() as PlanDurationUnit) || 'ms',
         triggerMode: trigMode,
         sensorPattern:
           trigMode === 'MOTION'
             ? getDefaultSensorPattern(sensorCount)
             : normalizeSensorPattern(rawPat, sensorCount),
-        logicOp: (sm[4] as PlanLogicOp) || 'EQUAL',
-        brake: parseInt(sm[5], 10) || 0,
-        speedL: parseInt(sm[6], 10) || 0,
-        speedR: parseInt(sm[7], 10) || 0,
-        triggerUnit: (sm[8].toLowerCase() as PlanDurationUnit) || 'ms',
-        pidId: (parseInt(sm[9], 10) as 0 | 1 | 2 | 3 | 4 | 5) || 1,
-        speedA: parseInt(sm[10], 10) || 0,
-        timerValue: parseInt(sm[11], 10) || 0,
-        timerUnit: (sm[12].toLowerCase() as PlanDurationUnit) || 'ms',
-        lineColor: (sm[13] as PlanLineColor) || 'HITAM',
+        logicOp: (sm[6] as PlanLogicOp) || 'EQUAL',
+        brake: parseInt(sm[7], 10) || 0,
+        speedL: parseInt(sm[8], 10) || 0,
+        speedR: parseInt(sm[9], 10) || 0,
+        pidId: (parseInt(sm[10], 10) as 0 | 1 | 2 | 3 | 4 | 5) || 1,
+        speedA: parseInt(sm[11], 10) || 0,
+        timerValue: parseInt(sm[12], 10) || 0,
+        timerUnit: (sm[13].toLowerCase() as PlanDurationUnit) || 'ms',
+        lineColor: (sm[14] as PlanLineColor) || 'HITAM',
       };
       items.push(step);
-      const stopFlag = sm[14];
+      const stopFlag = sm[15];
       if (stopFlag === 'AT_ACTION') {
         items.push({ type: 'stop_here', stage: 'ACTION' });
       } else if (stopFlag === 'AT_SPEED_A') {
         items.push({ type: 'stop_here', stage: 'SPEED_A' });
       }
     }
+
+    // Legacy format fallback if no new-format steps matched
+    if (items.length === 0) {
+      const legacyStepRegex =
+        /runStep\(\s*(\d+)\s*,\s*ACT_(\w+)\s*,\s*"([^"]*)"\s*,\s*OP_(\w+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*UNIT_(\w+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*UNIT_(\w+)\s*,\s*LINE_(\w+)(?:\s*,\s*STOP_(\w+))?\s*\)/g;
+      while ((sm = legacyStepRegex.exec(body)) !== null) {
+        const rawPat = sm[3];
+        const trigMode: PlanTriggerMode = rawPat === 'MOTION' ? 'MOTION' : 'SENSOR';
+        const step: RobotPlanStep = {
+          type: 'step',
+          index: parseInt(sm[1], 10),
+          action: (sm[2] as PlanActionType) || 'MAJU',
+          triggerValue: 100,
+          triggerUnit: (sm[8].toLowerCase() as PlanDurationUnit) || 'ms',
+          triggerMode: trigMode,
+          sensorPattern:
+            trigMode === 'MOTION'
+              ? getDefaultSensorPattern(sensorCount)
+              : normalizeSensorPattern(rawPat, sensorCount),
+          logicOp: (sm[4] as PlanLogicOp) || 'EQUAL',
+          brake: parseInt(sm[5], 10) || 0,
+          speedL: parseInt(sm[6], 10) || 0,
+          speedR: parseInt(sm[7], 10) || 0,
+          pidId: (parseInt(sm[9], 10) as 0 | 1 | 2 | 3 | 4 | 5) || 1,
+          speedA: parseInt(sm[10], 10) || 0,
+          timerValue: parseInt(sm[11], 10) || 0,
+          timerUnit: (sm[12].toLowerCase() as PlanDurationUnit) || 'ms',
+          lineColor: (sm[13] as PlanLineColor) || 'HITAM',
+        };
+        items.push(step);
+        const stopFlag = sm[14];
+        if (stopFlag === 'AT_ACTION') {
+          items.push({ type: 'stop_here', stage: 'ACTION' });
+        } else if (stopFlag === 'AT_SPEED_A') {
+          items.push({ type: 'stop_here', stage: 'SPEED_A' });
+        }
+      }
+    }
+
     if (items.length > 0) {
       plans.push({ planId, items });
     }
@@ -972,13 +1024,14 @@ export function buildRobotPlanBlocklyXml(
       return `<block type="robot_plan_step" id="${bid}">
         <field name="INDEX">${item.index}</field>
         <field name="ACTION">${item.action}</field>
+        <field name="TRIG_VAL">${item.triggerValue ?? 100}</field>
+        <field name="TRIG_UNIT">${item.triggerUnit}</field>
         <field name="TRIG_MODE">${item.triggerMode}</field>
         <field name="PATTERN">${pat}</field>
         <field name="LOGIC_OP">${item.logicOp}</field>
         <field name="BRAKE">${item.brake}</field>
         <field name="SPEED_L">${item.speedL}</field>
         <field name="SPEED_R">${item.speedR}</field>
-        <field name="TRIG_UNIT">${item.triggerUnit}</field>
         <field name="PID_ID">${item.pidId}</field>
         <field name="SPEED_A">${item.speedA}</field>
         <field name="TIMER_VAL">${item.timerValue}</field>

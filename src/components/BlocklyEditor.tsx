@@ -27,14 +27,11 @@ let activeRobotHwConfig: RobotHardwareConfig = createDefaultRobotHardwareConfig(
 
 const registerRobotPlanBlocks = () => {
   const getDurationUnitOptions = (): [string, string][] => {
-    if (activeRobotHwConfig.hasEncoder) {
-      return [
-        ['⏱️ ms', 'ms'],
-        ['⚙️ Encoder L', 'enc_l'],
-        ['⚙️ Encoder R', 'enc_r'],
-      ];
-    }
-    return [['⏱️ ms', 'ms']];
+    return [
+      ['⏱️ ms', 'ms'],
+      ['⚙️ Encoder L', 'enc_l'],
+      ['⚙️ Encoder R', 'enc_r'],
+    ];
   };
 
   // 1. Block Setup Hardware & Pin Robot (PWM, Multiplexer 4067/4051, Encoder, RPM)
@@ -130,7 +127,7 @@ const registerRobotPlanBlocks = () => {
     },
   };
 
-  // 4. Block: Step Index (Rumus Lengkap: Index, Aksi, Jika Motion/Poin Sensor 00xx00 Op, Break, Speed L/R, ms/Enc, PID 1-5, Lanjut Speed A, Timer, Garis)
+  // 4. Block: Step Index (Rumus Lengkap: Index, Aksi + Angka ms/Enc L/Enc R, Jika Motion/Poin Sensor 00xx00 Op, Break, Speed L/R, PID 1-5, Lanjut Speed A, Timer, Garis)
   Blockly.Blocks['robot_plan_step'] = {
     init: function (this: Blockly.Block) {
       const defaultPat = getDefaultSensorPattern(activeRobotHwConfig.sensorCount);
@@ -152,6 +149,8 @@ const registerRobotPlanBlocks = () => {
           ]),
           'ACTION'
         )
+        .appendField(new Blockly.FieldNumber(100, 0, 20000, 10), 'TRIG_VAL')
+        .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
         .appendField('│ Jika')
         .appendField(
           new Blockly.FieldDropdown([
@@ -178,7 +177,6 @@ const registerRobotPlanBlocks = () => {
         .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_L')
         .appendField('Speed R')
         .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_R')
-        .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
         .appendField('│ Kontrol')
         .appendField(
           new Blockly.FieldDropdown([
@@ -2372,13 +2370,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               blockId: cur.id,
               index: idxVal,
               action: (cur.getFieldValue('ACTION') || 'MAJU') as PlanActionType,
+              triggerValue: Number(cur.getFieldValue('TRIG_VAL') ?? 100),
+              triggerUnit: (cur.getFieldValue('TRIG_UNIT') || 'ms') as PlanDurationUnit,
               triggerMode: (cur.getFieldValue('TRIG_MODE') || 'SENSOR') as PlanTriggerMode,
               sensorPattern: normalizeSensorPattern(cur.getFieldValue('PATTERN') || '', hw.sensorCount),
               logicOp: (cur.getFieldValue('LOGIC_OP') || 'OR') as PlanLogicOp,
               brake: Number(cur.getFieldValue('BRAKE') ?? 0),
               speedL: Number(cur.getFieldValue('SPEED_L') ?? 160),
               speedR: Number(cur.getFieldValue('SPEED_R') ?? 160),
-              triggerUnit: (cur.getFieldValue('TRIG_UNIT') || 'ms') as PlanDurationUnit,
               pidId: (Number(cur.getFieldValue('PID_ID') ?? 2) as 0 | 1 | 2 | 3 | 4 | 5),
               speedA: Number(cur.getFieldValue('SPEED_A') ?? 120),
               timerValue: Number(cur.getFieldValue('TIMER_VAL') ?? 120),
@@ -3120,13 +3119,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             <block type="robot_plan_step">
               <field name="INDEX">0</field>
               <field name="ACTION">MAJU</field>
+              <field name="TRIG_VAL">100</field>
+              <field name="TRIG_UNIT">ms</field>
               <field name="TRIG_MODE">SENSOR</field>
               <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
               <field name="LOGIC_OP">OR</field>
               <field name="BRAKE">0</field>
               <field name="SPEED_L">160</field>
               <field name="SPEED_R">160</field>
-              <field name="TRIG_UNIT">ms</field>
               <field name="PID_ID">2</field>
               <field name="SPEED_A">140</field>
               <field name="TIMER_VAL">250</field>
@@ -3138,13 +3138,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="robot_plan_step">
           <field name="INDEX">0</field>
           <field name="ACTION">MAJU</field>
+          <field name="TRIG_VAL">100</field>
+          <field name="TRIG_UNIT">ms</field>
           <field name="TRIG_MODE">SENSOR</field>
           <field name="PATTERN">${normalizeSensorPattern('00xx00', activeRobotHwConfig.sensorCount)}</field>
           <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">0</field>
           <field name="SPEED_L">160</field>
           <field name="SPEED_R">160</field>
-          <field name="TRIG_UNIT">ms</field>
           <field name="PID_ID">2</field>
           <field name="SPEED_A">140</field>
           <field name="TIMER_VAL">250</field>
