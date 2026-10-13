@@ -21,6 +21,8 @@ export type HardwareLogCallback = (log: {
 const COMPILE_SERVER_URL =
   (import.meta as any).env?.VITE_COMPILE_SERVER_URL || 'http://localhost:3001';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 let _localBridgeCache: { available: boolean; checkedAt: number } = {
   available: false,
   checkedAt: 0,
@@ -122,6 +124,7 @@ const portRegistry = new Map<string, any>();
 let activeMonitorPort: any = null;
 let activeMonitorReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 let activeMonitorKeepReading = false;
+let activeLocalStreamAbort: AbortController | null = null;
 
 /**
  * Checks whether the app is running inside Electron Desktop with Node IPC.
@@ -278,31 +281,10 @@ export async function requestWebSerialPort(): Promise<WebSerialPortEntry | null>
 }
 
 /**
- * Safely releases any active browser WebSerial monitor reader lock without network calls
- * so user gesture activation is preserved. When `closePort` is false, keeps `activeMonitorPort`
- * open so CH340/CP2102 drivers on Windows don't fail on rapid close+reopen.
+ * Safely releases any active browser WebSerial monitor reader lock and closes activeMonitorPort.
  */
-async function releaseBrowserSerialMonitorLocks(closePort = false): Promise<void> {
-  activeMonitorKeepReading = false;
-  try {
-    if (activeMonitorReader) {
-      await activeMonitorReader.cancel().catch(() => {});
-      try {
-        activeMonitorReader.releaseLock();
-      } catch {}
-      activeMonitorReader = null;
-    }
-  } catch {}
-  if (closePort) {
-    try {
-      if (activeMonitorPort) {
-        await activeMonitorPort.close().catch(() => {});
-        activeMonitorPort = null;
-      }
-    } catch {}
-  } else {
-    activeMonitorPort = null;
-  }
+async function releaseBrowserSerialMonitorLocks(_closePort = true): Promise<void> {
+  await stopWebSerialMonitor();
 }
 
 /**
@@ -323,20 +305,20 @@ async function tryFastOpenSerialPort(rawPort: any, baudRate = 115200): Promise<b
 }
 
 /**
- * Attempts to open a Web SerialPort with automatic stream lock cleanup and retry.
- * Uses standard baudRate without oversized bufferSize so Windows WCH CH340 (CH341SER.SYS) never fails SetupComm.
+ * Attempts to open a Web SerialPort with automatic stream lock cleanup and progressive retry.
+ * Handles Windows WCH CH340 (CH341SER.SYS) driver teardown delays cleanly.
  */
-async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 3): Promise<boolean> {
+async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 4): Promise<boolean> {
   if (!rawPort) return false;
   // If port is already open and its streams are not locked, reuse it directly
   if (rawPort.readable && rawPort.writable && !rawPort.readable.locked && !rawPort.writable.locked) {
     return true;
   }
-  // If port is open with locked streams, try closing it first
+  // If port is open with locked streams, close it first and give Windows kernel time to release handle
   if (rawPort.readable || rawPort.writable) {
     try {
       await rawPort.close();
-      await new Promise((r) => setTimeout(r, 180));
+      await sleep(350);
     } catch {}
   }
 
@@ -350,10 +332,8 @@ async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 
         return true;
       }
       if (attempt + 1 < maxAttempts) {
-        try {
-          await rawPort.close();
-        } catch {}
-        await new Promise((r) => setTimeout(r, 220));
+        // Progressive backoff delay (300ms, 600ms, 900ms) for Windows CH340 handle release
+        await sleep(300 * (attempt + 1));
       }
     }
   }
@@ -362,8 +342,7 @@ async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 
 
 /**
  * Retrieves a registered SerialPort instance by its virtual address, or requests one if none exists.
- * Preserves browser user gesture activation so CH340 (which lacks a USB serial number and requires
- * `navigator.serial.requestPort()` after replugging) always opens the native browser port chooser.
+ * Preserves browser user gesture activation while giving Windows CH340 drivers proper timing.
  */
 export async function ensureWebSerialPort(
   portAddress: string,
@@ -371,8 +350,8 @@ export async function ensureWebSerialPort(
   baudRate = 115200,
   allowPrompt = true
 ): Promise<{ port: any; address: string; openError?: string } | null> {
-  // Release monitor reader lock WITHOUT closing the underlying port so user gesture is preserved
-  await releaseBrowserSerialMonitorLocks(false);
+  // Cleanly close any monitor port and release reader locks first
+  await stopWebSerialMonitor();
 
   const webOnly = await listBrowserAuthorizedSerialPorts();
   const candidates: WebSerialPortEntry[] = [];
@@ -397,8 +376,7 @@ export async function ensureWebSerialPort(
     }
   }
 
-  // If no authorized USB port exists yet (common when plugging in a CH340 board),
-  // IMMEDIATELY prompt with requestWebSerialPort() while user gesture activation is 100% fresh!
+  // If no authorized USB port exists yet (e.g. first time user plugs device), prompt user
   if (candidates.length === 0) {
     if (!allowPrompt) return null;
     const requested = await requestWebSerialPort();
@@ -408,13 +386,13 @@ export async function ensureWebSerialPort(
     if (!verifyOpen) {
       return { port: requested.rawPort, address: requested.address };
     }
-    if (await tryOpenSerialPort(requested.rawPort, baudRate, 3)) {
+    if (await tryOpenSerialPort(requested.rawPort, baudRate, 4)) {
       return { port: requested.rawPort, address: requested.address };
     }
     try {
       await fetchCompilerApi('/api/serial-stop', { method: 'POST' });
     } catch {}
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(300);
     if (await tryOpenSerialPort(requested.rawPort, baudRate, 3)) {
       return { port: requested.rawPort, address: requested.address };
     }
@@ -431,9 +409,20 @@ export async function ensureWebSerialPort(
     return { port: candidates[0].rawPort, address: candidates[0].address };
   }
 
-  // Fast path without setTimeout: if any candidate port is already open or fast-opens, reuse immediately!
+  // Fast path: try opening candidate ports directly (fast if already open, or retried with backoff)
   for (const cand of candidates) {
-    if (await tryFastOpenSerialPort(cand.rawPort, baudRate)) {
+    if (await tryOpenSerialPort(cand.rawPort, baudRate, 4)) {
+      return { port: cand.rawPort, address: cand.address };
+    }
+  }
+
+  // If initial attempts failed, stop any local bridge and retry candidate ports
+  try {
+    await fetchCompilerApi('/api/serial-stop', { method: 'POST' });
+  } catch {}
+  await sleep(300);
+  for (const cand of candidates) {
+    if (await tryOpenSerialPort(cand.rawPort, baudRate, 2)) {
       return { port: cand.rawPort, address: cand.address };
     }
   }
@@ -442,22 +431,13 @@ export async function ensureWebSerialPort(
     return null;
   }
 
-  // None of the cached ports opened immediately — prompt user with native port chooser while user gesture is still active!
+  // None of the cached ports could be opened — prompt user with native port chooser
   const requested = await requestWebSerialPort();
   if (!requested || !requested.rawPort) {
     return null;
   }
 
-  if (await tryOpenSerialPort(requested.rawPort, baudRate, 3)) {
-    return { port: requested.rawPort, address: requested.address };
-  }
-
-  try {
-    await fetchCompilerApi('/api/serial-stop', { method: 'POST' });
-  } catch {}
-  await new Promise((r) => setTimeout(r, 250));
-
-  if (await tryOpenSerialPort(requested.rawPort, baudRate, 3)) {
+  if (await tryOpenSerialPort(requested.rawPort, baudRate, 4)) {
     return { port: requested.rawPort, address: requested.address };
   }
 
@@ -498,10 +478,10 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
     if (cand.port.readable || cand.port.writable) {
       try {
         await cand.port.close();
-        await new Promise((r) => setTimeout(r, 180));
+        await sleep(350);
       } catch {}
     }
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
         await cand.port.open({ baudRate });
         if (typeof cand.port.setSignals === 'function') {
@@ -516,10 +496,9 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
           return cand;
         }
         lastErr = err;
-        try {
-          await cand.port.close();
-        } catch {}
-        await new Promise((r) => setTimeout(r, 220));
+        if (attempt + 1 < 4) {
+          await sleep(300 * (attempt + 1));
+        }
       }
     }
   }
@@ -536,12 +515,27 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
 // WEB SERIAL MONITOR (Real-time RX/TX Stream in Browser)
 // ============================================================================
 
-let activeLocalStreamAbort: AbortController | null = null;
-
-export async function stopWebSerialMonitor(keepPortOpen = false): Promise<void> {
+export async function stopWebSerialMonitor(_keepPortOpen = false): Promise<void> {
   activeMonitorKeepReading = false;
-  let wasOpen = Boolean(activeMonitorPort) && !keepPortOpen;
-  await releaseBrowserSerialMonitorLocks(!keepPortOpen);
+  try {
+    if (activeMonitorReader) {
+      await activeMonitorReader.cancel().catch(() => {});
+      try {
+        activeMonitorReader.releaseLock();
+      } catch {}
+      activeMonitorReader = null;
+    }
+  } catch {}
+
+  let hadPort = false;
+  if (activeMonitorPort) {
+    try {
+      await activeMonitorPort.close().catch(() => {});
+      hadPort = true;
+    } catch {}
+    activeMonitorPort = null;
+  }
+
   if (activeLocalStreamAbort) {
     try {
       activeLocalStreamAbort.abort();
@@ -550,11 +544,11 @@ export async function stopWebSerialMonitor(keepPortOpen = false): Promise<void> 
     try {
       await fetchCompilerApi('/api/serial-stop', { method: 'POST' });
     } catch {}
-    await new Promise((r) => setTimeout(r, 200));
   }
 
-  if (wasOpen) {
-    await new Promise((r) => setTimeout(r, 200));
+  // Windows WCH CH340 (CH341SER.SYS) requires 350ms after CloseHandle before COM can be reopened
+  if (hadPort) {
+    await sleep(350);
   }
 }
 
@@ -601,7 +595,7 @@ export async function startWebSerialMonitor(
   onDisconnect?: () => void,
   allowPrompt = false
 ): Promise<{ success: boolean; address?: string; error?: string }> {
-  await stopWebSerialMonitor(true);
+  await stopWebSerialMonitor();
 
   const isLocalCom =
     Boolean(portAddress) &&
@@ -716,8 +710,6 @@ export async function sendWebSerialData(data: string): Promise<boolean> {
 // ============================================================================
 // MICROPYTHON DIRECT UPLOAD OVER WEB SERIAL RAW REPL
 // ============================================================================
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function uploadMicroPythonViaWebSerial(
   port: any,
@@ -909,12 +901,12 @@ export async function flashAvrHexViaWebSerial(
         if (baudRate !== 115200 || port.readable?.locked || port.writable?.locked) {
           try {
             await port.close();
-            await sleep(150);
+            await sleep(350);
           } catch {}
-          await port.open({ baudRate, bufferSize: 8192 });
+          await port.open({ baudRate });
         }
       } else {
-        await port.open({ baudRate, bufferSize: 8192 });
+        await port.open({ baudRate });
       }
       writer = port.writable.getWriter();
       reader = port.readable.getReader();
@@ -1502,10 +1494,10 @@ export async function executeWebHardwareAction(params: {
   // IMPORTANT: Verify/open Web Serial port BEFORE any network/timer awaits so browser user gesture activation is preserved!
   let targetWebPort: { port: any; address: string; openError?: string } | null = null;
   if (action === 'upload' || action === 'flash-firmware') {
+    await stopWebSerialMonitor();
     if (!isLocalComPort || isRemoteWebOrigin() || isPython || action === 'flash-firmware' || isWebSerialSupported()) {
       targetWebPort = await ensureWebSerialPort(port, true, 115200);
     }
-    await stopWebSerialMonitor(true);
     if (!targetWebPort && (isPython || action === 'flash-firmware') && !(boardLower.includes('micro:bit') && isPython)) {
       onLog({
         text: '⚠️ Pilih port USB perangkat Anda pada jendela popup browser (Web Serial API) untuk melanjutkan.',

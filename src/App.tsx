@@ -6622,6 +6622,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (isSerialConnected) {
           setIsSerialConnected(false);
         }
+        await stopWebSerialMonitor();
 
         const webRes = await executeWebHardwareAction({
           action,
