@@ -320,7 +320,7 @@ async function tryOpenSerialPort(rawPort: any, baudRate = 115200, maxAttempts = 
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      await rawPort.open({ baudRate, bufferSize: 8192 });
+      await rawPort.open({ baudRate, bufferSize: 65536 });
       return true;
     } catch (err: any) {
       const msg = String(err?.message || err || '');
@@ -443,7 +443,7 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
     }
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await cand.port.open({ baudRate, bufferSize: 8192 });
+        await cand.port.open({ baudRate, bufferSize: 65536 });
         return cand;
       } catch (err: any) {
         if (err?.message?.includes('already open') && cand.port.readable && cand.port.writable) {
@@ -572,7 +572,7 @@ export async function startWebSerialMonitor(
 
   onData(`\r\n--- Web Serial Monitor Connected to ${address} @ ${baudRate} baud ---\r\n`);
 
-  // Start async read loop
+  // Start async read loop (resilient to BreakError / FramingError / BufferOverrunError on ESP32 reset)
   (async () => {
     while (port.readable && activeMonitorKeepReading) {
       try {
@@ -585,11 +585,22 @@ export async function startWebSerialMonitor(
             onData(decoder.decode(value, { stream: true }));
           }
         }
-      } catch (err) {
-        if (activeMonitorKeepReading) {
-          console.warn('[WebSerial Monitor] Read stream error:', err);
+      } catch (err: any) {
+        const errName = String(err?.name || err?.message || err || '');
+        const isRecoverableUartErr =
+          errName.includes('BreakError') ||
+          errName.includes('FramingError') ||
+          errName.includes('ParityError') ||
+          errName.includes('BufferOverrunError') ||
+          errName.includes('Break') ||
+          errName.includes('Framing') ||
+          errName.includes('Overrun');
+        if (!isRecoverableUartErr) {
+          if (activeMonitorKeepReading) {
+            console.warn('[WebSerial Monitor] Read stream error:', err);
+          }
+          break;
         }
-        break;
       } finally {
         if (activeMonitorReader) {
           try {
@@ -597,6 +608,9 @@ export async function startWebSerialMonitor(
           } catch {}
           activeMonitorReader = null;
         }
+      }
+      if (activeMonitorKeepReading) {
+        await new Promise((r) => setTimeout(r, 15));
       }
     }
     if (onDisconnect) onDisconnect();
@@ -1034,31 +1048,59 @@ export async function flashEspViaWebSerial(
   const isEsp8266 =
     boardName.toLowerCase().includes('esp8266') || boardName.toLowerCase().includes('nodemcu');
 
-  let reader: any = null;
+  let activeReader: any = null;
   let writer: any = null;
   let reading = false;
 
   let activePort = port;
   try {
-    const opened = await openAvailableWebSerialPort(port, 115200);
+    // Reuse already-open port directly (avoids Windows USB driver 'Failed to open serial port' error on close+reopen)
+    const opened = await openAvailableWebSerialPort(activePort, 115200);
     activePort = opened.port;
     port = activePort;
     writer = activePort.writable.getWriter();
-    reader = activePort.readable.getReader();
 
     const rxBuffer: number[] = [];
     reading = true;
-    (async () => {
-      try {
-        while (reading && reader) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) {
-            for (let i = 0; i < value.length; i++) rxBuffer.push(value[i]);
+
+    // Resilient Web Serial reader loop:
+    // On Windows/Chrome, resetting ESP32 causes a UART BREAK (TX drops low) and 74880-baud boot log
+    // which triggers BreakError / FramingError / ParityError / BufferOverrunError on reader.read().
+    // In Web Serial API, releasing the lock after these non-fatal errors refreshes port.readable
+    // with a new ReadableStream. We MUST loop and re-acquire getReader() or RX permanently dies!
+    const readerLoopPromise = (async () => {
+      while (reading && activePort.readable) {
+        try {
+          activeReader = activePort.readable.getReader();
+          while (reading) {
+            const { value, done } = await activeReader.read();
+            if (done) break;
+            if (value) {
+              for (let i = 0; i < value.length; i++) {
+                rxBuffer.push(value[i]);
+              }
+            }
+          }
+        } catch (_readErr) {
+          // Non-fatal UART BreakError / FramingError / BufferOverrunError during ESP32 reset.
+          // Release lock in finally block and immediately re-attach reader to activePort.readable.
+        } finally {
+          if (activeReader) {
+            try {
+              activeReader.releaseLock();
+            } catch {}
+            activeReader = null;
           }
         }
-      } catch {}
+        if (reading) {
+          await sleep(5);
+        }
+      }
     })();
+
+    // Drain any stale serial bytes or pending BufferOverrunError accumulated during Cloud Compilation
+    await sleep(40);
+    rxBuffer.length = 0;
 
     const extractSlipPacket = (expectedOpcode: number): { status: number; errCode: number } | null => {
       while (rxBuffer.length > 0) {
@@ -1074,6 +1116,7 @@ export async function flashEspViaWebSerial(
         for (let i = 1; i < rxBuffer.length; i++) {
           if (rxBuffer[i] === 0xc0) {
             if (i === 1) {
+              // Back-to-back 0xC0: discard the first 0xC0 and keep the second 0xC0 as start of frame
               rxBuffer.shift();
               endIdx = -2;
               break;
@@ -1085,7 +1128,8 @@ export async function flashEspViaWebSerial(
         if (endIdx === -2) continue;
         if (endIdx === -1) return null;
 
-        const rawFrame = rxBuffer.splice(0, endIdx + 1).slice(1, -1);
+        // Peek at the candidate frame between rxBuffer[0] (0xC0) and rxBuffer[endIdx] (0xC0)
+        const rawFrame = rxBuffer.slice(1, endIdx);
         const decoded: number[] = [];
         for (let i = 0; i < rawFrame.length; i++) {
           if (rawFrame[i] === 0xdb && i + 1 < rawFrame.length) {
@@ -1102,10 +1146,21 @@ export async function flashEspViaWebSerial(
           decoded.push(rawFrame[i]);
         }
 
-        if (decoded.length >= 10 && decoded[0] === 0x01 && decoded[1] === expectedOpcode) {
-          const status = decoded[8];
-          const errCode = decoded[9] || 0;
-          return { status, errCode };
+        // Check if this is a genuine ESP ROM Bootloader SLIP response packet (direction === 0x01)
+        if (decoded.length >= 10 && decoded[0] === 0x01) {
+          // Valid SLIP frame: consume including the closing 0xC0 at endIdx
+          rxBuffer.splice(0, endIdx + 1);
+          if (decoded[1] === expectedOpcode) {
+            const status = decoded[8];
+            const errCode = decoded[9] || 0;
+            return { status, errCode };
+          }
+          // Valid SLIP frame for an earlier opcode (e.g. extra SYNC response), continue loop
+          continue;
+        } else {
+          // Not a valid SLIP packet (e.g. boot log bytes between a stray 0xC0 glitch and the real opening 0xC0).
+          // Do NOT consume rxBuffer[endIdx] because rxBuffer[endIdx] is the OPENING 0xC0 of the real SLIP frame!
+          rxBuffer.splice(0, endIdx);
         }
       }
       return null;
@@ -1127,35 +1182,6 @@ export async function flashEspViaWebSerial(
       return { ok: false };
     };
 
-    const triggerBootloaderReset = async (strategy: number) => {
-      if (typeof port.setSignals !== 'function') return;
-      if (strategy === 0) {
-        // NodeMCU / Wemos CH340 & CP2102 dual-transistor auto-reset circuit
-        await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-        await sleep(100);
-        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-        await sleep(75);
-        await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-        await sleep(80);
-      } else if (strategy === 1) {
-        // Direct DTR->GPIO0, RTS->EN reset sequence
-        await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-        await sleep(100);
-        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-        await sleep(100);
-        await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-        await sleep(80);
-      } else {
-        // Extended hold for ESP32 DevKit V1 boards with larger EN capacitor (1uF-10uF)
-        await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-        await sleep(250);
-        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-        await sleep(200);
-        await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-        await sleep(100);
-      }
-    };
-
     // Build SYNC payload (0x07, 0x07, 0x12, 0x20 + 32x 0x55)
     const syncData = new Uint8Array(36);
     syncData[0] = 0x07;
@@ -1165,28 +1191,91 @@ export async function flashEspViaWebSerial(
     syncData.fill(0x55, 4);
     const syncPacket = buildEspCommandPacket(0x08, syncData, 0);
 
+    const trySyncAttempts = async (attempts: number, timeoutMs = 180): Promise<boolean> => {
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        await writer.write(syncPacket);
+        const syncRes = await waitForSlipResponse(0x08, timeoutMs);
+        if (syncRes.ok) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     onLog({ text: '🔌 [esptool-web] Mengatur sinyal DTR/RTS untuk masuk ke ROM Bootloader ESP...', type: 'info' });
     onLog({ text: 'Connecting........', type: 'stdout' });
 
     let synced = false;
-    for (let strat = 0; strat < 3 && !synced; strat++) {
-      await triggerBootloaderReset(strat);
+
+    // Strategy 0: Standard Classic Auto-Reset (esptool-js / NodeMCU / DevKit V1)
+    if (typeof port.setSignals === 'function' && !synced) {
+      await port.setSignals({ dataTerminalReady: false, requestToSend: true }); // IO0=HIGH, EN=LOW (reset)
+      await sleep(100);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: false }); // IO0=LOW, EN=HIGH (download boot)
+      await sleep(50);
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(50);
       rxBuffer.length = 0;
-      for (let attempt = 0; attempt < 7; attempt++) {
-        await writer.write(syncPacket);
-        const syncRes = await waitForSlipResponse(0x08, 250);
-        if (syncRes.ok) {
-          synced = true;
-          break;
-        }
+      synced = await trySyncAttempts(6, 200);
+    }
+
+    // Strategy 1: Continuous Virtual BOOT Hold (keeps DTR=true, RTS=false -> IO0=LOW while EN capacitor charges & during SYNC)
+    // Essential for ESP32 DevKit V1 boards on Windows with 1uF-10uF EN capacitor!
+    if (typeof port.setSignals === 'function' && !synced) {
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(60);
+      await port.setSignals({ dataTerminalReady: false, requestToSend: true }); // EN=LOW (discharge EN cap)
+      await sleep(200);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: false }); // EN=HIGH, IO0=LOW (hold BOOT low!)
+      await sleep(120);
+      rxBuffer.length = 0;
+      // Try syncing while virtual BOOT (IO0=LOW) is still actively held
+      synced = await trySyncAttempts(5, 200);
+      // Release virtual BOOT and try again in case EN finished rising during the hold
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      if (!synced) {
+        await sleep(60);
+        synced = await trySyncAttempts(5, 200);
+      }
+    }
+
+    // Strategy 2: Direct DTR/RTS & Extended Capacitor Hold
+    if (typeof port.setSignals === 'function' && !synced) {
+      await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+      await sleep(80);
+      await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+      await sleep(300);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+      await sleep(350);
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(100);
+      rxBuffer.length = 0;
+      synced = await trySyncAttempts(6, 220);
+    }
+
+    // Strategy 3: USB-Serial-JTAG / Inverted Reset + Manual BOOT Button Window
+    if (!synced) {
+      if (typeof port.setSignals === 'function') {
+        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+        await sleep(100);
+        await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+        await sleep(120);
+        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+        await sleep(150);
+      }
+      rxBuffer.length = 0;
+      synced = await trySyncAttempts(8, 250);
+      if (typeof port.setSignals === 'function') {
+        await port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
       }
     }
 
     if (!synced) {
       reading = false;
-      try { await reader.cancel(); } catch {}
-      try { reader.releaseLock(); } catch {}
+      try { if (activeReader) await activeReader.cancel(); } catch {}
+      try { if (activeReader) activeReader.releaseLock(); } catch {}
       try { writer.releaseLock(); } catch {}
+      try { await readerLoopPromise; } catch {}
       try { await port.close(); } catch {}
       const syncErrMsg =
         'Gagal sinkronisasi dengan ROM Bootloader ESP via Web Serial (tahap SYNC). Tahan tombol FLASH/BOOT pada board saat menekan Upload.';
@@ -1195,7 +1284,7 @@ export async function flashEspViaWebSerial(
     }
 
     // Drain any extra queued SYNC responses
-    await sleep(60);
+    await sleep(100);
     rxBuffer.length = 0;
 
     onLog({
@@ -1207,7 +1296,7 @@ export async function flashEspViaWebSerial(
     if (!isEsp8266) {
       rxBuffer.length = 0;
       await writer.write(buildEspCommandPacket(0x0d, new Uint8Array(8), 0));
-      await waitForSlipResponse(0x0d, 1000);
+      await waitForSlipResponse(0x0d, 1500);
     }
 
     const blockSize = 1024;
@@ -1237,8 +1326,8 @@ export async function flashEspViaWebSerial(
 
       rxBuffer.length = 0;
       await writer.write(buildEspCommandPacket(0x02, beginData, 0));
-      // ESP8266 erases flash synchronously during FLASH_BEGIN (can take 5-15 seconds)
-      const beginRes = await waitForSlipResponse(0x02, 25000);
+      // ESP8266/ESP32 erases flash synchronously during FLASH_BEGIN (can take 5-20 seconds)
+      const beginRes = await waitForSlipResponse(0x02, 30000);
       if (!beginRes.ok) {
         throw new Error(
           `Gagal FLASH_BEGIN di offset 0x${offset.toString(16)}${
@@ -1265,7 +1354,7 @@ export async function flashEspViaWebSerial(
         const chk = computeEspChecksum(padded);
         rxBuffer.length = 0;
         await writer.write(buildEspCommandPacket(0x03, blockPayload, chk));
-        const dataRes = await waitForSlipResponse(0x03, 5000);
+        const dataRes = await waitForSlipResponse(0x03, 8000);
         if (!dataRes.ok) {
           throw new Error(
             `Gagal menulis blok #${seq}/${numBlocks}${
@@ -1299,9 +1388,10 @@ export async function flashEspViaWebSerial(
     }
 
     reading = false;
-    try { await reader.cancel(); } catch {}
-    try { reader.releaseLock(); } catch {}
+    try { if (activeReader) await activeReader.cancel(); } catch {}
+    try { if (activeReader) activeReader.releaseLock(); } catch {}
     try { writer.releaseLock(); } catch {}
+    try { await readerLoopPromise; } catch {}
     try { await port.close(); } catch {}
 
     onLog({ text: 'Leaving... Hard resetting via RTS pin...', type: 'stdout' });
@@ -1309,8 +1399,8 @@ export async function flashEspViaWebSerial(
     return { success: true };
   } catch (err: any) {
     reading = false;
-    try { if (reader) await reader.cancel(); } catch {}
-    try { if (reader) reader.releaseLock(); } catch {}
+    try { if (activeReader) await activeReader.cancel(); } catch {}
+    try { if (activeReader) activeReader.releaseLock(); } catch {}
     try { if (writer) writer.releaseLock(); } catch {}
     try { await port.close(); } catch {}
     const errMsg = err?.message || String(err);
