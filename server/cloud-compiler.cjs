@@ -182,6 +182,17 @@ function transpileInoToRuntimeScript(rawCode) {
     return constMap[t] !== undefined ? constMap[t] : t;
   };
 
+  // Extract custom void helper functions (besides setup and loop) so calls to them can be inlined
+  const customFunctions = {};
+  const funcHeaderRegex = /\bvoid\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*\{/g;
+  let fMatch;
+  while ((fMatch = funcHeaderRegex.exec(code)) !== null) {
+    const fnName = fMatch[1];
+    if (fnName !== 'setup' && fnName !== 'loop') {
+      customFunctions[fnName] = extractFunctionBody(code, fnName);
+    }
+  }
+
   const normalizeExpr = (expr) => {
     let e = (expr || '').trim();
     // Replace helper ultrasonic calls with ultrasonic(trig,echo)
@@ -190,10 +201,14 @@ function transpileInoToRuntimeScript(rawCode) {
       /\b(?:ukur_jarak|readUltrasonic|readDistance|baca_jarak)\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g,
       (_, t, ec) => `ultrasonic(${resolveToken(t)},${resolveToken(ec)})`
     );
+    // Replace HIGH -> 1 and LOW -> 0 only outside quoted string literals
+    if (!(e.startsWith('"') && e.endsWith('"'))) {
+      e = e.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
+    }
     return e;
   };
 
-  const parseStatementBlock = (blockText, outArr) => {
+  const parseStatementBlock = (blockText, outArr, callDepth = 0) => {
     const stmtLines = blockText.split(/\r?\n/);
     let i = 0;
     while (i < stmtLines.length) {
@@ -220,7 +235,7 @@ function transpileInoToRuntimeScript(rawCode) {
 
       // for (int x = start; x <= end; x += step)
       const forMatch = line.match(
-        /^for\s*\(\s*(?:int|long|float)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]+);\s*\1\s*(<=|<|>=|>)\s*([^;]+);\s*\1\s*(\+\+|--|\+=|-=)\s*([^)]*)\)/
+        /^for\s*\(\s*(?:int|long|float|double)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]+);\s*\1\s*(<=|<|>=|>)\s*([^;]+);\s*\1\s*(\+\+|--|\+=|-=)\s*([^)]*)\)/
       );
       if (forMatch) {
         const vName = forMatch[1].trim();
@@ -246,7 +261,7 @@ function transpileInoToRuntimeScript(rawCode) {
           }
           const innerBody = restBlock.slice(openBrace + 1, p - 1);
           outArr.push(`FOR:${vName}:${startExpr}:${endExpr}:${stepExpr}`);
-          parseStatementBlock(innerBody, outArr);
+          parseStatementBlock(innerBody, outArr, callDepth);
           outArr.push('ENDFOR');
           const consumedLines = restBlock.slice(0, p).split(/\r?\n/).length;
           i += Math.max(1, consumedLines);
@@ -270,7 +285,7 @@ function transpileInoToRuntimeScript(rawCode) {
           }
           const ifBody = restBlock.slice(openBrace + 1, p - 1);
           outArr.push(`IF:${cond}`);
-          parseStatementBlock(ifBody, outArr);
+          parseStatementBlock(ifBody, outArr, callDepth);
 
           let afterIf = restBlock.slice(p).trimStart();
           let totalConsumedChars = p;
@@ -286,7 +301,7 @@ function transpileInoToRuntimeScript(rawCode) {
               }
               const elseBody = restBlock.slice(elseOpen + 1, ep - 1);
               outArr.push('ELSE');
-              parseStatementBlock(elseBody, outArr);
+              parseStatementBlock(elseBody, outArr, callDepth);
               totalConsumedChars = ep;
             }
           }
@@ -329,6 +344,12 @@ function transpileInoToRuntimeScript(rawCode) {
         } else if ((m = stmt.match(/^WiFi\.begin\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/))) {
           outArr.push(`WIFI:${resolveToken(m[1])}:${resolveToken(m[2])}`);
         } else if (
+          callDepth < 4 &&
+          (m = stmt.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/)) &&
+          customFunctions[m[1].trim()]
+        ) {
+          parseStatementBlock(customFunctions[m[1].trim()], outArr, callDepth + 1);
+        } else if (
           (m = stmt.match(
             /^(?:(?:const\s+)?(?:int|long|float|double|String|bool|boolean|auto)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/
           ))
@@ -347,6 +368,10 @@ function transpileInoToRuntimeScript(rawCode) {
   parseStatementBlock(setupBody, setupInstructions);
   parseStatementBlock(loopBody, loopInstructions);
 
+  if (!setupInstructions.some((inst) => inst.startsWith('SERIAL:'))) {
+    setupInstructions.unshift('SERIAL:115200');
+  }
+
   const scriptLines = [
     SLOT_MAGIC,
     ...setupInstructions,
@@ -360,7 +385,12 @@ function transpileInoToRuntimeScript(rawCode) {
 // Recompute ESP32 image XOR checksum + SHA256 appended hash after patching .rodata slot
 function patchEsp32FirmwareBinary(rawBin, scriptText) {
   const buf = Buffer.from(rawBin);
-  const magicIdx = buf.indexOf(Buffer.from(SLOT_MAGIC));
+  // IMPORTANT: Match ROBOLAB_PROG_V1_SLOT\n (the 4096-byte slot buffer at offset 65928),
+  // NOT ROBOLAB_PROG_V1_SLOT\0 (the 21-byte parser string literal in .rodata at offset 532)!
+  let magicIdx = buf.indexOf(Buffer.from(SLOT_MAGIC + '\n'));
+  if (magicIdx === -1) {
+    magicIdx = buf.lastIndexOf(Buffer.from(SLOT_MAGIC));
+  }
   if (magicIdx === -1) {
     throw new Error('ROBOLAB_PROG_V1_SLOT not found in ESP32 firmware template');
   }
@@ -414,7 +444,12 @@ function crc8266(buf) {
 // Recompute ESP8266 DOUT mode + 5-segment XOR checksum + eboot CRC32 after patching .rodata slot
 function patchEsp8266FirmwareBinary(rawBin, scriptText) {
   const buf = Buffer.from(rawBin);
-  const magicIdx = buf.indexOf(Buffer.from(SLOT_MAGIC));
+  // IMPORTANT: Match ROBOLAB_PROG_V1_SLOT\n (the 4096-byte slot buffer),
+  // NOT ROBOLAB_PROG_V1_SLOT\0 (the 21-byte parser string literal in .rodata)!
+  let magicIdx = buf.indexOf(Buffer.from(SLOT_MAGIC + '\n'));
+  if (magicIdx === -1) {
+    magicIdx = buf.lastIndexOf(Buffer.from(SLOT_MAGIC));
+  }
   if (magicIdx === -1) {
     throw new Error('ROBOLAB_PROG_V1_SLOT not found in ESP8266 firmware template');
   }

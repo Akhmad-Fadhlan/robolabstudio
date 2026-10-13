@@ -6606,6 +6606,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setTerminalTab('terminal');
       setTerminalLogs([]);
       setInteractiveTerminalLogs([]);
+      if (action === 'upload') {
+        setSerialRawOutput('');
+      }
       setBuildProgress(5);
       setBuildStatusText(
         action === 'verify'
@@ -6656,9 +6659,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               : 'Firmware Flashed Successfully 🎉'
           );
           if (action === 'upload') {
+            setTerminalLogs(prev => [
+              ...prev,
+              {
+                text: '📡 Program sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.',
+                type: 'info',
+              },
+            ]);
             setTimeout(async () => {
               const targetPortAddr = webRes.selectedPort || port;
-              setTerminalTab('serial');
               const started = await startWebSerialMonitor(
                 targetPortAddr,
                 serialBaudrate,
@@ -6667,9 +6676,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               );
               if (started.success) {
                 setIsSerialConnected(true);
-                setConnectedPort(targetPortAddr);
+                setConnectedPort(started.address || targetPortAddr);
               }
-            }, 500);
+            }, 800);
           }
         } else {
           setBuildStatusText(

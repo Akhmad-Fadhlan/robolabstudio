@@ -444,9 +444,15 @@ async function openAvailableWebSerialPort(preferredPort: any, baudRate: number):
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         await cand.port.open({ baudRate, bufferSize: 65536 });
+        if (typeof cand.port.setSignals === 'function') {
+          await cand.port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+        }
         return cand;
       } catch (err: any) {
         if (err?.message?.includes('already open') && cand.port.readable && cand.port.writable) {
+          if (typeof cand.port.setSignals === 'function') {
+            await cand.port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+          }
           return cand;
         }
         lastErr = err;
@@ -547,7 +553,7 @@ export async function startWebSerialMonitor(
     if (localStarted.success) return localStarted;
   }
 
-  const target = await ensureWebSerialPort(portAddress);
+  const target = await ensureWebSerialPort(portAddress, false, true, baudRate || 115200);
   if (!target || !target.port) {
     const fallbackLocal = await startLocalBridgeSerialMonitor(portAddress, baudRate || 115200, onData, onDisconnect);
     if (fallbackLocal.success) return fallbackLocal;
@@ -560,6 +566,9 @@ export async function startWebSerialMonitor(
     const opened = await openAvailableWebSerialPort(port, baudRate || 115200);
     port = opened.port;
     if (opened.address) address = opened.address;
+    if (typeof port.setSignals === 'function') {
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+    }
   } catch (openErr: any) {
     const fallbackLocal = await startLocalBridgeSerialMonitor(portAddress, baudRate || 115200, onData, onDisconnect);
     if (fallbackLocal.success) return fallbackLocal;
@@ -570,7 +579,7 @@ export async function startWebSerialMonitor(
   activeMonitorKeepReading = true;
   const decoder = new TextDecoder();
 
-  onData(`\r\n--- Web Serial Monitor Connected to ${address} @ ${baudRate} baud ---\r\n`);
+  onData(`--- Web Serial Monitor Connected to ${address} @ ${baudRate} baud ---\r\n`);
 
   // Start async read loop (resilient to BreakError / FramingError / BufferOverrunError on ESP32 reset)
   (async () => {
