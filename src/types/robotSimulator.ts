@@ -672,7 +672,16 @@ export function getSensorPresetOptions(sensorCount: SensorCount): SensorPresetOp
     description: 'Semua sensor mendeteksi garis (garis melintang / perempatan)',
   });
 
-  return options;
+  const uniqueOptions: SensorPresetOption[] = [];
+  const seenPatterns = new Set<string>();
+  for (const opt of options) {
+    if (!seenPatterns.has(opt.pattern)) {
+      seenPatterns.add(opt.pattern);
+      uniqueOptions.push(opt);
+    }
+  }
+
+  return uniqueOptions;
 }
 
 export function findMatchingSensorPreset(

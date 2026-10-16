@@ -229,6 +229,7 @@ const registerRobotPlanBlocks = () => {
       this.setOnChange(function (this: Blockly.Block, changeEvent: any) {
         if (!changeEvent || changeEvent.blockId !== this.id) return;
         if (changeEvent.type !== Blockly.Events.BLOCK_CHANGE) return;
+        if (this.workspace?.isFlyout) return;
 
         if (changeEvent.name === 'SENSOR_PRESET') {
           const selectedVal = this.getFieldValue('SENSOR_PRESET');
@@ -1757,18 +1758,86 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   ];
 };
 
+/**
+ * Checks whether a block is active (not disabled) and connected to a valid
+ * root execution structure (setup, loop, function, event handler, container).
+ * Disconnected / floating / orphaned blocks return false so they are ignored.
+ */
+export const isBlockActive = (block: any): boolean => {
+  if (!block) return false;
+
+  // 1. Check if this block itself is disabled
+  if (block.disabled || (typeof block.isEnabled === 'function' && !block.isEnabled())) {
+    return false;
+  }
+
+  // 2. Check if this block is inside a flyout
+  if (block.workspace?.isFlyout) {
+    return false;
+  }
+
+  // 3. Walk up the parent chain to verify that every ancestor is enabled
+  let cur: any = block;
+  while (cur) {
+    if (cur.disabled || (typeof cur.isEnabled === 'function' && !cur.isEnabled())) {
+      return false;
+    }
+    const parent = cur.getParent();
+    if (!parent) break;
+    cur = parent;
+  }
+
+  // 4. `cur` is now the root block (top-level block) of the chain.
+  if (!cur) return false;
+
+  // 5. Recognized executable root blocks:
+  const validRootTypes = new Set([
+    'arduino_setup',
+    'arduino_loop',
+    'procedures_defnoreturn',
+    'procedures_defreturn',
+    'blynk_on_write',
+    'basic_on_start',
+    'basic_forever',
+    'input_on_button_pressed',
+    'input_on_gesture',
+    'robot_plan_container',
+    'robot_run_plan',
+  ]);
+
+  if (validRootTypes.has(cur.type)) {
+    return true;
+  }
+
+  // robot_hw_setup is valid at top level if there is a robot_plan_container or robot_run_plan
+  if (cur.type === 'robot_hw_setup') {
+    const ws = cur.workspace;
+    return !!ws && ws.getAllBlocks(false).some((b: any) => 
+      (b.type === 'robot_plan_container' || b.type === 'robot_run_plan') &&
+      !b.disabled &&
+      (typeof b.isEnabled !== 'function' || b.isEnabled())
+    );
+  }
+
+  return false;
+};
+
 const isLibraryNeeded = (libName: string, workspace: any): boolean => {
   const lower = libName.toLowerCase();
   
   if (lower === 'wire') {
-    const hasMPU = workspace.getBlocksByType('mpu6050_init').length > 0 || workspace.getBlocksByType('mpu6050_read').length > 0;
-    const hasDisplay = workspace.getBlocksByType('lib_display_begin').length > 0 || workspace.getBlocksByType('lib_display_clear').length > 0 || workspace.getBlocksByType('lib_display_print').length > 0 || workspace.getBlocksByType('lib_display_setcursor').length > 0;
-    const hasRFID = workspace.getAllBlocks(false).some((b: any) => (b.type || '').toLowerCase().includes('rfid') || (b.type || '').toLowerCase().includes('pn532'));
+    const hasMPU = workspace.getBlocksByType('mpu6050_init').some((b: any) => isBlockActive(b)) ||
+                   workspace.getBlocksByType('mpu6050_read').some((b: any) => isBlockActive(b));
+    const hasDisplay = workspace.getBlocksByType('lib_display_begin').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('lib_display_clear').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('lib_display_print').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('lib_display_setcursor').some((b: any) => isBlockActive(b));
+    const hasRFID = workspace.getAllBlocks(false).some((b: any) => isBlockActive(b) && ((b.type || '').toLowerCase().includes('rfid') || (b.type || '').toLowerCase().includes('pn532')));
     return hasMPU || hasDisplay || hasRFID;
   }
   
   if (lower === 'spi') {
-    const hasSPI_RFID = workspace.getBlocksByType('lib_rfid_begin').length > 0;
+    const hasSPI_RFID = workspace.getBlocksByType('lib_rfid_begin').some((b: any) => isBlockActive(b));
     return hasSPI_RFID;
   }
 
@@ -1779,8 +1848,8 @@ const isLibraryNeeded = (libName: string, workspace: any): boolean => {
   const blockTypes = getBlockTypesForLibrary(libName);
   if (blockTypes.length === 0) return false;
   
-  return blockTypes.some(type => workspace.getBlocksByType(type).length > 0) ||
-         workspace.getAllBlocks(false).some((b: any) => (b.type || '').toLowerCase().includes('rfid') || (b.type || '').toLowerCase().includes('pn532'));
+  return blockTypes.some(type => workspace.getBlocksByType(type).some((b: any) => isBlockActive(b))) ||
+         workspace.getAllBlocks(false).some((b: any) => isBlockActive(b) && ((b.type || '').toLowerCase().includes('rfid') || (b.type || '').toLowerCase().includes('pn532')));
 };
 
 export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
@@ -2355,14 +2424,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const generateCodeForLang = useCallback((lang: 'arduino' | 'python', boardType?: string): string => {
     if (!workspaceRef.current) return '';
     const workspace = workspaceRef.current;
-    const allBlocks = workspace.getAllBlocks(false);
-    const hasRobotPlanBlocks = allBlocks.some((b: any) =>
-      b.type === 'robot_plan_container' ||
-      b.type === 'robot_plan_step' ||
-      b.type === 'robot_plan_stop' ||
-      b.type === 'robot_hw_setup' ||
-      b.type === 'robot_run_plan'
-    );
+    
+    // Check for active Robot Plan
+    const containerBlocks = workspace.getBlocksByType('robot_plan_container').filter((b: any) => isBlockActive(b));
+    const runPlanBlock = workspace.getBlocksByType('robot_run_plan').find((b: any) => isBlockActive(b));
+    const hasRobotPlanBlocks = containerBlocks.length > 0 || !!runPlanBlock;
 
     if (hasRobotPlanBlocks) {
       let hw: RobotHardwareConfig = {
@@ -2370,7 +2436,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         pins: { ...activeRobotHwConfig.pins },
       };
 
-      const hwBlock = workspace.getBlocksByType('robot_hw_setup')[0];
+      const hwBlock = workspace.getBlocksByType('robot_hw_setup').find((b: any) => isBlockActive(b));
       let hwPatch: Partial<RobotHardwareConfig> | undefined;
       if (hwBlock) {
         const pwmL = hwBlock.getFieldValue('PWM_L') || hw.pins.pwmL;
@@ -2406,6 +2472,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         let cur = startBlock;
         let autoIndex = 0;
         while (cur) {
+          if (cur.disabled || (typeof cur.isEnabled === 'function' && !cur.isEnabled())) {
+            cur = cur.getNextBlock();
+            continue;
+          }
           if (cur.type === 'robot_plan_step') {
             const rawIdx = Number(cur.getFieldValue('INDEX'));
             const idxVal = Number.isFinite(rawIdx) ? rawIdx : autoIndex;
@@ -2441,34 +2511,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         return items;
       };
 
-      const containerBlocks = workspace.getBlocksByType('robot_plan_container');
       const extractedPlans: RobotPlan[] = [];
-
-      if (containerBlocks.length > 0) {
-        containerBlocks.forEach((cb: any) => {
-          const planId = Math.max(1, Math.min(10, Number(cb.getFieldValue('PLAN_ID') || 1)));
-          const firstStep = cb.getInputTargetBlock('STEPS');
-          const items = readChainItems(firstStep);
-          extractedPlans.push({
-            planId,
-            blockId: cb.id,
-            items,
-          });
+      containerBlocks.forEach((cb: any) => {
+        const planId = Math.max(1, Math.min(10, Number(cb.getFieldValue('PLAN_ID') || 1)));
+        const firstStep = cb.getInputTargetBlock('STEPS');
+        const items = readChainItems(firstStep);
+        extractedPlans.push({
+          planId,
+          blockId: cb.id,
+          items,
         });
-      } else {
-        // Fallback if user placed top-level robot_plan_step blocks without container
-        const topStepBlocks = workspace
-          .getTopBlocks(true)
-          .filter((b: any) => b.type === 'robot_plan_step' || b.type === 'robot_plan_stop');
-        if (topStepBlocks.length > 0) {
-          extractedPlans.push({
-            planId: 1,
-            items: readChainItems(topStepBlocks[0]),
-          });
-        }
-      }
+      });
 
-      const runPlanBlock = workspace.getBlocksByType('robot_run_plan')[0];
       const activePlanId = runPlanBlock
         ? Number(runPlanBlock.getFieldValue('PLAN_ID') || 1)
         : extractedPlans[0]?.planId || 1;
@@ -2488,7 +2542,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
     if (lang === 'arduino') {
       generatedCode += '// RoboLab Studio - Generated Arduino Code\n';
-      generatedCode += `// Blocks in workspace: ${workspace.getAllBlocks(false).map(b => b.type).join(', ')}\n`;
+      generatedCode += `// Blocks in workspace: ${workspace.getAllBlocks(false).filter((b: any) => isBlockActive(b)).map(b => b.type).join(', ')}\n`;
       
       // Include installed library headers only if they are used by workspace blocks
       const libs = installedLibrariesRef.current || [];
@@ -2523,6 +2577,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       // Servo globals
       const servoPins = new Set<string>();
       workspace.getAllBlocks(false).forEach((block: any) => {
+        if (!isBlockActive(block)) return;
         if (block.type === 'arduino_servo_write' || block.type === 'pins_servo_write') {
           const pin = block.getFieldValue('PIN');
           if (pin) servoPins.add(pin.toString());
@@ -2545,7 +2600,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // DHT globals
-      const dhtBlock = workspace.getBlocksByType('dht_init')[0];
+      const dhtBlock = workspace.getBlocksByType('dht_init').find((b: any) => isBlockActive(b));
       if (dhtBlock) {
         let pin = dhtBlock.getFieldValue('PIN') || '4';
         const isEsp8266Board = activeBoard.toLowerCase().includes('esp8266') || activeBoard.toLowerCase().includes('nodemcu');
@@ -2557,18 +2612,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // MPU6050 globals
-      const mpuBlock = workspace.getBlocksByType('mpu6050_init')[0] || workspace.getBlocksByType('mpu6050_read')[0];
+      const mpuBlock = workspace.getBlocksByType('mpu6050_init').find((b: any) => isBlockActive(b)) || 
+                       workspace.getBlocksByType('mpu6050_read').find((b: any) => isBlockActive(b));
       if (mpuBlock) {
         generatedCode += `Adafruit_MPU6050 mpu;\nsensors_event_t a, g, temp;\n`;
       }
 
       // RFID / PN532 globals (Fuzzy block type match for custom or built-in RFID blocks)
       const rfidBlock = workspace.getAllBlocks(false).find((b: any) => {
+        if (!isBlockActive(b)) return false;
         const t = (b.type || '').toLowerCase();
         return t.includes('rfid') || t.includes('pn532') || t.includes('nfc');
       });
       if (rfidBlock) {
-        const i2cBeginBlock = workspace.getBlocksByType('lib_rfid_i2c_begin')[0];
+        const i2cBeginBlock = workspace.getBlocksByType('lib_rfid_i2c_begin').find((b: any) => isBlockActive(b));
         const isI2CBlock = !!i2cBeginBlock || (rfidBlock.getField('SDA') && rfidBlock.getField('SCL'));
         
         if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
@@ -2618,7 +2675,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // Display globals
-      const displayBlock = workspace.getBlocksByType('lib_display_begin')[0] || workspace.getBlocksByType('lib_display_clear')[0] || workspace.getBlocksByType('lib_display_print')[0];
+      const displayBlock = workspace.getBlocksByType('lib_display_begin').find((b: any) => isBlockActive(b)) || 
+                           workspace.getBlocksByType('lib_display_clear').find((b: any) => isBlockActive(b)) || 
+                           workspace.getBlocksByType('lib_display_print').find((b: any) => isBlockActive(b));
       if (displayBlock) {
         if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
         if (!generatedCode.includes('#include <Adafruit_GFX.h>')) generatedCode += '#include <Adafruit_GFX.h>\n';
@@ -2629,7 +2688,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // FastLED globals
-      const fastledBlock = workspace.getBlocksByType('lib_fastled_begin')[0] || workspace.getBlocksByType('lib_fastled_setrgb')[0];
+      const fastledBlock = workspace.getBlocksByType('lib_fastled_begin').find((b: any) => isBlockActive(b)) || 
+                           workspace.getBlocksByType('lib_fastled_setrgb').find((b: any) => isBlockActive(b));
       if (fastledBlock) {
         if (!generatedCode.includes('#include <FastLED.h>')) generatedCode += '#include <FastLED.h>\n';
         if (!generatedCode.includes('CRGB leds')) {
@@ -2638,7 +2698,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // Stepper globals
-      const stepperBlock = workspace.getBlocksByType('lib_stepper_begin')[0] || workspace.getBlocksByType('lib_stepper_step')[0];
+      const stepperBlock = workspace.getBlocksByType('lib_stepper_begin').find((b: any) => isBlockActive(b)) || 
+                           workspace.getBlocksByType('lib_stepper_step').find((b: any) => isBlockActive(b));
       if (stepperBlock) {
         if (!generatedCode.includes('#include <Stepper.h>')) generatedCode += '#include <Stepper.h>\n';
         if (!generatedCode.includes('Stepper stepper')) {
@@ -2647,7 +2708,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // SD globals
-      const sdBlock = workspace.getBlocksByType('lib_sd_begin')[0] || workspace.getBlocksByType('lib_sd_open')[0];
+      const sdBlock = workspace.getBlocksByType('lib_sd_begin').find((b: any) => isBlockActive(b)) || 
+                      workspace.getBlocksByType('lib_sd_open').find((b: any) => isBlockActive(b));
       if (sdBlock) {
         if (!generatedCode.includes('#include <SPI.h>')) generatedCode += '#include <SPI.h>\n';
         if (!generatedCode.includes('#include <SD.h>')) generatedCode += '#include <SD.h>\n';
@@ -2657,7 +2719,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // BME globals
-      const bmeBlock = workspace.getBlocksByType('lib_bme_begin')[0] || workspace.getBlocksByType('lib_bme_temp')[0];
+      const bmeBlock = workspace.getBlocksByType('lib_bme_begin').find((b: any) => isBlockActive(b)) || 
+                       workspace.getBlocksByType('lib_bme_temp').find((b: any) => isBlockActive(b));
       if (bmeBlock) {
         if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
         if (!generatedCode.includes('#include <Adafruit_Sensor.h>')) generatedCode += '#include <Adafruit_Sensor.h>\n';
@@ -2668,7 +2731,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // GPS globals
-      const gpsBlock = workspace.getBlocksByType('lib_gps_begin')[0] || workspace.getBlocksByType('lib_gps_lat')[0];
+      const gpsBlock = workspace.getBlocksByType('lib_gps_begin').find((b: any) => isBlockActive(b)) || 
+                       workspace.getBlocksByType('lib_gps_lat').find((b: any) => isBlockActive(b));
       if (gpsBlock) {
         if (!generatedCode.includes('#include <SoftwareSerial.h>')) generatedCode += '#include <SoftwareSerial.h>\n';
         if (!generatedCode.includes('#include <TinyGPS++.h>')) generatedCode += '#include <TinyGPS++.h>\n';
@@ -2678,7 +2742,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // NeoPixel globals
-      const neoBlock = workspace.getBlocksByType('neopixel_init')[0];
+      const neoBlock = workspace.getBlocksByType('neopixel_init').find((b: any) => isBlockActive(b));
       if (neoBlock) {
         const pin = neoBlock.getFieldValue('PIN') || '5';
         const num = neoBlock.getFieldValue('NUM') || '8';
@@ -2686,40 +2750,41 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // MQTT globals
-      const mqttBlock = workspace.getBlocksByType('mqtt_init')[0] || workspace.getBlocksByType('mqtt_connect')[0];
+      const mqttBlock = workspace.getBlocksByType('mqtt_init').find((b: any) => isBlockActive(b)) || 
+                        workspace.getBlocksByType('mqtt_connect').find((b: any) => isBlockActive(b));
       if (mqttBlock) {
         generatedCode += `WiFiClient espClient;\nPubSubClient client(espClient);\n`;
       }
       
-      const hasHttp = workspace.getBlocksByType('esp32_http_get').length > 0 || 
-                      workspace.getBlocksByType('esp32_http_post').length > 0;
-      const hasWebSocket = workspace.getBlocksByType('esp32_websocket_connect').length > 0 ||
-                           workspace.getBlocksByType('esp32_websocket_send').length > 0 ||
-                           workspace.getBlocksByType('esp32_websocket_loop').length > 0 ||
-                           workspace.getBlocksByType('esp32_websocket_has_message').length > 0 ||
-                           workspace.getBlocksByType('esp32_websocket_get_message').length > 0;
+      const hasHttp = workspace.getBlocksByType('esp32_http_get').some((b: any) => isBlockActive(b)) || 
+                      workspace.getBlocksByType('esp32_http_post').some((b: any) => isBlockActive(b));
+      const hasWebSocket = workspace.getBlocksByType('esp32_websocket_connect').some((b: any) => isBlockActive(b)) ||
+                           workspace.getBlocksByType('esp32_websocket_send').some((b: any) => isBlockActive(b)) ||
+                           workspace.getBlocksByType('esp32_websocket_loop').some((b: any) => isBlockActive(b)) ||
+                           workspace.getBlocksByType('esp32_websocket_has_message').some((b: any) => isBlockActive(b)) ||
+                           workspace.getBlocksByType('esp32_websocket_get_message').some((b: any) => isBlockActive(b));
 
-      const hasWiFi = workspace.getBlocksByType('esp32_wifi_connect').length > 0 || 
-                    workspace.getBlocksByType('esp32_wifi_status').length > 0 || 
-                    workspace.getBlocksByType('esp32_wifi_ip').length > 0 || hasHttp || hasWebSocket;
+      const hasWiFi = workspace.getBlocksByType('esp32_wifi_connect').some((b: any) => isBlockActive(b)) || 
+                    workspace.getBlocksByType('esp32_wifi_status').some((b: any) => isBlockActive(b)) || 
+                    workspace.getBlocksByType('esp32_wifi_ip').some((b: any) => isBlockActive(b)) || hasHttp || hasWebSocket;
                     
-      const hasBT = workspace.getBlocksByType('esp32_bluetooth_begin').length > 0 || 
-                  workspace.getBlocksByType('esp32_bluetooth_available').length > 0 || 
-                  workspace.getBlocksByType('esp32_bluetooth_read').length > 0 || 
-                  workspace.getBlocksByType('esp32_bluetooth_write').length > 0;
+      const hasBT = workspace.getBlocksByType('esp32_bluetooth_begin').some((b: any) => isBlockActive(b)) || 
+                  workspace.getBlocksByType('esp32_bluetooth_available').some((b: any) => isBlockActive(b)) || 
+                  workspace.getBlocksByType('esp32_bluetooth_read').some((b: any) => isBlockActive(b)) || 
+                  workspace.getBlocksByType('esp32_bluetooth_write').some((b: any) => isBlockActive(b));
 
-      const hasBlynk = workspace.getBlocksByType('blynk_config').length > 0 ||
-                       workspace.getBlocksByType('blynk_begin').length > 0 ||
-                       workspace.getBlocksByType('blynk_run').length > 0 ||
-                       workspace.getBlocksByType('blynk_on_write').length > 0 ||
-                       workspace.getBlocksByType('blynk_param_as_int').length > 0 ||
-                       workspace.getBlocksByType('blynk_virtual_write').length > 0;
+      const hasBlynk = workspace.getBlocksByType('blynk_config').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('blynk_begin').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('blynk_run').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('blynk_on_write').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('blynk_param_as_int').some((b: any) => isBlockActive(b)) ||
+                       workspace.getBlocksByType('blynk_virtual_write').some((b: any) => isBlockActive(b));
                   
       const isESP8266Board = activeBoard.toLowerCase().includes('esp8266') || activeBoard.toLowerCase().includes('nodemcu');
       const isESP32Board = activeBoard.toLowerCase().includes('esp32');
 
       if (hasBlynk) {
-        const blynkConfigBlock = workspace.getBlocksByType('blynk_config')[0];
+        const blynkConfigBlock = workspace.getBlocksByType('blynk_config').find((b: any) => isBlockActive(b));
         if (blynkConfigBlock) {
           const tIdBlock = blynkConfigBlock.getInputTargetBlock('TEMPLATE_ID');
           const tNameBlock = blynkConfigBlock.getInputTargetBlock('TEMPLATE_NAME');
@@ -2785,11 +2850,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         generatedCode += '\n';
       }
 
-      const setupBlocks = topBlocks.filter(b => b.type === 'arduino_setup');
-      const loopBlocks = topBlocks.filter(b => b.type === 'arduino_loop');
+      const setupBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'arduino_setup');
+      const loopBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'arduino_loop');
 
       // Render Blynk Callback Functions
-      const blynkWriteBlocks = topBlocks.filter(b => b.type === 'blynk_on_write');
+      const blynkWriteBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'blynk_on_write');
       if (blynkWriteBlocks.length > 0) {
         generatedCode += '// Blynk Callback Functions\n';
         blynkWriteBlocks.forEach((bBlock: any) => {
@@ -2805,7 +2870,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
 
       // Render custom procedure function definitions at global scope
-      const funcBlocks = topBlocks.filter(b => b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn');
+      const funcBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn'));
       if (funcBlocks.length > 0) {
         generatedCode += '// Custom Functions\n';
         funcBlocks.forEach((funcBlock: any) => {
@@ -2829,11 +2894,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         });
       }
 
-      // Auto-collect used pins to generate pinMode declarations
+      // Auto-collect used pins to generate pinMode declarations (only from active blocks)
       const outputs = new Set<string>();
       const inputs = new Set<string>();
-      console.log('[RoboLab Generator] Block types in workspace:', workspace.getAllBlocks(false).map(b => b.type));
       workspace.getAllBlocks(false).forEach(block => {
+        if (!isBlockActive(block)) return;
         if (block.type === 'pin_digital_write' || block.type === 'pin_analog_write') {
           const pin = block.getFieldValue('PIN');
           if (pin && (!isNaN(Number(pin)) || /^A\d+$/.test(pin))) {
@@ -2890,13 +2955,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       });
       
-      // Always generate standalone top blocks inside loop (if not setup/loop/functions)
-      topBlocks.forEach((block: Blockly.Block) => {
-        if (block.type !== 'arduino_setup' && block.type !== 'arduino_loop' && block.type !== 'procedures_defnoreturn' && block.type !== 'procedures_defreturn' && block.type !== 'blynk_on_write') {
-          generatedCode += generateBlockCode(block, '  ', 'arduino');
-        }
-      });
-      
+      // NOTE: Standalone/orphaned top blocks are strictly excluded from void loop()
       generatedCode += '}\n';
     } else {
       if (activeBoard === 'BBC micro:bit') {
@@ -2904,14 +2963,47 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         generatedCode += '# RoboLab Studio - Generated MicroPython Code (BBC micro:bit)\n';
         generatedCode += 'from microbit import *\n\n';
 
-        const mbSetupBlocks = topBlocks.filter(b => b.type === 'arduino_setup');
-        const mbLoopBlocks = topBlocks.filter(b => b.type === 'arduino_loop');
+        const mbFuncBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn'));
+        mbFuncBlocks.forEach((funcBlock: any) => {
+          const funcName = funcBlock.getFieldValue('NAME') || 'myFunction';
+          const args: string[] = funcBlock.arguments_ || [];
+          const isReturn = funcBlock.type === 'procedures_defreturn';
+          generatedCode += `def ${funcName}(${args.join(', ')}):\n`;
+          const stackContent = funcBlock.getInputTargetBlock('STACK');
+          let hasContent = false;
+          if (stackContent) {
+            const body = generateBlockCode(stackContent, '    ', 'python');
+            if (body.trim()) {
+              generatedCode += body;
+              hasContent = true;
+            }
+          }
+          if (isReturn) {
+            const retBlock = funcBlock.getInputTargetBlock('RETURN');
+            const retVal = retBlock ? getBlockValue(retBlock, 'python') : 'None';
+            generatedCode += `    return ${retVal}\n`;
+            hasContent = true;
+          }
+          if (!hasContent) {
+            generatedCode += '    pass\n';
+          }
+          generatedCode += '\n';
+        });
+
+        const mbSetupBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'arduino_setup' || b.type === 'basic_on_start'));
+        const mbLoopBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'arduino_loop');
+        const mbForeverBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'basic_forever');
+        const mbEventBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'input_on_button_pressed' || b.type === 'input_on_gesture'));
 
         // Setup langsung (tanpa indentasi)
         mbSetupBlocks.forEach(sb => {
-          const setupContent = sb.getInputTargetBlock('STACK');
-          if (setupContent) {
-            generatedCode += generateBlockCode(setupContent, '', 'python');
+          if (sb.type === 'arduino_setup') {
+            const setupContent = sb.getInputTargetBlock('STACK');
+            if (setupContent) {
+              generatedCode += generateBlockCode(setupContent, '', 'python');
+            }
+          } else {
+            generatedCode += generateBlockCode(sb, '', 'python');
           }
         });
 
@@ -2929,25 +3021,31 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           if (!hasContent) {
             generatedCode += '    pass\n';
           }
-        } else if (mbSetupBlocks.length === 0 && topBlocks.length === 0) {
+        }
+
+        // basic_forever blocks
+        mbForeverBlocks.forEach(fb => {
+          generatedCode += '\n' + generateBlockCode(fb, '', 'python');
+        });
+
+        // Event blocks
+        mbEventBlocks.forEach(eb => {
+          generatedCode += '\n' + generateBlockCode(eb, '', 'python');
+        });
+
+        if (mbSetupBlocks.length === 0 && mbLoopBlocks.length === 0 && mbForeverBlocks.length === 0 && mbEventBlocks.length === 0 && mbFuncBlocks.length === 0) {
           generatedCode += 'pass\n';
         }
-        
-        // Generate standalone top blocks globally
-        topBlocks.forEach((block: Blockly.Block) => {
-          if (block.type !== 'arduino_setup' && block.type !== 'arduino_loop') {
-            generatedCode += generateBlockCode(block, '', 'python');
-          }
-        });
       } else {
         // === Arduino / ESP32: Standard MicroPython ===
         generatedCode += 'import machine\n';
         generatedCode += 'import time\n\n';
         
-        // Auto-collect used pins
+        // Auto-collect used pins (only from active blocks)
         const outputs = new Set<string>();
         const inputs = new Set<string>();
         workspace.getAllBlocks(false).forEach(block => {
+          if (!isBlockActive(block)) return;
           if (block.type === 'pin_digital_write' || block.type === 'pin_analog_write') {
             const pin = block.getFieldValue('PIN');
             if (pin) outputs.add(pin);
@@ -2959,8 +3057,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
         if (outputs.size > 0 || inputs.size > 0) {
           outputs.forEach(pin => {
-              if (Array.from(workspace.getAllBlocks(false)).some(b => b.type === 'pin_analog_write' && b.getFieldValue('PIN') === pin)) {
-                 const pwmBlock = Array.from(workspace.getAllBlocks(false)).find(b => b.type === 'pin_analog_write' && b.getFieldValue('PIN') === pin);
+              if (Array.from(workspace.getAllBlocks(false)).some(b => isBlockActive(b) && b.type === 'pin_analog_write' && b.getFieldValue('PIN') === pin)) {
+                 const pwmBlock = Array.from(workspace.getAllBlocks(false)).find(b => isBlockActive(b) && b.type === 'pin_analog_write' && b.getFieldValue('PIN') === pin);
                  const freq = pwmBlock ? (pwmBlock.getFieldValue('FREQ') || 1000) : 1000;
                  generatedCode += `pwm${pin} = machine.PWM(machine.Pin(${pin}), freq=${freq})\n`;
                } else {
@@ -2969,7 +3067,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           });
           inputs.forEach(pin => {
              const cleanPin = pin.replace(/\D/g, '');
-             if (Array.from(workspace.getAllBlocks(false)).some(b => b.type === 'pin_analog_read' && b.getFieldValue('PIN') === pin)) {
+             if (Array.from(workspace.getAllBlocks(false)).some(b => isBlockActive(b) && b.type === 'pin_analog_read' && b.getFieldValue('PIN') === pin)) {
                generatedCode += `adc${cleanPin} = machine.ADC(machine.Pin(${cleanPin}))\n`;
              } else {
                generatedCode += `pin${pin} = machine.Pin(${pin}, machine.Pin.IN)\n`;
@@ -2978,8 +3076,35 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           generatedCode += '\n';
         }
 
-        const setupBlocks = topBlocks.filter(b => b.type === 'arduino_setup');
-        const loopBlocks = topBlocks.filter(b => b.type === 'arduino_loop');
+        const pyFuncBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn'));
+        pyFuncBlocks.forEach((funcBlock: any) => {
+          const funcName = funcBlock.getFieldValue('NAME') || 'myFunction';
+          const args: string[] = funcBlock.arguments_ || [];
+          const isReturn = funcBlock.type === 'procedures_defreturn';
+          generatedCode += `def ${funcName}(${args.join(', ')}):\n`;
+          const stackContent = funcBlock.getInputTargetBlock('STACK');
+          let hasContent = false;
+          if (stackContent) {
+            const body = generateBlockCode(stackContent, '    ', 'python');
+            if (body.trim()) {
+              generatedCode += body;
+              hasContent = true;
+            }
+          }
+          if (isReturn) {
+            const retBlock = funcBlock.getInputTargetBlock('RETURN');
+            const retVal = retBlock ? getBlockValue(retBlock, 'python') : 'None';
+            generatedCode += `    return ${retVal}\n`;
+            hasContent = true;
+          }
+          if (!hasContent) {
+            generatedCode += '    pass\n';
+          }
+          generatedCode += '\n';
+        });
+
+        const setupBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'arduino_setup');
+        const loopBlocks = topBlocks.filter(b => isBlockActive(b) && b.type === 'arduino_loop');
 
         // Render Setup Content
         setupBlocks.forEach(sb => {
@@ -2989,12 +3114,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
         });
 
-        // Generate standalone top blocks
-        topBlocks.forEach((block: Blockly.Block) => {
-          if (block.type !== 'arduino_setup' && block.type !== 'arduino_loop') {
-            generatedCode += generateBlockCode(block, '', 'python');
-          }
-        });
+        // NOTE: Standalone/orphaned top blocks are strictly excluded from Python script
 
         // Render Loop Content
         if (loopBlocks.length > 0) {
@@ -3171,30 +3291,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     let xml = `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
       <category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
-        <block type="arduino_setup"></block>
         <block type="robot_hw_setup"></block>
         <block type="robot_plan_container">
           <field name="PLAN_ID">1</field>
-          <statement name="STEPS">
-            <block type="robot_plan_step">
-              <field name="INDEX">0</field>
-              <field name="ACTION">MAJU</field>
-              <field name="TRIG_VAL">100</field>
-              <field name="TRIG_UNIT">ms</field>
-              <field name="TRIG_MODE">SENSOR</field>
-              <field name="SENSOR_PRESET">${centerPreset.pattern}</field>
-              <field name="PATTERN">${centerPreset.pattern}</field>
-              <field name="LOGIC_OP">OR</field>
-              <field name="BRAKE">0</field>
-              <field name="SPEED_L">160</field>
-              <field name="SPEED_R">160</field>
-              <field name="PID_ID">2</field>
-              <field name="SPEED_A">140</field>
-              <field name="TIMER_VAL">250</field>
-              <field name="TIMER_UNIT">ms</field>
-              <field name="LINE_COLOR">HITAM</field>
-            </block>
-          </statement>
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">0</field>
@@ -3726,7 +3825,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const frames: string[] = [];
 
       const scanBlocks = (block: Blockly.Block | null) => {
-        if (!block) return;
+        if (!block || !isBlockActive(block)) return;
         const type = block.type;
 
         if (type === 'basic_show_icon') {
@@ -3783,14 +3882,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         });
       };
 
-      // Scan setup and loop blocks
+      // Scan setup, loop, forever, on_start, and event blocks (only if active)
       const topBlocks = ws.getTopBlocks(false);
       topBlocks.forEach(tb => {
+        if (!isBlockActive(tb)) return;
         if (tb.type === 'arduino_setup' || tb.type === 'arduino_loop') {
           const stack = tb.getInputTargetBlock('STACK');
           if (stack) scanBlocks(stack);
-        } else {
-          scanBlocks(tb);
+        } else if (tb.type === 'basic_on_start' || tb.type === 'basic_forever' || tb.type === 'input_on_button_pressed' || tb.type === 'input_on_gesture') {
+          const handler = tb.getInputTargetBlock('HANDLER');
+          if (handler) scanBlocks(handler);
         }
       });
 
@@ -4325,6 +4426,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     let currentBlock: Blockly.Block | null = block;
 
     while (currentBlock) {
+      if (currentBlock.disabled || (typeof (currentBlock as any).isEnabled === 'function' && !(currentBlock as any).isEnabled())) {
+        currentBlock = currentBlock.getNextBlock();
+        continue;
+      }
       if (currentBlock.type === 'arduino_delay') {
         const ms = currentBlock.getFieldValue('MS');
         if (lang === 'arduino') {
