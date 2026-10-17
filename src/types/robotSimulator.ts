@@ -1006,6 +1006,30 @@ ${
   delay(targetVal);
 }
 
+void followLine(int baseSpeed, int pidId, LineColor lineColor) {
+  readAllSensors(lineColor);
+  if (pidId < 1 || pidId > 5) {
+    setMotorSpeed(baseSpeed, baseSpeed);
+    return;
+  }
+  PIDConfig& pid = pidList[pidId - 1];
+  float weightedSum = 0;
+  int activeCount = 0;
+  float half = (NUM_SENSORS - 1) / 2.0f;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (sensorState[i]) {
+      weightedSum += (i - half);
+      activeCount++;
+    }
+  }
+  float err = (activeCount > 0) ? (weightedSum / activeCount) : (pidLastError * 0.9f);
+  pidIntegral = constrain(pidIntegral + err * (pid.dt / 1000.0f), -30.0f, 30.0f);
+  float deriv = (err - pidLastError) / max(0.005f, pid.dt / 1000.0f);
+  pidLastError = err;
+  float corr = pid.kp * err + pid.ki * pidIntegral + pid.kd * deriv * 0.08f;
+  setMotorSpeed(constrain((int)(baseSpeed + corr), -255, 255), constrain((int)(baseSpeed - corr), -255, 255));
+}
+
 void runStep(
   int idx, ActionType act, long trigVal, DurationUnit trigUnit,
   const char* pattern, LogicOp op,
@@ -1013,54 +1037,58 @@ void runStep(
   int pidId, int speedA, long timerVal, DurationUnit timerUnit,
   LineColor lineColor, StopStage stopStage = STOP_NONE
 ) {
-  if (act == ACT_PAUSE) {
-    stopMotors();
-    waitDuration(trigVal > 0 ? trigVal : timerVal, trigVal > 0 ? trigUnit : timerUnit);
-    return;
-  }
-  // Tahap 1: Action & Durasi Aksi (ms / Encoder L / Encoder R) / Sensor PID
-  int actSpeedL = speedL;
-  int actSpeedR = speedR;
-  if (act == ACT_LEFT) {
-    actSpeedL = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedL : -abs(speedL);
-    actSpeedR = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedR : abs(speedR);
-  } else if (act == ACT_RIGHT) {
-    actSpeedL = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedL : abs(speedL);
-    actSpeedR = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedR : -abs(speedR);
-  } else if (act == ACT_MUNDUR) {
-    actSpeedL = -abs(speedL);
-    actSpeedR = -abs(speedR);
-  } else if (act == ACT_PAUSE) {
-    actSpeedL = 0;
-    actSpeedR = 0;
-  }
-  setMotorSpeed(actSpeedL, actSpeedR);
-  if (trigVal > 0) {
-    waitDuration(trigVal, trigUnit);
-  }
+  // Tahap 1: Menunggu Sensor / Motion (Mengikuti garis jika membaca sensor)
   if (pattern[0] != 'M') {
     while (!matchSensorPattern(pattern, op, lineColor)) {
-      setMotorSpeed(actSpeedL, actSpeedR);
+      followLine(speedA > 0 ? speedA : 120, pidId, lineColor);
       delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
     }
   }
-  // Brake
+
+  // Tahap 2: Jalankan Aksi Index
+  if (act == ACT_PAUSE) {
+    stopMotors();
+    waitDuration(trigVal > 0 ? trigVal : 100, trigUnit);
+  } else {
+    int actSpeedL = speedL;
+    int actSpeedR = speedR;
+    if (act == ACT_LEFT) {
+      actSpeedL = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedL : -abs(speedL);
+      actSpeedR = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedR : abs(speedR);
+    } else if (act == ACT_RIGHT) {
+      actSpeedL = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedL : abs(speedL);
+      actSpeedR = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedR : -abs(speedR);
+    } else if (act == ACT_MUNDUR) {
+      actSpeedL = -abs(speedL);
+      actSpeedR = -abs(speedR);
+    }
+    setMotorSpeed(actSpeedL, actSpeedR);
+    if (trigVal > 0) {
+      waitDuration(trigVal, trigUnit);
+    }
+  }
+
+  // Brake jika ada
   if (brakeMs > 0) {
-    setMotorSpeed(-actSpeedL / 2, -actSpeedR / 2);
+    setMotorSpeed(-speedL / 2, -speedR / 2);
     delay(brakeMs);
     stopMotors();
   }
+
   if (stopStage == STOP_AT_ACTION) {
     stopMotors();
     return;
   }
-  // Tahap 2: Lanjut Speed A selama Timer
+
+  // Tahap 3: Lanjut Speed A yaitu Mengikuti Garis selama waktu yang ditentukan / encoder
   if (timerVal > 0) {
-    int dirL = (act == ACT_LEFT) ? -speedA : (act == ACT_MUNDUR ? -speedA : speedA);
-    int dirR = (act == ACT_RIGHT) ? -speedA : (act == ACT_MUNDUR ? -speedA : speedA);
-    setMotorSpeed(dirL, dirR);
-    waitDuration(timerVal, timerUnit);
+    unsigned long startT = millis();
+    while (millis() - startT < (unsigned long)timerVal) {
+      followLine(speedA, pidId, lineColor);
+      delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
+    }
   }
+
   if (stopStage == STOP_AT_SPEED_A) {
     stopMotors();
   }
@@ -1168,37 +1196,54 @@ ${pidEntries}
 def set_motor_speed(speed_l, speed_r):
     pass
 
-def stop_motors():
-    set_motor_speed(0, 0)
+def follow_line(base_speed, pid_id, line_color):
+    pass
+
+def match_sensor_pattern(pattern, logic_op, line_color):
+    return True
 
 def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, speed_l, speed_r, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
-    # Pola Sensor: '0' = membaca sensor, 'x' = tidak membaca sensor
-    act_l, act_r = speed_l, speed_r
-    if action == "LEFT":
-        act_l = speed_l if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else -abs(speed_l)
-        act_r = speed_r if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else abs(speed_r)
-    elif action == "RIGHT":
-        act_l = speed_l if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else abs(speed_l)
-        act_r = speed_r if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else -abs(speed_r)
-    elif action == "MUNDUR":
-        act_l, act_r = -abs(speed_l), -abs(speed_r)
-    elif action == "PAUSE":
-        act_l, act_r = 0, 0
-    set_motor_speed(act_l, act_r)
-    if trig_val > 0:
-        time.sleep_ms(trig_val)
+    # Tahap 1: Menunggu Sensor / Motion (Mengikuti garis jika membaca sensor)
+    if pattern != "MOTION":
+        while not match_sensor_pattern(pattern, logic_op, line_color):
+            follow_line(speed_a if speed_a > 0 else 120, pid_id, line_color)
+            time.sleep_ms(10)
+
+    # Tahap 2: Jalankan Aksi Index
+    if action == "PAUSE":
+        stop_motors()
+        time.sleep_ms(trig_val if trig_val > 0 else 100)
+    else:
+        act_l, act_r = speed_l, speed_r
+        if action == "LEFT":
+            act_l = speed_l if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else -abs(speed_l)
+            act_r = speed_r if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else abs(speed_r)
+        elif action == "RIGHT":
+            act_l = speed_l if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else abs(speed_l)
+            act_r = speed_r if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else -abs(speed_r)
+        elif action == "MUNDUR":
+            act_l, act_r = -abs(speed_l), -abs(speed_r)
+        set_motor_speed(act_l, act_r)
+        if trig_val > 0:
+            time.sleep_ms(trig_val)
+
+    # Brake jika ada
     if brake_ms > 0:
-        set_motor_speed(-act_l // 2, -act_r // 2)
+        set_motor_speed(-speed_l // 2, -speed_r // 2)
         time.sleep_ms(brake_ms)
         stop_motors()
+
     if stop_stage == "ACTION":
         stop_motors()
         return
+
+    # Tahap 3: Lanjut Speed A (Mengikuti Garis) selama waktu yang ditentukan / encoder
     if timer_val > 0:
-        dir_l = -speed_a if action in ("LEFT", "MUNDUR") else speed_a
-        dir_r = -speed_a if action in ("RIGHT", "MUNDUR") else speed_a
-        set_motor_speed(dir_l, dir_r)
-        time.sleep_ms(timer_val)
+        start_t = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), start_t) < timer_val:
+            follow_line(speed_a, pid_id, line_color)
+            time.sleep_ms(10)
+
     if stop_stage == "SPEED_A":
         stop_motors()
 

@@ -171,7 +171,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     encL: 0,
     encR: 0,
     itemCursor: 0,
-    subStage: 'ACTION' as 'ACTION' | 'BRAKE' | 'SPEED_A' | 'DONE',
+    subStage: 'WAIT_TRIGGER' as 'WAIT_TRIGGER' | 'ACTION' | 'BRAKE' | 'SPEED_A' | 'DONE',
     stageStartMs: 0,
     stageStartEncL: 0,
     stageStartEncR: 0,
@@ -384,7 +384,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         encL: 0,
         encR: 0,
         itemCursor: 0,
-        subStage: 'ACTION',
+        subStage: 'WAIT_TRIGGER',
         stageStartMs: 0,
         stageStartEncL: 0,
         stageStartEncR: 0,
@@ -558,7 +558,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         encL: 0,
         encR: 0,
         itemCursor: 0,
-        subStage: 'ACTION',
+        subStage: 'WAIT_TRIGGER',
         stageStartMs: 0,
         stageStartEncL: 0,
         stageStartEncR: 0,
@@ -692,12 +692,53 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             return s.elapsedMs - s.stageStartMs >= targetVal;
           };
 
+          if (s.subStage === 'WAIT_TRIGGER') {
+            if (step.triggerMode === 'MOTION') {
+              // Mode Motion: Tidak menunggu sensor, langsung menjalankan aksi yang sudah dibuat pada index
+              s.subStage = 'ACTION';
+              s.stageStartMs = s.elapsedMs;
+              s.stageStartEncL = s.encL;
+              s.stageStartEncR = s.encR;
+            } else {
+              // Mode Sensor: Mengikuti garis menggunakan PID sambil memindai pola sensor yang ditentukan
+              const pidCorr = computePidCorrection();
+              const baseCruise = step.speedA > 0 ? step.speedA : 130;
+              cmdSpeedL = Math.max(-255, Math.min(255, baseCruise + pidCorr));
+              cmdSpeedR = Math.max(-255, Math.min(255, baseCruise - pidCorr));
+
+              setExecStatus({
+                stepIndex: step.index,
+                stage: 'WAIT_TRIGGER',
+                message: `🔍 Index #${step.index} [CARI SENSOR] · Menunggu Pola ${step.sensorPattern} (${step.logicOp}) · Mengikuti Garis`,
+                stoppedByInterrupt: false,
+              });
+
+              // Guard agar tidak langsung re-trigger jika baru saja berpindah dari index sebelumnya
+              const minGuardPassed = s.itemCursor === 0 ? true : s.elapsedMs - s.stageStartMs >= 40;
+              const patternMatched =
+                minGuardPassed &&
+                evaluateSensorPatternMatch(
+                  sensors,
+                  normalizeSensorPattern(step.sensorPattern, hardwareConfig.sensorCount),
+                  step.logicOp
+                );
+
+              if (patternMatched) {
+                // Sensor terdeteksi! Jalankan aksi yang sudah dibuat pada index
+                s.subStage = 'ACTION';
+                s.stageStartMs = s.elapsedMs;
+                s.stageStartEncL = s.encL;
+                s.stageStartEncR = s.encR;
+              }
+            }
+          }
+
           if (s.subStage === 'ACTION') {
             const trigVal = step.triggerValue ?? 100;
             setExecStatus({
               stepIndex: step.index,
               stage: 'ACTION',
-              message: `▶ Index #${step.index} [ACTION: ${step.action} ${trigVal} ${step.triggerUnit.toUpperCase()}] · Jika ${step.triggerMode === 'MOTION' ? 'MOTION' : `${step.sensorPattern} (${step.logicOp})`} · PID ${step.pidId || 'OFF'}`,
+              message: `▶ Index #${step.index} [AKSI: ${step.action} ${trigVal} ${step.triggerUnit.toUpperCase()}] · Speed L:${step.speedL} R:${step.speedR}`,
               stoppedByInterrupt: false,
             });
 
@@ -727,25 +768,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               cmdSpeedR = -Math.abs(step.speedR || 140);
             } else {
               // MAJU: Mengikuti garis menggunakan kontrol PID
-              const pidCorr = computePidCorrection();
-              cmdSpeedL = Math.max(-255, Math.min(255, step.speedL + pidCorr));
-              cmdSpeedR = Math.max(-255, Math.min(255, step.speedR - pidCorr));
+              if (step.pidId > 0) {
+                const pidCorr = computePidCorrection();
+                cmdSpeedL = Math.max(-255, Math.min(255, step.speedL + pidCorr));
+                cmdSpeedR = Math.max(-255, Math.min(255, step.speedR - pidCorr));
+              } else {
+                cmdSpeedL = step.speedL;
+                cmdSpeedR = step.speedR;
+              }
             }
 
-            // Check if Action duration / encoder count & sensor trigger condition are satisfied
-            const trigDurationDone = hasDurationElapsed(trigVal, step.triggerUnit);
-            const minGuardElapsed = trigVal > 0 ? trigDurationDone : s.elapsedMs - s.stageStartMs > 120;
-            const patternMatched =
-              step.triggerMode === 'MOTION'
-                ? trigDurationDone
-                : minGuardElapsed &&
-                  evaluateSensorPatternMatch(
-                    sensors,
-                    normalizeSensorPattern(step.sensorPattern, hardwareConfig.sensorCount),
-                    step.logicOp
-                  );
+            // Cek apakah aksi sudah selesai sesuai durasi / encoder yang ditentukan
+            const actionDone = hasDurationElapsed(trigVal, step.triggerUnit);
 
-            if (patternMatched) {
+            if (actionDone) {
               if (step.brake > 0) {
                 s.subStage = 'BRAKE';
                 s.stageStartMs = s.elapsedMs;
@@ -767,6 +803,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   stoppedByInterrupt: true,
                 });
               } else {
+                // Aksi selesai -> lanjut ke Speed A (mengikuti garis)
                 s.subStage = 'SPEED_A';
                 s.stageStartMs = s.elapsedMs;
                 s.stageStartEncL = s.encL;
@@ -807,6 +844,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   stoppedByInterrupt: true,
                 });
               } else {
+                // Brake selesai -> lanjut ke Speed A (mengikuti garis)
                 s.subStage = 'SPEED_A';
                 s.stageStartMs = s.elapsedMs;
                 s.stageStartEncL = s.encL;
@@ -814,30 +852,19 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               }
             }
           } else if (s.subStage === 'SPEED_A') {
+            // Ketika aksi sudah selesai maka menjalankan speed A yaitu mengikuti garis
             setExecStatus({
               stepIndex: step.index,
               stage: 'SPEED_A',
-              message: `⚡ Index #${step.index} [SPEED A: ${step.speedA}] · Timer ${step.timerValue} ${step.timerUnit.toUpperCase()}`,
+              message: `⚡ Index #${step.index} [SPEED A: ${step.speedA}] · Mengikuti Garis · Timer ${step.timerValue} ${step.timerUnit.toUpperCase()}`,
               stoppedByInterrupt: false,
             });
 
-            if (step.action === 'LEFT') {
-              cmdSpeedL = -Math.abs(step.speedA || 120);
-              cmdSpeedR = Math.abs(step.speedA || 120);
-            } else if (step.action === 'RIGHT') {
-              cmdSpeedL = Math.abs(step.speedA || 120);
-              cmdSpeedR = -Math.abs(step.speedA || 120);
-            } else if (step.action === 'MUNDUR') {
-              cmdSpeedL = -Math.abs(step.speedA || 120);
-              cmdSpeedR = -Math.abs(step.speedA || 120);
-            } else if (step.action === 'PAUSE') {
-              cmdSpeedL = 0;
-              cmdSpeedR = 0;
-            } else {
-              const pidCorr = computePidCorrection();
-              cmdSpeedL = Math.max(-255, Math.min(255, step.speedA + pidCorr));
-              cmdSpeedR = Math.max(-255, Math.min(255, step.speedA - pidCorr));
-            }
+            // Selalu mengikuti garis menggunakan kontrol PID saat Speed A
+            const pidCorr = computePidCorrection();
+            const baseSpeedA = step.speedA || 120;
+            cmdSpeedL = Math.max(-255, Math.min(255, baseSpeedA + pidCorr));
+            cmdSpeedR = Math.max(-255, Math.min(255, baseSpeedA - pidCorr));
 
             if (hasDurationElapsed(step.timerValue, step.timerUnit)) {
               if (hasStopAfterSpeedA) {
@@ -858,9 +885,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   stoppedByInterrupt: true,
                 });
               } else {
-                // Advance to next step
+                // Speed A selesai -> maju ke index selanjutnya (mengulang pola yang sama)
                 s.itemCursor += 1;
-                s.subStage = 'ACTION';
+                s.subStage = 'WAIT_TRIGGER';
                 s.stageStartMs = s.elapsedMs;
                 s.stageStartEncL = s.encL;
                 s.stageStartEncR = s.encR;

@@ -3255,7 +3255,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [helpTab, setHelpTab] = useState<'quickstart' | 'shortcuts' | 'about'>('quickstart');
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('robolab_theme_mode') as 'dark' | 'light') || 'dark';
+    return (localStorage.getItem('robolab_theme_mode') as 'dark' | 'light') || 'light';
   });
   const [themeColor, setThemeColor] = useState<'cyan' | 'sky' | 'emerald' | 'pink'>(() => {
     return (localStorage.getItem('robolab_theme_color') as 'cyan' | 'sky' | 'emerald' | 'pink') || 'cyan';
