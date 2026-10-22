@@ -124,7 +124,7 @@ export interface ActiveExecutionHighlight {
   running: boolean;
   planId: number | null;
   stepIndex: number | null;
-  stage: 'ACTION' | 'BRAKE' | 'SPEED_A' | 'STOPPED' | 'FINISHED' | null;
+  stage: 'SENSOR' | 'WAIT_TRIGGER' | 'ACTION' | 'BRAKE' | 'SPEED_A' | 'STOPPED' | 'FINISHED' | null;
   blockId: string | null;
   stoppedByInterrupt?: boolean;
 }
@@ -743,8 +743,8 @@ export function createDefaultRobotPlans(sensorCount: SensorCount = 6): RobotPlan
           triggerValue: 100,
           triggerUnit: 'ms',
           triggerMode: 'SENSOR',
-          sensorPattern: patCross,
-          logicOp: 'EQUAL',
+          sensorPattern: patCenter,
+          logicOp: 'OR',
           brake: 20,
           speedL: 160,
           speedR: 160,
@@ -1050,15 +1050,20 @@ void runStep(
   int pidId, int speedA, long timerVal, DurationUnit timerUnit,
   LineColor lineColor, StopStage stopStage = STOP_NONE
 ) {
-  // Tahap 1: Menunggu Sensor / Motion (Mengikuti garis jika membaca sensor)
+  // Tahap 1: Evaluasi Sensor: Apakah sensor terdeteksi? Jika belum, telusuri garis atau tunggu
   if (pattern[0] != 'M') {
     while (!matchSensorPattern(pattern, op, lineColor)) {
-      followLine(speedA > 0 ? speedA : 120, pidId, lineColor);
-      delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
+      if (speedA > 0) {
+        followLine(speedA, pidId, lineColor);
+        delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
+      } else {
+        stopMotors();
+        delay(5);
+      }
     }
   }
 
-  // Tahap 2: Jalankan Aksi Index
+  // Tahap 2: Sensor Terdeteksi -> Jalankan Aksi Index
   if (act == ACT_PAUSE) {
     stopMotors();
     waitDuration(trigVal > 0 ? trigVal : 100, trigUnit);
@@ -1216,13 +1221,17 @@ def match_sensor_pattern(pattern, logic_op, line_color):
     return True
 
 def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, speed_l, speed_r, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
-    # Tahap 1: Menunggu Sensor / Motion (Mengikuti garis jika membaca sensor)
+    # Tahap 1: Evaluasi Sensor: Apakah sensor terdeteksi? Jika belum, telusuri garis atau tunggu
     if pattern != "MOTION":
         while not match_sensor_pattern(pattern, logic_op, line_color):
-            follow_line(speed_a if speed_a > 0 else 120, pid_id, line_color)
-            time.sleep_ms(10)
+            if speed_a > 0:
+                follow_line(speed_a, pid_id, line_color)
+                time.sleep_ms(10)
+            else:
+                stop_motors()
+                time.sleep_ms(10)
 
-    # Tahap 2: Jalankan Aksi Index
+    # Tahap 2: Sensor Terdeteksi -> Jalankan Aksi Index
     if action == "PAUSE":
         stop_motors()
         time.sleep_ms(trig_val if trig_val > 0 else 100)

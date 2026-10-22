@@ -648,15 +648,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           const sensors = sampleSensorsAtPose(s.x, s.y, s.theta, step.lineColor);
           setSensorReadings(sensors);
 
-          // Broadcast live running block highlight to Blockly
-          onHighlightChange?.({
-            running: true,
-            planId: currentPlan.planId,
-            stepIndex: step.index,
-            stage: s.subStage === 'SPEED_A' ? 'SPEED_A' : s.subStage === 'BRAKE' ? 'BRAKE' : 'ACTION',
-            blockId: step.blockId || null,
-          });
-
           let cmdSpeedL = 0;
           let cmdSpeedR = 0;
 
@@ -693,7 +684,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             return s.elapsedMs - s.stageStartMs >= targetVal;
           };
 
-          // ── 1. KETIKA SENSOR TERDETEKSI / MOTION TANPA SENSOR ──
+          // ── 1. EVALUASI SENSOR TERLEBIH DAHULU: Apakah sensor (...) terdeteksi? ──
           if (s.subStage === 'WAIT_TRIGGER') {
             if (step.triggerMode === 'MOTION') {
               // Motion tanpa sensor: Langsung lanjut mengeksekusi aksi pada index
@@ -702,20 +693,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               s.stageStartEncL = s.encL;
               s.stageStartEncR = s.encR;
             } else {
-              // Sensor terdeteksi: Menelusuri garis sambil memindai pola sensor
-              const pidCorr = computePidCorrection();
-              const baseCruise = step.speedA > 0 ? step.speedA : 130;
-              cmdSpeedL = Math.max(-255, Math.min(255, baseCruise + pidCorr));
-              cmdSpeedR = Math.max(-255, Math.min(255, baseCruise - pidCorr));
-
-              setExecStatus({
-                stepIndex: step.index,
-                stage: 'WAIT_TRIGGER',
-                message: `🔍 Index #${step.index} [DETEKSI SENSOR: ${step.sensorPattern}] · Menelusuri Garis`,
-                stoppedByInterrupt: false,
-              });
-
-              // Guard debouncing singkat agar tidak re-trigger instan jika baru berpindah dari index sebelumnya
+              // Evaluasi kecocokan sensor terlebih dahulu sebelum melakukan aksi apapun
               const minGuardPassed = s.itemCursor === 0 ? true : s.elapsedMs - s.stageStartMs >= 35;
               const patternMatched =
                 minGuardPassed &&
@@ -726,16 +704,36 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 );
 
               if (patternMatched) {
-                // Ketika sensor terdeteksi -> Lanjut jalankan Aksi pada index
+                // JIKA SENSOR TERDETEKSI -> Langsung jalankan Aksi pada index!
                 s.subStage = 'ACTION';
                 s.stageStartMs = s.elapsedMs;
                 s.stageStartEncL = s.encL;
                 s.stageStartEncR = s.encR;
+              } else {
+                // JIKA BELUM TERDETEKSI:
+                // Robot membaca sensor terlebih dahulu (BUKAN menjalankan aksi).
+                // Hanya bergerak menelusuri garis jika user menentukan speedA > 0. Jika speedA === 0, robot diam menunggu sensor.
+                const cruiseSpeed = step.speedA > 0 ? step.speedA : 0;
+                if (cruiseSpeed > 0) {
+                  const pidCorr = computePidCorrection();
+                  cmdSpeedL = Math.max(-255, Math.min(255, cruiseSpeed + pidCorr));
+                  cmdSpeedR = Math.max(-255, Math.min(255, cruiseSpeed - pidCorr));
+                } else {
+                  cmdSpeedL = 0;
+                  cmdSpeedR = 0;
+                }
+
+                setExecStatus({
+                  stepIndex: step.index,
+                  stage: 'WAIT_TRIGGER',
+                  message: `🔍 Index #${step.index} [MEMBACA SENSOR: ${step.sensorPattern}] · Menunggu Terdeteksi`,
+                  stoppedByInterrupt: false,
+                });
               }
             }
           }
 
-          // ── 2. AKSI PADA INDEX ──
+          // ── 2. AKSI PADA INDEX (HANYA DIEKSEKUSI JIKA SENSOR SUDAH TERDETEKSI ATAU MOTION) ──
           if (s.subStage === 'ACTION') {
             const trigVal = step.triggerValue ?? 100;
             setExecStatus({
@@ -887,6 +885,17 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 s.stageStartEncR = s.encR;
               }
             }
+          }
+
+          // Broadcast live running block highlight to Blockly
+          if (!s.finished) {
+            onHighlightChange?.({
+              running: true,
+              planId: currentPlan.planId,
+              stepIndex: step.index,
+              stage: s.subStage === 'SPEED_A' ? 'SPEED_A' : s.subStage === 'BRAKE' ? 'BRAKE' : s.subStage === 'ACTION' ? 'ACTION' : 'SENSOR',
+              blockId: step.blockId || null,
+            });
           }
 
           // Differential drive kinematics calibrated to Motor RPM & Wheel Diameter
