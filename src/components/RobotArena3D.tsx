@@ -425,8 +425,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       if (!img) return results;
 
       const rScale = (hardwareConfig.robotScale || 1.0) * 1.18;
-      const sensorWingWidth = Math.max(33, Math.min(44, 24 + count * 1.6));
-      const sSpan = (sensorWingWidth - 5) * 2;
+      const sensorWingWidth =
+        count === 2 ? 16 : count === 4 ? 24 : Math.max(33, Math.min(44, 24 + count * 1.6));
+      const sSpan = count === 2 ? 16 : count === 4 ? 30 : (sensorWingWidth - 5) * 2;
 
       const cosT = Math.cos(rTheta);
       const sinT = Math.sin(rTheta);
@@ -1387,13 +1388,25 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       }
 
       // 3b. Wide Curved/Angled Front Sensor Array Wing Bar (Iconic Line Follower Nose)
-      const sensorWingWidth = Math.max(33, Math.min(44, 24 + hardwareConfig.sensorCount * 1.6));
+      const sensorWingWidth =
+        hardwareConfig.sensorCount === 2
+          ? 16
+          : hardwareConfig.sensorCount === 4
+          ? 24
+          : Math.max(33, Math.min(44, 24 + hardwareConfig.sensorCount * 1.6));
+      const sSpan =
+        hardwareConfig.sensorCount === 2
+          ? 16
+          : hardwareConfig.sensorCount === 4
+          ? 30
+          : (sensorWingWidth - 5) * 2;
+      const innerW = Math.min(13, sensorWingWidth - 3);
       const frontWingPts: Array<[number, number]> = [
         [44, -sensorWingWidth * 0.48],
         [37, -sensorWingWidth],
         [25, -sensorWingWidth],
-        [23, -13],
-        [23, 13],
+        [23, -innerW],
+        [23, innerW],
         [25, sensorWingWidth],
         [37, sensorWingWidth],
         [44, sensorWingWidth * 0.48],
@@ -1527,7 +1540,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
       // 6. Front Sensor Array LEDs ('0' = Green Glow on Line, 'X' = Red Off Line)
       const sCount = hardwareConfig.sensorCount;
-      const sSpan = (sensorWingWidth - 5) * 2;
       for (let i = 0; i < sCount; i++) {
         const frac = sCount === 1 ? 0 : i / (sCount - 1) - 0.5;
         // Slight arc along the front wing nose
@@ -1680,6 +1692,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   // Update hardware helper that also triggers auto-PID & smart pin estimator
   const updateHardware = (patch: Partial<RobotHardwareConfig>, recalcPins = false, recalcPids = false) => {
     const merged: RobotHardwareConfig = { ...hardwareConfig, ...patch };
+    if (merged.sensorCount === 2 || merged.sensorCount === 4) {
+      merged.sensorMode = 'direct';
+    }
     if (recalcPins) {
       merged.pins = estimateRobotPins(merged.mcu, merged.sensorCount, merged.sensorMode);
     }
@@ -2201,7 +2216,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   onChange={(e) => {
                     const sc = parseInt(e.target.value, 10) as SensorCount;
                     const mode: SensorReadMode =
-                      sc >= 6 ? 'mux_4067' : hardwareConfig.sensorMode;
+                      (sc === 2 || sc === 4)
+                        ? 'direct'
+                        : (sc >= 6 ? 'mux_4067' : (hardwareConfig.sensorMode === 'direct' ? 'mux_4051' : hardwareConfig.sensorMode));
                     updateHardware({ sensorCount: sc, sensorMode: mode }, true, true);
                   }}
                   className={`w-full border rounded px-2 py-1 font-bold ${
@@ -2221,19 +2238,28 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 <label className={`block text-[10px] font-bold uppercase mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Mode Baca Sensor / Mux
                 </label>
-                <select
-                  value={hardwareConfig.sensorMode}
-                  onChange={(e) =>
-                    updateHardware({ sensorMode: e.target.value as SensorReadMode }, true, false)
-                  }
-                  className={`w-full border rounded px-2 py-1 font-semibold ${
-                    isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-100 border-slate-700'
-                  }`}
-                >
-                  <option value="mux_4067">Multiplexer CD74HC4067 (S0..S3 + SIG)</option>
-                  <option value="mux_4051">Multiplexer 74HC4051 (S0..S2 + SIG)</option>
-                  <option value="direct">Pin Sensor Langsung (Direct ADC/Digital)</option>
-                </select>
+                {hardwareConfig.sensorCount === 2 || hardwareConfig.sensorCount === 4 ? (
+                  <div className={`px-2 py-1.5 rounded text-xs font-semibold flex items-center justify-between ${
+                    isLight ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/60'
+                  }`}>
+                    <span>⚡ Tanpa Multiplexer (Direct Pin)</span>
+                    <span className="text-[10px] opacity-75">Otomatis ({hardwareConfig.sensorCount} Sensor)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={hardwareConfig.sensorMode}
+                    onChange={(e) =>
+                      updateHardware({ sensorMode: e.target.value as SensorReadMode }, true, false)
+                    }
+                    className={`w-full border rounded px-2 py-1 font-semibold ${
+                      isLight ? 'bg-white text-slate-800 border-slate-300' : 'bg-[#111e34] text-slate-100 border-slate-700'
+                    }`}
+                  >
+                    <option value="mux_4067">Multiplexer CD74HC4067 (S0..S3 + SIG)</option>
+                    <option value="mux_4051">Multiplexer 74HC4051 (S0..S2 + SIG)</option>
+                    <option value="direct">Pin Sensor Langsung (Direct ADC/Digital)</option>
+                  </select>
+                )}
               </div>
 
               {/* Jenis Motor & RPM */}
@@ -2392,7 +2418,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 </select>
               </label>
 
-              {hardwareConfig.sensorMode !== 'direct' && (
+              {hardwareConfig.sensorMode !== 'direct' && hardwareConfig.sensorCount !== 2 && hardwareConfig.sensorCount !== 4 ? (
                 <>
                   <span className={`font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
                     Mux S0..S3: [{hardwareConfig.pins.muxS0}, {hardwareConfig.pins.muxS1}, {hardwareConfig.pins.muxS2}
@@ -2415,6 +2441,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                     </select>
                   </label>
                 </>
+              ) : (
+                <span className={`font-mono ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
+                  Direct Pin Sensor: [{hardwareConfig.pins.sensorDirectPins.slice(0, hardwareConfig.sensorCount).join(', ')}] (Tanpa Mux)
+                </span>
               )}
 
               {hardwareConfig.hasEncoder && (

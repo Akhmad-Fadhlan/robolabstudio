@@ -221,6 +221,9 @@ export function estimateRobotPins(
   sensorCount: SensorCount,
   sensorMode: SensorReadMode
 ): RobotPinConfig {
+  const isDirectSensor = sensorCount === 2 || sensorCount === 4;
+  const effectiveMode: SensorReadMode = isDirectSensor ? 'direct' : sensorMode;
+
   if (mcu === 'ESP32 DevKit V1') {
     return {
       pwmL: '25',
@@ -294,7 +297,7 @@ export function estimateRobotPins(
   }
 
   // Arduino Uno / Nano
-  const useMux = sensorMode !== 'direct' || sensorCount > 6;
+  const useMux = !isDirectSensor && (effectiveMode !== 'direct' || sensorCount > 6);
   return {
     pwmL: '5',
     dirL1: '4',
@@ -393,11 +396,11 @@ export function normalizeSensorPattern(raw: string, sensorCount: SensorCount): s
 
 export function getDefaultSensorPattern(sensorCount: SensorCount): string {
   if (sensorCount === 2) return '00';
-  if (sensorCount === 4) return '0xx0';
-  if (sensorCount === 5) return '0xxx0';
-  if (sensorCount === 6) return '00xx00';
-  if (sensorCount === 8) return '00xxxx00';
-  return '000xxxxxx000';
+  if (sensorCount === 4) return 'x00x';
+  if (sensorCount === 5) return 'xx0xx';
+  if (sensorCount === 6) return 'xx00xx';
+  if (sensorCount === 8) return 'xxx00xxx';
+  return 'xxxxx00xxxxx';
 }
 
 export interface SensorPresetOption {
@@ -672,6 +675,15 @@ export function getSensorPresetOptions(sensorCount: SensorCount): SensorPresetOp
     description: 'Semua sensor mendeteksi garis (garis melintang / perempatan)',
   });
 
+  // 8. Di Luar Garis (Semua Sensor Lepas Garis)
+  options.push({
+    id: 'off_line',
+    label: `⭕ Lepas Garis / Luar Garis (${sensorCount} Sensor [${'x'.repeat(sensorCount)}])`,
+    pattern: 'x'.repeat(sensorCount),
+    category: 'none',
+    description: 'Semua sensor di luar garis / putih',
+  });
+
   const uniqueOptions: SensorPresetOption[] = [];
   const seenPatterns = new Set<string>();
   for (const opt of options) {
@@ -827,8 +839,9 @@ export function generateRobotPlanArduinoCode(
   activePlanToRun = 1
 ): string {
   const p = hw.pins;
-  const useMux = hw.sensorMode !== 'direct';
-  const isMux16 = hw.sensorMode === 'mux_4067';
+  const isDirectSensor = hw.sensorCount === 2 || hw.sensorCount === 4 || hw.sensorMode === 'direct';
+  const useMux = !isDirectSensor;
+  const isMux16 = useMux && hw.sensorMode === 'mux_4067';
 
   const pidLines = hw.pids
     .map(
@@ -843,7 +856,7 @@ export function generateRobotPlanArduinoCode(
 #define MUX_S1 ${p.muxS1}
 #define MUX_S2 ${p.muxS2}
 ${isMux16 ? `#define MUX_S3 ${p.muxS3}\n` : ''}#define MUX_SIG ${p.muxSig}`
-    : `// Sensor Garis Direct Pin (${hw.sensorCount} Sensor)
+    : `// Sensor Garis Direct Pin (${hw.sensorCount} Sensor - Tanpa Multiplexer)
 const int SENSOR_PINS[${hw.sensorCount}] = { ${p.sensorDirectPins.slice(0, hw.sensorCount).join(', ')} };`;
 
   const encoderSection = hw.hasEncoder
@@ -1110,7 +1123,7 @@ ${
   pinMode(MUX_S1, OUTPUT);
   pinMode(MUX_S2, OUTPUT);
 ${isMux16 ? '  pinMode(MUX_S3, OUTPUT);\n' : ''}`
-    : ''
+    : `  for (int i = 0; i < NUM_SENSORS; i++) { pinMode(SENSOR_PINS[i], INPUT); }\n`
 }${
     hw.hasEncoder
       ? `  pinMode(ENC_L_PIN, INPUT_PULLUP);
@@ -1178,7 +1191,7 @@ export function generateRobotPlanPythonCode(
 
   return `# ============================================================================
 # ROBOLAB STUDIO - AUTO-GENERATED MICROPYTHON ROBOT PLAN
-# Board: ${hw.mcu} | Sensor: ${hw.sensorCount} (${hw.sensorMode}) | Motor: ${hw.motorRpm} RPM
+# Board: ${hw.mcu} | Sensor: ${hw.sensorCount} (${(hw.sensorCount === 2 || hw.sensorCount === 4) ? 'Tanpa Multiplexer / Direct' : hw.sensorMode}) | Motor: ${hw.motorRpm} RPM
 # ============================================================================
 from machine import Pin, PWM, ADC
 import time
@@ -1391,16 +1404,15 @@ export function buildRobotPlanBlocklyXml(
     if (item.type === 'step') {
       const pat = normalizeSensorPattern(item.sensorPattern, hw.sensorCount);
       const matched = findMatchingSensorPreset(pat, hw.sensorCount);
-      const presetVal = matched ? pat : 'CUSTOM';
+      const presetVal = matched ? pat : pat;
       return `<block type="robot_plan_step" id="${bid}">
         <field name="INDEX">${item.index}</field>
+        <field name="TRIG_MODE">${item.triggerMode}</field>
+        <field name="SENSOR_PRESET">${presetVal}</field>
+        <field name="LOGIC_OP">${item.logicOp}</field>
         <field name="ACTION">${item.action}</field>
         <field name="TRIG_VAL">${item.triggerValue ?? 100}</field>
         <field name="TRIG_UNIT">${item.triggerUnit}</field>
-        <field name="TRIG_MODE">${item.triggerMode}</field>
-        <field name="SENSOR_PRESET">${presetVal}</field>
-        <field name="PATTERN">${pat}</field>
-        <field name="LOGIC_OP">${item.logicOp}</field>
         <field name="BRAKE">${item.brake}</field>
         <field name="SPEED_L">${item.speedL}</field>
         <field name="SPEED_R">${item.speedR}</field>
@@ -1440,7 +1452,7 @@ export function buildRobotPlanBlocklyXml(
         <field name="PWM_R">${hw.pins.pwmR}</field>
         <field name="MOTOR_RPM">${hw.motorRpm}</field>
         <field name="SENSOR_COUNT">${hw.sensorCount}</field>
-        <field name="SENSOR_MODE">${hw.sensorMode}</field>
+        <field name="SENSOR_MODE">${(hw.sensorCount === 2 || hw.sensorCount === 4) ? 'direct' : hw.sensorMode}</field>
         <field name="MUX_SIG">${hw.pins.muxSig}</field>
         <field name="HAS_ENCODER">${hw.hasEncoder ? 'YES' : 'NO'}</field>
         <field name="ENC_L">${hw.pins.encLA}</field>

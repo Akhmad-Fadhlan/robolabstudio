@@ -62,14 +62,14 @@ const registerRobotPlanBlocks = () => {
       ];
 
       this.appendDummyInput()
-        .appendField('🔍 Sensor')
+        .appendField('🔍')
         .appendField(new Blockly.FieldDropdown(sensorOpts), 'SENSOR_COUNT')
         .appendField('Mode')
         .appendField(
           new Blockly.FieldDropdown([
+            ['Tanpa Multiplexer (Direct Pin)', 'direct'],
             ['Multiplexer 4067 (16-Ch)', 'mux_4067'],
             ['Multiplexer 4051 (8-Ch)', 'mux_4051'],
-            ['Direct Pin', 'direct'],
           ]),
           'SENSOR_MODE'
         )
@@ -90,8 +90,19 @@ const registerRobotPlanBlocks = () => {
       this.setNextStatement(true, null);
       this.setColour('#0ea5e9');
       this.setTooltip(
-        'Otomatis mengatur pin PWM motor, sensor multiplexer, interrupt encoder, dan RPM motor ke kode .ino & .py'
+        'Otomatis mengatur pin PWM motor, sensor multiplexer / direct pin, interrupt encoder, dan RPM motor ke kode .ino & .py'
       );
+
+      this.setOnChange(function (this: Blockly.Block, changeEvent: any) {
+        if (!changeEvent || changeEvent.blockId !== this.id) return;
+        if (changeEvent.type !== Blockly.Events.BLOCK_CHANGE) return;
+        if (changeEvent.name === 'SENSOR_COUNT') {
+          const sc = Number(this.getFieldValue('SENSOR_COUNT'));
+          if (sc === 2 || sc === 4) {
+            this.setFieldValue('direct', 'SENSOR_MODE');
+          }
+        }
+      });
     },
   };
 
@@ -132,27 +143,41 @@ const registerRobotPlanBlocks = () => {
   // 4. Block: Step Index (Rumus Lengkap: Index, Aksi + Angka ms/Enc L/Enc R, Jika Motion/Poin Sensor 00xx00 Op, Break, Speed L/R, PID 1-5, Lanjut Speed A, Timer, Garis)
   Blockly.Blocks['robot_plan_step'] = {
     init: function (this: Blockly.Block) {
-      const count = activeRobotHwConfig?.sensorCount || 6;
-      const defaultPat = getDefaultSensorPattern(count);
-
-      const presetDropdown = new Blockly.FieldDropdown(() => {
+      const presetDropdown = new Blockly.FieldDropdown(function (this: Blockly.FieldDropdown) {
         const curCount = activeRobotHwConfig?.sensorCount || 6;
         const opts = getSensorPresetOptions(curCount);
         const list: [string, string][] = opts.map((opt) => [
           `${opt.label} [${opt.pattern}]`,
           opt.pattern,
         ]);
-        list.push(['✏️ Kustom (Atur 0/x Bebas)', 'CUSTOM']);
+        const curVal = this?.getValue?.();
+        if (curVal && !opts.some((o) => o.pattern === curVal)) {
+          list.push([`Pola [${curVal}]`, curVal]);
+        }
         return list;
-      });
-
-      const patternField = new Blockly.FieldTextInput(defaultPat, (newVal: string) => {
-        return normalizeSensorPattern(newVal, activeRobotHwConfig?.sensorCount || 6);
       });
 
       this.appendDummyInput()
         .appendField('🔢 Index')
         .appendField(new Blockly.FieldNumber(0, 0, 99, 1), 'INDEX')
+        .appendField('│ Jika')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['🎯 Sensor', 'SENSOR'],
+            ['⚡ Motion (Tanpa Sensor)', 'MOTION'],
+          ]),
+          'TRIG_MODE'
+        )
+        .appendField(presetDropdown, 'SENSOR_PRESET')
+        .appendField(
+          new Blockly.FieldDropdown([
+            ['EQUAL', 'EQUAL'],
+            ['AND', 'AND'],
+            ['OR', 'OR'],
+            ['XOR', 'XOR'],
+          ]),
+          'LOGIC_OP'
+        )
         .appendField('│ Aksi')
         .appendField(
           new Blockly.FieldDropdown([
@@ -166,25 +191,6 @@ const registerRobotPlanBlocks = () => {
         )
         .appendField(new Blockly.FieldNumber(100, 0, 20000, 10), 'TRIG_VAL')
         .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
-        .appendField('│ Jika')
-        .appendField(
-          new Blockly.FieldDropdown([
-            ['🎯 Poin Sensor', 'SENSOR'],
-            ['⚡ Motion (Tanpa Sensor)', 'MOTION'],
-          ]),
-          'TRIG_MODE'
-        )
-        .appendField(presetDropdown, 'SENSOR_PRESET')
-        .appendField(patternField, 'PATTERN')
-        .appendField(
-          new Blockly.FieldDropdown([
-            ['EQUAL', 'EQUAL'],
-            ['AND', 'AND'],
-            ['OR', 'OR'],
-            ['XOR', 'XOR'],
-          ]),
-          'LOGIC_OP'
-        )
         .appendField('│ Break')
         .appendField(new Blockly.FieldNumber(0, 0, 1000, 5), 'BRAKE');
 
@@ -223,33 +229,8 @@ const registerRobotPlanBlocks = () => {
       this.setNextStatement(true, null);
       this.setColour('#3b82f6');
       this.setTooltip(
-        "Step Index Robot: Pilihan kombinasi sensor (Kanan, Kiri, Tengah Kiri/Kanan, Sayap, Perempatan) menyesuaikan jumlah sensor robot. '0' = membaca garis, 'x' = diabaikan."
+        "Step Index Robot: Jika (Sensor/Motion) baru Aksi. Dropdown sensor menyesuaikan jumlah sensor robot."
       );
-
-      this.setOnChange(function (this: Blockly.Block, changeEvent: any) {
-        if (!changeEvent || changeEvent.blockId !== this.id) return;
-        if (changeEvent.type !== Blockly.Events.BLOCK_CHANGE) return;
-        if (this.workspace?.isFlyout) return;
-
-        if (changeEvent.name === 'SENSOR_PRESET') {
-          const selectedVal = this.getFieldValue('SENSOR_PRESET');
-          if (selectedVal && selectedVal !== 'CUSTOM') {
-            const curPat = this.getFieldValue('PATTERN');
-            if (curPat !== selectedVal) {
-              this.setFieldValue(selectedVal, 'PATTERN');
-            }
-          }
-        } else if (changeEvent.name === 'PATTERN') {
-          const curPat = this.getFieldValue('PATTERN') || '';
-          const activeSc = activeRobotHwConfig?.sensorCount || 6;
-          const matched = findMatchingSensorPreset(curPat, activeSc);
-          const target = matched ? matched.pattern : 'CUSTOM';
-          const curPreset = this.getFieldValue('SENSOR_PRESET');
-          if (curPreset !== target) {
-            this.setFieldValue(target, 'SENSOR_PRESET');
-          }
-        }
-      });
     },
   };
 
@@ -2001,13 +1982,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     if (!ws) return;
     const stepBlocks = ws.getBlocksByType('robot_plan_step', false);
     stepBlocks.forEach((b) => {
-      const curPat = b.getFieldValue('PATTERN') || '';
+      const curPat = b.getFieldValue('SENSOR_PRESET') || b.getFieldValue('PATTERN') || '';
       const norm = normalizeSensorPattern(curPat, robotHardwareConfig.sensorCount);
-      if (curPat !== norm) {
-        b.setFieldValue(norm, 'PATTERN');
-      }
       const matched = findMatchingSensorPreset(norm, robotHardwareConfig.sensorCount);
-      b.setFieldValue(matched ? norm : 'CUSTOM', 'SENSOR_PRESET');
+      const target = matched ? matched.pattern : getDefaultSensorPattern(robotHardwareConfig.sensorCount);
+      b.setFieldValue(target, 'SENSOR_PRESET');
       if (!robotHardwareConfig.hasEncoder) {
         if (b.getFieldValue('TRIG_UNIT') !== 'ms') b.setFieldValue('ms', 'TRIG_UNIT');
         if (b.getFieldValue('TIMER_UNIT') !== 'ms') b.setFieldValue('ms', 'TIMER_UNIT');
@@ -2442,7 +2421,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const pwmL = hwBlock.getFieldValue('PWM_L') || hw.pins.pwmL;
         const pwmR = hwBlock.getFieldValue('PWM_R') || hw.pins.pwmR;
         const sensorCount = (Number(hwBlock.getFieldValue('SENSOR_COUNT') || hw.sensorCount) as SensorCount);
-        const sensorMode = (hwBlock.getFieldValue('SENSOR_MODE') || hw.sensorMode) as 'direct' | 'mux_4051' | 'mux_4067';
+        let sensorMode = (hwBlock.getFieldValue('SENSOR_MODE') || hw.sensorMode) as 'direct' | 'mux_4051' | 'mux_4067';
+        if (sensorCount === 2 || sensorCount === 4) {
+          sensorMode = 'direct';
+        }
         const muxSig = hwBlock.getFieldValue('MUX_SIG') || hw.pins.muxSig;
         const hasEncoder = (hwBlock.getFieldValue('HAS_ENCODER') || (hw.hasEncoder ? 'YES' : 'NO')) === 'YES';
         const encLA = hwBlock.getFieldValue('ENC_L') || hw.pins.encLA;
@@ -2487,7 +2469,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               triggerValue: Number(cur.getFieldValue('TRIG_VAL') ?? 100),
               triggerUnit: (cur.getFieldValue('TRIG_UNIT') || 'ms') as PlanDurationUnit,
               triggerMode: (cur.getFieldValue('TRIG_MODE') || 'SENSOR') as PlanTriggerMode,
-              sensorPattern: normalizeSensorPattern(cur.getFieldValue('PATTERN') || '', hw.sensorCount),
+              sensorPattern: normalizeSensorPattern(
+                cur.getFieldValue('SENSOR_PRESET') || cur.getFieldValue('PATTERN') || '',
+                hw.sensorCount
+              ),
               logicOp: (cur.getFieldValue('LOGIC_OP') || 'OR') as PlanLogicOp,
               brake: Number(cur.getFieldValue('BRAKE') ?? 0),
               speedL: Number(cur.getFieldValue('SPEED_L') ?? 160),
@@ -3274,7 +3259,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     }
     const curSc = activeRobotHwConfig?.sensorCount || 6;
     const presets = getSensorPresetOptions(curSc);
-    const centerPreset = presets.find((p) => p.category === 'center') || presets[0] || { pattern: '00xx00' };
+    const centerPreset = presets.find((p) => p.category === 'center') || presets[0] || { pattern: getDefaultSensorPattern(curSc) };
     const leftPreset =
       presets.find((p) => p.category === 'left' && p.id === 'left_2') ||
       presets.find((p) => p.category === 'left') ||
@@ -3297,13 +3282,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">0</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${centerPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
           <field name="ACTION">MAJU</field>
           <field name="TRIG_VAL">100</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">SENSOR</field>
-          <field name="SENSOR_PRESET">${centerPreset.pattern}</field>
-          <field name="PATTERN">${centerPreset.pattern}</field>
-          <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">0</field>
           <field name="SPEED_L">160</field>
           <field name="SPEED_R">160</field>
@@ -3315,13 +3299,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">1</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${leftPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
           <field name="ACTION">LEFT</field>
           <field name="TRIG_VAL">80</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">SENSOR</field>
-          <field name="SENSOR_PRESET">${leftPreset.pattern}</field>
-          <field name="PATTERN">${leftPreset.pattern}</field>
-          <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">15</field>
           <field name="SPEED_L">140</field>
           <field name="SPEED_R">140</field>
@@ -3333,13 +3316,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">2</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${rightPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
           <field name="ACTION">RIGHT</field>
           <field name="TRIG_VAL">80</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">SENSOR</field>
-          <field name="SENSOR_PRESET">${rightPreset.pattern}</field>
-          <field name="PATTERN">${rightPreset.pattern}</field>
-          <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">15</field>
           <field name="SPEED_L">140</field>
           <field name="SPEED_R">140</field>
@@ -3351,13 +3333,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">3</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${wingPreset.pattern}</field>
+          <field name="LOGIC_OP">OR</field>
           <field name="ACTION">MAJU</field>
           <field name="TRIG_VAL">80</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">SENSOR</field>
-          <field name="SENSOR_PRESET">${wingPreset.pattern}</field>
-          <field name="PATTERN">${wingPreset.pattern}</field>
-          <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">20</field>
           <field name="SPEED_L">150</field>
           <field name="SPEED_R">150</field>
@@ -3369,13 +3350,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">4</field>
+          <field name="TRIG_MODE">SENSOR</field>
+          <field name="SENSOR_PRESET">${crossPreset.pattern}</field>
+          <field name="LOGIC_OP">EQUAL</field>
           <field name="ACTION">MAJU</field>
           <field name="TRIG_VAL">100</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">SENSOR</field>
-          <field name="SENSOR_PRESET">${crossPreset.pattern}</field>
-          <field name="PATTERN">${crossPreset.pattern}</field>
-          <field name="LOGIC_OP">EQUAL</field>
           <field name="BRAKE">25</field>
           <field name="SPEED_L">160</field>
           <field name="SPEED_R">160</field>
@@ -3387,13 +3367,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="robot_plan_step">
           <field name="INDEX">5</field>
+          <field name="TRIG_MODE">MOTION</field>
+          <field name="SENSOR_PRESET">CUSTOM</field>
+          <field name="LOGIC_OP">OR</field>
           <field name="ACTION">MAJU</field>
           <field name="TRIG_VAL">500</field>
           <field name="TRIG_UNIT">ms</field>
-          <field name="TRIG_MODE">MOTION</field>
-          <field name="SENSOR_PRESET">CUSTOM</field>
-          <field name="PATTERN">${centerPreset.pattern}</field>
-          <field name="LOGIC_OP">OR</field>
           <field name="BRAKE">0</field>
           <field name="SPEED_L">180</field>
           <field name="SPEED_R">180</field>
