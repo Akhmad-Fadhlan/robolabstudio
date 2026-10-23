@@ -44,7 +44,7 @@ import { arduinoToBlocklyXml } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
 import { processAiMessage, DEFAULT_KILOCODE_CONFIG } from './services/kilocodeService';
 import type { KiloCodeConfig, ChatMessage } from './services/kilocodeService';
-import { checkTrialStatus } from './services/supabaseClient';
+import { checkTrialStatus, fetchUserCustomLibraries, saveUserCustomLibrary } from './services/supabaseClient';
 import type { TrialStatus } from './services/supabaseClient';
 import {
   isElectronEnv,
@@ -3854,11 +3854,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
 
 
-  // Package search
+  // Package search & Per-Account Scoped Libraries
   const [pkgSearch, setPkgSearch] = useState('');
+  const userPackageStorageKey = authUser?.id ? `robolab_packages_${authUser.id}` : 'robolab_packages';
   const [packages, setPackages] = useState(() => {
     try {
-      const saved = localStorage.getItem('robolab_packages');
+      const key = authUser?.id ? `robolab_packages_${authUser.id}` : 'robolab_packages';
+      const saved = localStorage.getItem(key);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -3870,59 +3872,119 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [pkgTab, setPkgTab] = useState<'arduino' | 'python' | 'boards'>('arduino');
   const [githubUrl, setGithubUrl] = useState('');
   const [isInstallingGithub, setIsInstallingGithub] = useState(false);
+  const [isSyncingLibs, setIsSyncingLibs] = useState(false);
   const [installingMap, setInstallingMap] = useState<Record<string, { loading: boolean; progress?: string }>>({});
 
-  // Persist packages state to localStorage
+  // Persist packages state to localStorage per user
   useEffect(() => {
-    localStorage.setItem('robolab_packages', JSON.stringify(packages));
-  }, [packages]);
+    localStorage.setItem(userPackageStorageKey, JSON.stringify(packages));
+  }, [packages, userPackageStorageKey]);
 
-  // Sync installed libraries and board cores status from disk via arduino-cli on startup
-  useEffect(() => {
+  // Sync installed libraries and board cores status from disk & cloud scoped to current user account
+  const syncInstalledLibraries = useCallback(async () => {
     const req = (window as any).__electronRequire || (window as any).require;
     if (!req) return;
+    setIsSyncingLibs(true);
     try {
       const electron = req('electron');
-      // 1. Sync libraries
-      electron.ipcRenderer.invoke('get-installed-libs').then((installedLibsOnDisk: string[]) => {
-        if (Array.isArray(installedLibsOnDisk) && installedLibsOnDisk.length > 0) {
-          setPackages((prev: any) => ({
+      // 1. Sync libraries from disk (Default system libs + user account isolated folder)
+      const installedLibsOnDisk = await electron.ipcRenderer.invoke('get-installed-libs', authUser?.id);
+      if (Array.isArray(installedLibsOnDisk) && installedLibsOnDisk.length > 0) {
+        setPackages((prev: any) => {
+          const existingArduino = Array.isArray(prev?.arduino) ? [...prev.arduino] : [...INITIAL_PACKAGES.arduino];
+
+          // A. Mark existing known libraries as installed if present on disk
+          const updated = existingArduino.map((p: any) => {
+            const diskMatch = installedLibsOnDisk.some((diskLib: any) => {
+              const diskName = (typeof diskLib === 'string' ? diskLib : diskLib.name) || '';
+              return diskName.toLowerCase() === p.name.toLowerCase() ||
+                diskName.toLowerCase().includes(p.name.toLowerCase()) ||
+                p.name.toLowerCase().includes(diskName.toLowerCase());
+            });
+            return diskMatch ? { ...p, installed: true } : p;
+          });
+
+          // B. Dynamically inject custom / user-scoped libraries found on disk (e.g. RFID/MFRC522)
+          for (const diskLib of installedLibsOnDisk) {
+            const diskName = typeof diskLib === 'string' ? diskLib : diskLib.name;
+            if (!diskName) continue;
+            const alreadyInList = updated.some(p => p.name.toLowerCase() === diskName.toLowerCase());
+            if (!alreadyInList) {
+              const isObj = typeof diskLib === 'object' && diskLib !== null;
+              updated.push({
+                name: diskName,
+                desc: isObj ? (diskLib.desc || `Library kustom di akun Anda (${diskName})`) : `Custom Library (${diskName})`,
+                version: isObj ? (diskLib.version || '1.0.0-custom') : '1.0.0-custom',
+                author: isObj ? (diskLib.author || (authUser?.name || 'Akun Anda')) : (authUser?.name || 'Akun Anda'),
+                installed: true,
+                isCustom: true,
+                userId: isObj ? diskLib.userId : authUser?.id
+              });
+            }
+          }
+
+          return {
             ...prev,
-            arduino: prev.arduino.map((p: any) => {
-              const diskMatch = installedLibsOnDisk.some(diskLib => 
-                diskLib.toLowerCase() === p.name.toLowerCase() ||
-                diskLib.toLowerCase().includes(p.name.toLowerCase()) ||
-                p.name.toLowerCase().includes(diskLib.toLowerCase())
-              );
-              return diskMatch ? { ...p, installed: true } : p;
-            })
-          }));
-        }
-      }).catch((err: any) => console.warn('Failed to sync installed libs from disk:', err));
+            arduino: updated
+          };
+        });
+      }
 
       // 2. Sync board cores
-      electron.ipcRenderer.invoke('get-installed-cores').then((installedCoresOnDisk: string[]) => {
-        if (Array.isArray(installedCoresOnDisk)) {
-          const coreNameMap: Record<string, string> = {
-            'ESP32 Arduino': 'esp32:esp32',
-            'Arduino AVR Boards': 'arduino:avr',
-            'MegaCore (ATmega128)': 'MegaCore:avr',
-            'ESP8266 Arduino': 'esp8266:esp8266',
-            'STM32 Boards': 'STMicroelectronics:stm32',
-            'Raspberry Pi Pico': 'rp2040:rp2040'
-          };
-          setPackages((prev: any) => ({
-            ...prev,
-            boards: prev.boards.map((b: any) => {
-              const targetCore = coreNameMap[b.name] || b.name;
-              const isInstalled = installedCoresOnDisk.some(c => c.toLowerCase() === targetCore.toLowerCase());
-              return { ...b, installed: isInstalled };
-            })
-          }));
-        }
-      }).catch((err: any) => console.warn('Failed to sync installed cores from disk:', err));
-    } catch (_) {}
-  }, []);
+      const installedCoresOnDisk = await electron.ipcRenderer.invoke('get-installed-cores');
+      if (Array.isArray(installedCoresOnDisk)) {
+        const coreNameMap: Record<string, string> = {
+          'ESP32 Arduino': 'esp32:esp32',
+          'Arduino AVR Boards': 'arduino:avr',
+          'MegaCore (ATmega128)': 'MegaCore:avr',
+          'ESP8266 Arduino': 'esp8266:esp8266',
+          'STM32 Boards': 'STMicroelectronics:stm32',
+          'Raspberry Pi Pico': 'rp2040:rp2040'
+        };
+        setPackages((prev: any) => ({
+          ...prev,
+          boards: prev.boards.map((b: any) => {
+            const targetCore = coreNameMap[b.name] || b.name;
+            const isInstalled = installedCoresOnDisk.some(c => c.toLowerCase() === targetCore.toLowerCase());
+            return { ...b, installed: isInstalled };
+          })
+        }));
+      }
+
+      // 3. Sync from Supabase Cloud if user is authenticated
+      if (authUser?.id) {
+        fetchUserCustomLibraries(authUser.id).then(cloudLibs => {
+          if (Array.isArray(cloudLibs) && cloudLibs.length > 0) {
+            setPackages((prev: any) => {
+              const current = [...(prev.arduino || [])];
+              for (const cLib of cloudLibs) {
+                if (!current.some(p => p.name.toLowerCase() === cLib.name.toLowerCase())) {
+                  current.push({
+                    name: cLib.name,
+                    desc: `Library akun dari Cloud (${cLib.source_type}): ${cLib.source_url || ''}`,
+                    version: cLib.version || '1.0.0',
+                    author: authUser.name || 'Akun Anda',
+                    installed: true,
+                    isCustom: true,
+                    userId: authUser.id
+                  });
+                }
+              }
+              return { ...prev, arduino: current };
+            });
+          }
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('Failed to sync installed libs:', err);
+    } finally {
+      setIsSyncingLibs(false);
+    }
+  }, [authUser?.id, authUser?.name]);
+
+  useEffect(() => {
+    syncInstalledLibraries();
+  }, [syncInstalledLibraries]);
 
   // Automatically install packages for components when they are added to the workspace
   useEffect(() => {
@@ -5160,25 +5222,37 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (req) {
       try {
         const electron = req('electron');
-        const res = await electron.ipcRenderer.invoke('install-lib-from-zip');
+        const res = await electron.ipcRenderer.invoke('install-lib-from-zip', { userId: authUser?.id });
         if (res && res.success) {
           const installedName = res.libName || 'Custom_ZIP_Library';
           setPackages((prev: any) => ({
             ...prev,
             arduino: [
-              ...prev.arduino.filter((p: any) => p.name !== installedName),
+              ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
               {
                 name: installedName,
-                desc: `ZIP Library imported from local file`,
+                desc: `ZIP Library terpasang di akun Anda`,
                 version: '1.0.0-custom',
-                installed: true
+                author: authUser?.name || 'Akun Anda',
+                installed: true,
+                isCustom: true,
+                userId: authUser?.id
               }
             ]
           }));
+          if (authUser?.id) {
+            saveUserCustomLibrary(authUser.id, {
+              name: installedName,
+              source_type: 'zip',
+              version: '1.0.0-custom',
+              headers: res.headers || []
+            });
+          }
           setTerminalLogs((prev: any) => [
             ...prev,
-            { text: `[ZIP IMPORT] Library '${installedName}' berhasil diekstrak dan diinstal ke folder Arduino libraries.`, type: 'success' }
+            { text: `[ZIP IMPORT] Library '${installedName}' berhasil diekstrak dan diinstal ke akun Anda!`, type: 'success' }
           ]);
+          syncInstalledLibraries();
         }
       } catch (e: any) {
         console.warn('ZIP Import error:', e);
@@ -5194,7 +5268,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             name: input.replace('.zip', ''),
             desc: `ZIP Library imported from local file: ${input}`,
             version: '1.0.0-custom',
-            installed: true
+            installed: true,
+            isCustom: true
           }
         ]
       }));
@@ -6727,7 +6802,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         port,
         action,
         fileExt,
-        files: preparedFiles
+        files: preparedFiles,
+        userId: authUser?.id
       });
       
       setBuildProgress(100);
@@ -8448,8 +8524,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       let success = false;
                       if (req) {
                         try {
-                          const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', url);
-                          if (res && res.success) success = true;
+                          const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: url, userId: authUser?.id });
+                          if (res && res.success) {
+                            success = true;
+                            if (res.libName) repoName = res.libName;
+                            if (authUser?.id) {
+                              saveUserCustomLibrary(authUser.id, {
+                                name: res.libName || repoName,
+                                source_type: 'github',
+                                source_url: url,
+                                version: 'latest-git',
+                                headers: res.headers || []
+                              });
+                            }
+                            syncInstalledLibraries();
+                          }
                         } catch (e: any) {
                           console.warn('GitHub install error:', e);
                         }
@@ -8545,6 +8634,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>v{pkg.version}</span>
                             {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
+                            {pkg.isCustom ? (
+                              <span className="text-[9px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-1.5 py-0.5 rounded font-medium">👤 Akun Anda</span>
+                            ) : (
+                              <span className="text-[9px] text-slate-400 bg-slate-800/40 border border-slate-700/40 px-1.5 py-0.5 rounded">📦 Bawaan</span>
+                            )}
                           </div>
                           <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
                         </div>
@@ -10602,9 +10696,39 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     const req = (window as any).__electronRequire || (window as any).require;
                     if (req) {
                       try {
-                        const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', customGithubUrl.trim());
+                        const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: customGithubUrl.trim(), userId: authUser?.id });
                         if (res && res.success) {
+                          const installedName = res.libName || 'Custom_Library';
+                          setPackages((prev: any) => ({
+                            ...prev,
+                            arduino: [
+                              ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
+                              {
+                                name: installedName,
+                                desc: `GitHub Library: ${customGithubUrl.trim()}`,
+                                version: 'latest-git',
+                                author: authUser?.name || 'Akun Anda',
+                                installed: true,
+                                isCustom: true,
+                                userId: authUser?.id
+                              }
+                            ]
+                          }));
+                          if (authUser?.id) {
+                            saveUserCustomLibrary(authUser.id, {
+                              name: installedName,
+                              source_type: 'github',
+                              source_url: customGithubUrl.trim(),
+                              version: 'latest-git',
+                              headers: res.headers || []
+                            });
+                          }
+                          setTerminalLogs((prev: any) => [
+                            ...prev,
+                            { text: `[LIB] ✓ Library '${installedName}' berhasil diinstal ke akun Anda!`, type: 'success' }
+                          ]);
                           setCustomGithubUrl('');
+                          syncInstalledLibraries();
                         }
                       } catch (_) {}
                     }

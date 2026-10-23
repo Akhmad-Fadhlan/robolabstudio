@@ -427,6 +427,114 @@ const purgeBuildDirs = () => {
     });
   } catch (_) {}
 };
+// --- Per-Account Library Scoping & Scanning Helpers ---
+const getUserLibraryDir = (userId) => {
+  const safeId = (userId && typeof userId === 'string' && userId.trim())
+    ? userId.trim().replace(/[^a-zA-Z0-9_\-]/g, '_')
+    : 'guest';
+  try {
+    const base = app.getPath('userData');
+    const userLibDir = path.join(base, 'users', safeId, 'libraries');
+    if (!fs.existsSync(userLibDir)) {
+      fs.mkdirSync(userLibDir, { recursive: true });
+    }
+    return userLibDir;
+  } catch (err) {
+    console.warn('[RoboLab] Failed to resolve user library dir:', err.message);
+    const fallback = path.join(os.tmpdir(), 'robolab_users', safeId, 'libraries');
+    if (!fs.existsSync(fallback)) {
+      try { fs.mkdirSync(fallback, { recursive: true }); } catch (_) {}
+    }
+    return fallback;
+  }
+};
+
+const getGlobalLibraryDirs = () => {
+  const dirs = [];
+  try {
+    const docs = app.getPath('documents');
+    const d1 = path.join(docs, 'Arduino', 'libraries');
+    if (fs.existsSync(d1)) dirs.push(d1);
+  } catch (_) {}
+  try {
+    const d2 = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
+    if (fs.existsSync(d2) && !dirs.includes(d2)) dirs.push(d2);
+  } catch (_) {}
+  try {
+    const localAppData = process.env.LOCALAPPDATA || '';
+    if (localAppData) {
+      const d3 = path.join(localAppData, 'Arduino15', 'libraries');
+      if (fs.existsSync(d3) && !dirs.includes(d3)) dirs.push(d3);
+    }
+  } catch (_) {}
+  return dirs;
+};
+
+const scanLibrariesInFolder = (folderPath, isCustom = false, userId = null) => {
+  const list = [];
+  if (!folderPath || !fs.existsSync(folderPath)) return list;
+  try {
+    const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const libPath = path.join(folderPath, ent.name);
+      let name = ent.name;
+      let version = '1.0.0';
+      let author = isCustom ? 'Akun Pengguna' : 'Community';
+      let desc = isCustom ? 'Library terpasang di akun Anda' : 'Arduino Library';
+      const headers = [];
+
+      const propFile = path.join(libPath, 'library.properties');
+      if (fs.existsSync(propFile)) {
+        try {
+          const lines = fs.readFileSync(propFile, 'utf-8').split(/\r?\n/);
+          for (const line of lines) {
+            const idx = line.indexOf('=');
+            if (idx > 0) {
+              const k = line.slice(0, idx).trim();
+              const v = line.slice(idx + 1).trim();
+              if (k === 'name' && v) name = v;
+              else if (k === 'version' && v) version = v;
+              else if (k === 'author' && v) author = v;
+              else if (k === 'sentence' && v) desc = v;
+            }
+          }
+        } catch (_) {}
+      }
+
+      try {
+        const rootFiles = fs.readdirSync(libPath);
+        for (const f of rootFiles) {
+          if (f.endsWith('.h')) headers.push(f);
+        }
+        const srcPath = path.join(libPath, 'src');
+        if (fs.existsSync(srcPath) && fs.statSync(srcPath).isDirectory()) {
+          const srcFiles = fs.readdirSync(srcPath);
+          for (const f of srcFiles) {
+            if (f.endsWith('.h') && !headers.includes(f)) headers.push(f);
+          }
+        }
+      } catch (_) {}
+
+      list.push({
+        name,
+        folderName: ent.name,
+        version,
+        author,
+        desc,
+        path: libPath,
+        headers,
+        isCustom,
+        userId: userId || null,
+        installed: true
+      });
+    }
+  } catch (e) {
+    console.warn(`[RoboLab] Error scanning libraries in ${folderPath}:`, e.message);
+  }
+  return list;
+};
+
 
 const runArduinoCLI = (args, event, timeoutMs) => {
   return new Promise((resolve) => {
@@ -651,7 +759,7 @@ try {
 } catch (_) { lastCompiledHashes = {}; }
 
 ipcMain.handle('arduino-upload', async (event, payload = {}) => {
-  const { code = '', board = '', port = '', action = 'upload', fileExt = 'ino', files = {} } = (payload || {});
+  const { code = '', board = '', port = '', action = 'upload', fileExt = 'ino', files = {}, userId = null } = (payload || {});
 
   try {
     // Release COM port from Serial Monitor if active
@@ -1199,8 +1307,20 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
         jobCount = Math.min(2, jobCount);
       }
 
-      const compileArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', String(jobCount), '--warnings', 'none', '--verbose', ...configArgs, tempDir];
-      const singleJobArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', '1', '--warnings', 'none', ...configArgs, tempDir];
+      const userLibDir = getUserLibraryDir(userId);
+      const libArgs = [];
+      if (userLibDir && fs.existsSync(userLibDir)) {
+        libArgs.push('--libraries', userLibDir);
+      }
+      const globalDirs = getGlobalLibraryDirs();
+      for (const gd of globalDirs) {
+        if (fs.existsSync(gd) && gd !== userLibDir) {
+          libArgs.push('--libraries', gd);
+        }
+      }
+
+      const compileArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', String(jobCount), '--warnings', 'none', '--verbose', ...libArgs, ...configArgs, tempDir];
+      const singleJobArgs = ['compile', '--fqbn', fqbn, '--build-path', buildDir, '--jobs', '1', '--warnings', 'none', ...libArgs, ...configArgs, tempDir];
       let compileSuccess = await runArduinoCLI(compileArgs, event);
 
       const stderrStr = lastCLISterr || '';
@@ -1587,8 +1707,24 @@ ipcMain.handle('install-board-cores', async (event) => {
 });
 
 // IPC Handler: Fetch installed Arduino libraries from disk using arduino-cli lib list --format json
-ipcMain.handle('get-installed-libs', async () => {
-  return new Promise((resolve) => {
+ipcMain.handle('get-installed-libs', async (event, payloadUserId) => {
+  const userId = (typeof payloadUserId === 'string') ? payloadUserId : (payloadUserId?.userId || null);
+  const userLibDir = getUserLibraryDir(userId);
+  const globalDirs = getGlobalLibraryDirs();
+
+  const userLibs = scanLibrariesInFolder(userLibDir, true, userId);
+  const globalLibs = [];
+  for (const gd of globalDirs) {
+    const scanned = scanLibrariesInFolder(gd, false, null);
+    for (const s of scanned) {
+      if (!globalLibs.some(g => g.name.toLowerCase() === s.name.toLowerCase())) {
+        globalLibs.push(s);
+      }
+    }
+  }
+
+  // Fast check arduino-cli lib list (short timeout so it never hangs)
+  const cliLibs = await new Promise((resolve) => {
     const { execFile } = require('child_process');
     const cliPath = findArduinoCLI();
     const localAppDataForConfig = process.env.LOCALAPPDATA || '';
@@ -1597,23 +1733,44 @@ ipcMain.handle('get-installed-libs', async () => {
     if (fs.existsSync(arduino15ConfigPath)) {
       args.push('--config-file', arduino15ConfigPath);
     }
-    execFile(cliPath, args, { maxBuffer: 20 * 1024 * 1024, timeout: 30000 }, (error, stdout) => {
-      if (error) {
-        console.warn('[RoboLab] lib list notice:', error.message);
-        resolve([]);
-        return;
-      }
+    execFile(cliPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 5000 }, (error, stdout) => {
+      if (error || !stdout) return resolve([]);
       try {
         const data = JSON.parse(stdout);
         const libs = Array.isArray(data) ? data.map(item => item.library ? item.library.name : item.name).filter(Boolean) : [];
-        console.log('[RoboLab] Installed libraries on disk:', libs);
         resolve(libs);
-      } catch (e) {
-        console.warn('[RoboLab] lib list JSON parse warning:', e.message);
+      } catch (_) {
         resolve([]);
       }
     });
   });
+
+  for (const cName of cliLibs) {
+    if (!globalLibs.some(g => g.name.toLowerCase() === cName.toLowerCase())) {
+      globalLibs.push({
+        name: cName,
+        version: '1.0.0',
+        author: 'Arduino CLI Index',
+        desc: 'Installed Arduino library',
+        isCustom: false,
+        installed: true
+      });
+    }
+  }
+
+  // Combine: globalLibs + userLibs (userLibs takes precedence if duplicate)
+  const combined = [...globalLibs];
+  for (const u of userLibs) {
+    const idx = combined.findIndex(c => c.name.toLowerCase() === u.name.toLowerCase());
+    if (idx >= 0) {
+      combined[idx] = u;
+    } else {
+      combined.push(u);
+    }
+  }
+
+  console.log(`[RoboLab] Installed libraries for user [${userId || 'guest'}]: ${combined.length} (custom: ${userLibs.length})`);
+  return combined;
 });
 
 // IPC Handler: Fetch installed Arduino board cores from disk using arduino-cli core list --format json
@@ -1719,105 +1876,171 @@ ipcMain.handle('search-arduino-lib', async (event, searchQuery) => {
 });
 
 // IPC Handler: Install Arduino library directly from GitHub Git URL
-ipcMain.handle('install-lib-from-github', async (event, githubUrl) => {
+ipcMain.handle('install-lib-from-github', async (event, payload) => {
   try {
+    const githubUrl = typeof payload === 'object' && payload ? payload.githubUrl : payload;
+    const userId = typeof payload === 'object' && payload ? payload.userId : null;
+    const userLibDir = getUserLibraryDir(userId);
+
     const trimmedUrl = (githubUrl || '').trim();
     if (!trimmedUrl) {
       safeSend(event, 'arduino-log', { text: 'URL GitHub tidak boleh kosong.', type: 'error' });
       return { success: false, error: 'Empty URL' };
     }
-    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library dari GitHub: ${trimmedUrl}...`, type: 'info' });
-    const localAppDataForConfig = process.env.LOCALAPPDATA || '';
-    const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
-    const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
 
-    let gitUrl = trimmedUrl;
-    if (gitUrl.includes('github.com') && !gitUrl.endsWith('.git') && !gitUrl.endsWith('.zip')) {
-      gitUrl = gitUrl.replace(/\/$/, '') + '.git';
+    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library dari GitHub ke akun Anda: ${trimmedUrl}...`, type: 'info' });
+
+    const cleanRepoUrl = trimmedUrl.replace(/\.git$/i, '').replace(/\/$/, '');
+    const parts = cleanRepoUrl.split('/').filter(Boolean);
+    const repoName = (parts[parts.length - 1] || 'library').replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+    // 1. Try git clone first
+    const { spawn } = require('child_process');
+    const tempCloneDir = path.join(os.tmpdir(), `gh_clone_${Date.now()}_${repoName}`);
+    if (fs.existsSync(tempCloneDir)) {
+      try { fs.rmSync(tempCloneDir, { recursive: true, force: true }); } catch (_) {}
     }
 
-    const success = await runArduinoCLI(['lib', 'install', '--git-url', gitUrl, ...configArgs], event, 300000);
-    if (success) {
-      purgeBuildDirs();
-      safeSend(event, 'arduino-log', { text: `✅ Pustaka berhasil diinstal dari GitHub!`, type: 'success' });
-      return { success: true };
-    } else {
-      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal via git-url. Mencoba strategi kloning/ekstraksi ZIP repositori...`, type: 'info' });
-      const userDocsDir = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
-      if (!fs.existsSync(userDocsDir)) fs.mkdirSync(userDocsDir, { recursive: true });
-      const repoName = path.basename(trimmedUrl, '.git').replace(/[^a-zA-Z0-9_\-]/g, '');
-      const targetPath = path.join(userDocsDir, repoName);
-
-      if (fs.existsSync(targetPath)) {
-        try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
-      }
-
-      const { spawn } = require('child_process');
-      const cloneSuccess = await new Promise((res) => {
-        const gitProc = spawn('git', ['clone', gitUrl, targetPath], { windowsHide: true });
+    let cloneSuccess = false;
+    try {
+      const gitUrl = trimmedUrl.endsWith('.git') ? trimmedUrl : `${cleanRepoUrl}.git`;
+      cloneSuccess = await new Promise((res) => {
+        const gitProc = spawn('git', ['clone', '--depth', '1', gitUrl, tempCloneDir], { windowsHide: true });
         gitProc.on('close', (code) => res(code === 0));
         gitProc.on('error', () => res(false));
       });
+    } catch (_) { cloneSuccess = false; }
 
-      if (cloneSuccess) {
-        purgeBuildDirs();
-        safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil dikloning ke Arduino/libraries!`, type: 'success' });
-        return { success: true };
-      }
-
-      // If git clone failed, try downloading repository ZIP from GitHub
-      safeSend(event, 'arduino-log', { text: `⚠️ Git clone tidak tersedia atau gagal. Mengunduh arsip ZIP dari GitHub...`, type: 'info' });
-      const cleanRepoUrl = trimmedUrl.replace(/\.git$/i, '').replace(/\/$/, '');
+    let sourceDir = null;
+    if (cloneSuccess && fs.existsSync(tempCloneDir)) {
+      sourceDir = tempCloneDir;
+    } else {
+      // 2. Fallback: Download ZIP from GitHub archive
+      safeSend(event, 'arduino-log', { text: '⚠️ Git clone tidak tersedia/gagal. Mengunduh arsip ZIP dari GitHub...', type: 'info' });
       const zipUrls = [
         `${cleanRepoUrl}/archive/refs/heads/main.zip`,
-        `${cleanRepoUrl}/archive/refs/heads/master.zip`
+        `${cleanRepoUrl}/archive/refs/heads/master.zip`,
+        `${cleanRepoUrl}/archive/refs/heads/HEAD.zip`
       ];
 
+      const https = require('https');
+      const http = require('http');
+      const tempZip = path.join(os.tmpdir(), `gh_zip_${Date.now()}.zip`);
+
+      const downloadWithRedirects = (u) => new Promise((res, rej) => {
+        const client = u.startsWith('https') ? https : http;
+        client.get(u, (response) => {
+          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            return res(downloadWithRedirects(response.headers.location));
+          }
+          if (response.statusCode !== 200) return rej(new Error(`HTTP ${response.statusCode}`));
+          const fileStream = fs.createWriteStream(tempZip);
+          response.pipe(fileStream);
+          fileStream.on('finish', () => { fileStream.close(); res(tempZip); });
+        }).on('error', rej);
+      });
+
       let downloadedZip = null;
-      for (const zipUrl of zipUrls) {
+      for (const zUrl of zipUrls) {
         try {
-          const https = require('https');
-          const http = require('http');
-          const tempZip = path.join(os.tmpdir(), `gh_lib_${Date.now()}.zip`);
-          const fetchFile = (u) => new Promise((res, rej) => {
-            const client = u.startsWith('https') ? https : http;
-            client.get(u, (response) => {
-              if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                return res(fetchFile(response.headers.location));
-              }
-              if (response.statusCode !== 200) return rej(new Error(`HTTP ${response.statusCode}`));
-              const fileStream = fs.createWriteStream(tempZip);
-              response.pipe(fileStream);
-              fileStream.on('finish', () => { fileStream.close(); res(tempZip); });
-            }).on('error', rej);
-          });
-          downloadedZip = await fetchFile(zipUrl);
+          downloadedZip = await downloadWithRedirects(zUrl);
           if (downloadedZip) break;
         } catch (_) {}
       }
 
       if (downloadedZip) {
-        const zipSuccess = await runArduinoCLI(['lib', 'install', '--zip-path', downloadedZip, ...configArgs], event, 300000);
+        const tempExtractDir = path.join(os.tmpdir(), `gh_extract_${Date.now()}`);
+        fs.mkdirSync(tempExtractDir, { recursive: true });
+
+        if (process.platform === 'win32') {
+          const { execSync } = require('child_process');
+          const safeZip = downloadedZip.replace(/'/g, "''");
+          const safeDest = tempExtractDir.replace(/'/g, "''");
+          execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${safeZip}' -DestinationPath '${safeDest}' -Force"`, { stdio: 'ignore' });
+        } else {
+          const { execSync } = require('child_process');
+          execSync(`unzip -q -o "${downloadedZip}" -d "${tempExtractDir}"`);
+        }
         try { fs.unlinkSync(downloadedZip); } catch (_) {}
-        if (zipSuccess) {
-          purgeBuildDirs();
-          safeSend(event, 'arduino-log', { text: `✅ Pustaka '${repoName}' berhasil diunduh dan diinstal dari ZIP GitHub!`, type: 'success' });
-          return { success: true };
+
+        const entries = fs.readdirSync(tempExtractDir);
+        if (entries.length === 1 && fs.statSync(path.join(tempExtractDir, entries[0])).isDirectory()) {
+          sourceDir = path.join(tempExtractDir, entries[0]);
+        } else {
+          sourceDir = tempExtractDir;
         }
       }
-
-      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal pustaka dari GitHub. Pastikan URL repositori valid.`, type: 'error' });
-      return { success: false, error: 'GitHub install failed' };
     }
+
+    if (!sourceDir || !fs.existsSync(sourceDir)) {
+      safeSend(event, 'arduino-log', { text: '❌ Gagal mengunduh atau mengekstrak pustaka dari GitHub.', type: 'error' });
+      return { success: false, error: 'Download failed' };
+    }
+
+    // Detect actual library name from library.properties
+    let finalLibName = repoName;
+    const propPath = path.join(sourceDir, 'library.properties');
+    if (fs.existsSync(propPath)) {
+      try {
+        const lines = fs.readFileSync(propPath, 'utf-8').split(/\r?\n/);
+        for (const line of lines) {
+          if (line.startsWith('name=')) {
+            const n = line.slice(5).trim();
+            if (n) finalLibName = n;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    const safeFinalName = finalLibName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const targetPath = path.join(userLibDir, safeFinalName);
+    if (fs.existsSync(targetPath)) {
+      try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
+    }
+
+    fs.cpSync(sourceDir, targetPath, { recursive: true });
+    try { fs.rmSync(sourceDir, { recursive: true, force: true }); } catch (_) {}
+
+    // Scan headers in installed library
+    const headers = [];
+    try {
+      const rootFiles = fs.readdirSync(targetPath);
+      for (const f of rootFiles) {
+        if (f.endsWith('.h')) headers.push(f);
+      }
+      const srcDir = path.join(targetPath, 'src');
+      if (fs.existsSync(srcDir) && fs.statSync(srcDir).isDirectory()) {
+        const srcFiles = fs.readdirSync(srcDir);
+        for (const f of srcFiles) {
+          if (f.endsWith('.h') && !headers.includes(f)) headers.push(f);
+        }
+      }
+    } catch (_) {}
+
+    purgeBuildDirs();
+    safeSend(event, 'arduino-log', { text: `✅ Library '${safeFinalName}' berhasil diinstal ke akun Anda!`, type: 'success' });
+    return {
+      success: true,
+      libName: safeFinalName,
+      isCustom: true,
+      userId: userId || null,
+      path: targetPath,
+      headers
+    };
   } catch (err) {
     safeSend(event, 'arduino-log', { text: `Error GitHub install: ${err.message}`, type: 'error' });
     return { success: false, error: err.message };
   }
 });
 
-// IPC Handler: Install Arduino library directly from local ZIP file
-ipcMain.handle('install-lib-from-zip', async (event, inputFilePath) => {
+// IPC Handler: Install Arduino library directly from local ZIP file into user account
+ipcMain.handle('install-lib-from-zip', async (event, payload) => {
   try {
+    const inputFilePath = typeof payload === 'object' && payload ? payload.filePath : payload;
+    const userId = typeof payload === 'object' && payload ? payload.userId : null;
+    const userLibDir = getUserLibraryDir(userId);
+
     let zipPath = inputFilePath;
     if (!zipPath) {
       const result = await dialog.showOpenDialog({
@@ -1829,57 +2052,76 @@ ipcMain.handle('install-lib-from-zip', async (event, inputFilePath) => {
       zipPath = result.filePaths[0];
     }
 
-    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library ZIP: ${path.basename(zipPath)}...`, type: 'info' });
-    const localAppDataForConfig = process.env.LOCALAPPDATA || '';
-    const arduino15ConfigPath = path.join(localAppDataForConfig, 'Arduino15', 'arduino-cli.yaml');
-    const configArgs = fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
+    safeSend(event, 'arduino-log', { text: `📦 Memulai instalasi library ZIP ke akun Anda: ${path.basename(zipPath)}...`, type: 'info' });
 
-    let success = await runArduinoCLI(['lib', 'install', '--zip-path', zipPath, ...configArgs], event, 300000);
+    const tempExtractDir = path.join(os.tmpdir(), `zip_extract_${Date.now()}`);
+    fs.mkdirSync(tempExtractDir, { recursive: true });
 
-    if (!success) {
-      safeSend(event, 'arduino-log', { text: `⚠️ Mengekstrak arsip ZIP secara manual ke folder Arduino/libraries...`, type: 'warning' });
-      const userDocsDir = path.join(os.homedir(), 'Documents', 'Arduino', 'libraries');
-      if (!fs.existsSync(userDocsDir)) fs.mkdirSync(userDocsDir, { recursive: true });
-      const rawName = path.basename(zipPath, '.zip').replace(/-master|-main/gi, '');
-      const targetPath = path.join(userDocsDir, rawName);
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      const safeZip = zipPath.replace(/'/g, "''");
+      const safeDest = tempExtractDir.replace(/'/g, "''");
+      execSync(`powershell -NoProfile -Command "Expand-Archive -Path '${safeZip}' -DestinationPath '${safeDest}' -Force"`, { stdio: 'ignore' });
+    } else {
+      const { execSync } = require('child_process');
+      execSync(`unzip -q -o "${zipPath}" -d "${tempExtractDir}"`);
+    }
 
-      if (fs.existsSync(targetPath)) {
-        try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
-      }
+    const items = fs.readdirSync(tempExtractDir);
+    let sourceDir = tempExtractDir;
+    if (items.length === 1 && fs.statSync(path.join(tempExtractDir, items[0])).isDirectory()) {
+      sourceDir = path.join(tempExtractDir, items[0]);
+    }
 
-      if (process.platform === 'win32') {
-        try {
-          const { execSync } = require('child_process');
-          const tempExtractDir = path.join(os.tmpdir(), `zip_extract_${Date.now()}`);
-          fs.mkdirSync(tempExtractDir, { recursive: true });
-          const safeZip = zipPath.replace(/'/g, "''");
-          const safeDest = tempExtractDir.replace(/'/g, "''");
-          execSync(`powershell -command "Expand-Archive -Path '${safeZip}' -DestinationPath '${safeDest}' -Force"`, { stdio: 'ignore' });
-
-          const items = fs.readdirSync(tempExtractDir);
-          let sourceDir = tempExtractDir;
-          if (items.length === 1 && fs.statSync(path.join(tempExtractDir, items[0])).isDirectory()) {
-            sourceDir = path.join(tempExtractDir, items[0]);
+    let detectedName = path.basename(zipPath, '.zip').replace(/-master|-main/gi, '');
+    const propPath = path.join(sourceDir, 'library.properties');
+    if (fs.existsSync(propPath)) {
+      try {
+        const lines = fs.readFileSync(propPath, 'utf-8').split(/\r?\n/);
+        for (const line of lines) {
+          if (line.startsWith('name=')) {
+            const n = line.slice(5).trim();
+            if (n) detectedName = n;
+            break;
           }
+        }
+      } catch (_) {}
+    }
 
-          fs.cpSync(sourceDir, targetPath, { recursive: true });
-          try { fs.rmSync(tempExtractDir, { recursive: true, force: true }); } catch (_) {}
-          success = true;
-        } catch (extErr) {
-          console.error('[RoboLab] Manual zip extraction failed:', extErr.message);
+    const safeName = detectedName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const targetPath = path.join(userLibDir, safeName);
+    if (fs.existsSync(targetPath)) {
+      try { fs.rmSync(targetPath, { recursive: true, force: true }); } catch (_) {}
+    }
+
+    fs.cpSync(sourceDir, targetPath, { recursive: true });
+    try { fs.rmSync(tempExtractDir, { recursive: true, force: true }); } catch (_) {}
+
+    const headers = [];
+    try {
+      const rootFiles = fs.readdirSync(targetPath);
+      for (const f of rootFiles) {
+        if (f.endsWith('.h')) headers.push(f);
+      }
+      const srcDir = path.join(targetPath, 'src');
+      if (fs.existsSync(srcDir) && fs.statSync(srcDir).isDirectory()) {
+        const srcFiles = fs.readdirSync(srcDir);
+        for (const f of srcFiles) {
+          if (f.endsWith('.h') && !headers.includes(f)) headers.push(f);
         }
       }
-    }
+    } catch (_) {}
 
-    if (success) {
-      purgeBuildDirs();
-      const libName = path.basename(zipPath, '.zip');
-      safeSend(event, 'arduino-log', { text: `✅ Library '${libName}' dari ZIP berhasil diinstal!`, type: 'success' });
-      return { success: true, libName };
-    } else {
-      safeSend(event, 'arduino-log', { text: `❌ Gagal menginstal library dari ZIP.`, type: 'error' });
-      return { success: false, error: 'Failed to extract/install ZIP library' };
-    }
+    purgeBuildDirs();
+    safeSend(event, 'arduino-log', { text: `✅ Library '${safeName}' dari ZIP berhasil diinstal ke akun Anda!`, type: 'success' });
+    return {
+      success: true,
+      libName: safeName,
+      isCustom: true,
+      userId: userId || null,
+      path: targetPath,
+      headers
+    };
   } catch (err) {
     safeSend(event, 'arduino-log', { text: `Error ZIP install: ${err.message}`, type: 'error' });
     return { success: false, error: err.message };

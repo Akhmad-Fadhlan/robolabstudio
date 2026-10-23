@@ -542,3 +542,83 @@ export async function checkTrialStatus(): Promise<TrialStatus> {
 
   return { isExpired, daysUsed, daysLeft, firstOpenDate };
 }
+
+
+// ─── User Custom Libraries Cloud Sync ───────────────────────────────────────
+export interface UserCustomLibraryRecord {
+  id?: string;
+  user_id: string;
+  name: string;
+  source_type: 'github' | 'zip' | 'arduino_index';
+  source_url?: string;
+  version?: string;
+  headers?: string[];
+  created_at?: string;
+}
+
+export async function fetchUserCustomLibraries(userId: string): Promise<UserCustomLibraryRecord[]> {
+  if (!userId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('user_custom_libraries')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.warn('[RoboLab] fetchUserCustomLibraries notice (table may not exist yet):', error.message);
+      return [];
+    }
+    return (data as UserCustomLibraryRecord[]) || [];
+  } catch (err: any) {
+    console.warn('[RoboLab] fetchUserCustomLibraries exception:', err.message);
+    return [];
+  }
+}
+
+export async function saveUserCustomLibrary(
+  userId: string,
+  lib: Omit<UserCustomLibraryRecord, 'user_id'>
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { error } = await supabase
+      .from('user_custom_libraries')
+      .upsert({
+        user_id: userId,
+        name: lib.name,
+        source_type: lib.source_type,
+        source_url: lib.source_url || null,
+        version: lib.version || '1.0.0',
+        headers: lib.headers || [],
+      }, { onConflict: 'user_id, name' });
+
+    if (error) {
+      console.warn('[RoboLab] saveUserCustomLibrary notice:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[RoboLab] saveUserCustomLibrary exception:', err.message);
+    return false;
+  }
+}
+
+export async function deleteUserCustomLibrary(userId: string, libName: string): Promise<boolean> {
+  if (!userId || !libName) return false;
+  try {
+    const { error } = await supabase
+      .from('user_custom_libraries')
+      .delete()
+      .eq('user_id', userId)
+      .eq('name', libName);
+
+    if (error) {
+      console.warn('[RoboLab] deleteUserCustomLibrary notice:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[RoboLab] deleteUserCustomLibrary exception:', err.message);
+    return false;
+  }
+}
