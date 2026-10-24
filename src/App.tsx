@@ -3882,101 +3882,127 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   // Sync installed libraries and board cores status from disk & cloud scoped to current user account
   const syncInstalledLibraries = useCallback(async () => {
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (!req) return;
     setIsSyncingLibs(true);
     try {
-      const electron = req('electron');
-      // 1. Sync libraries from disk (Default system libs + user account isolated folder)
-      const installedLibsOnDisk = await electron.ipcRenderer.invoke('get-installed-libs', authUser?.id);
-      if (Array.isArray(installedLibsOnDisk) && installedLibsOnDisk.length > 0) {
-        setPackages((prev: any) => {
-          const existingArduino = Array.isArray(prev?.arduino) ? [...prev.arduino] : [...INITIAL_PACKAGES.arduino];
+      const req = (window as any).__electronRequire || (window as any).require;
+      let installedLibsOnDisk: any[] = [];
+      let installedCoresOnDisk: any[] = [];
 
-          // A. Mark existing known libraries as installed if present on disk
-          const updated = existingArduino.map((p: any) => {
-            const diskMatch = installedLibsOnDisk.some((diskLib: any) => {
-              const diskName = (typeof diskLib === 'string' ? diskLib : diskLib.name) || '';
-              return diskName.toLowerCase() === p.name.toLowerCase() ||
-                diskName.toLowerCase().includes(p.name.toLowerCase()) ||
-                p.name.toLowerCase().includes(diskName.toLowerCase());
-            });
-            return diskMatch ? { ...p, installed: true } : p;
-          });
-
-          // B. Dynamically inject custom / user-scoped libraries found on disk (e.g. RFID/MFRC522)
-          for (const diskLib of installedLibsOnDisk) {
-            const diskName = typeof diskLib === 'string' ? diskLib : diskLib.name;
-            if (!diskName) continue;
-            const alreadyInList = updated.some(p => p.name.toLowerCase() === diskName.toLowerCase());
-            if (!alreadyInList) {
-              const isObj = typeof diskLib === 'object' && diskLib !== null;
-              updated.push({
-                name: diskName,
-                desc: isObj ? (diskLib.desc || `Library kustom di akun Anda (${diskName})`) : `Custom Library (${diskName})`,
-                version: isObj ? (diskLib.version || '1.0.0-custom') : '1.0.0-custom',
-                author: isObj ? (diskLib.author || (authUser?.name || 'Akun Anda')) : (authUser?.name || 'Akun Anda'),
-                installed: true,
-                isCustom: true,
-                userId: isObj ? diskLib.userId : authUser?.id
-              });
-            }
-          }
-
-          return {
-            ...prev,
-            arduino: updated
-          };
-        });
+      // 1. Sync libraries and cores from local disk if Electron is available
+      if (req) {
+        try {
+          const electron = req('electron');
+          installedLibsOnDisk = (await electron.ipcRenderer.invoke('get-installed-libs', authUser?.id)) || [];
+          installedCoresOnDisk = (await electron.ipcRenderer.invoke('get-installed-cores')) || [];
+        } catch (e) {
+          console.warn('[RoboLab] Error invoking electron ipc:', e);
+        }
       }
 
-      // 2. Sync board cores
-      const installedCoresOnDisk = await electron.ipcRenderer.invoke('get-installed-cores');
-      if (Array.isArray(installedCoresOnDisk)) {
-        const coreNameMap: Record<string, string> = {
-          'ESP32 Arduino': 'esp32:esp32',
-          'Arduino AVR Boards': 'arduino:avr',
-          'MegaCore (ATmega128)': 'MegaCore:avr',
-          'ESP8266 Arduino': 'esp8266:esp8266',
-          'STM32 Boards': 'STMicroelectronics:stm32',
-          'Raspberry Pi Pico': 'rp2040:rp2040'
-        };
-        setPackages((prev: any) => ({
-          ...prev,
-          boards: prev.boards.map((b: any) => {
+      // 2. Sync from Supabase Cloud (Always runs and is awaited in both Web and Electron)
+      let cloudLibs: any[] = [];
+      if (authUser?.id) {
+        try {
+          cloudLibs = (await fetchUserCustomLibraries(authUser.id)) || [];
+        } catch (e) {
+          console.warn('[RoboLab] Error fetching custom libraries from cloud:', e);
+        }
+      }
+
+      // 3. Atomically update packages
+      setPackages((prev: any) => {
+        const existingArduino = Array.isArray(prev?.arduino) ? [...prev.arduino] : [...INITIAL_PACKAGES.arduino];
+
+        // A. Match disk libraries
+        let updated = existingArduino.map((p: any) => {
+          const diskMatch = installedLibsOnDisk.some((diskLib: any) => {
+            const diskName = (typeof diskLib === 'string' ? diskLib : diskLib.name) || '';
+            return diskName.toLowerCase() === p.name.toLowerCase() ||
+              diskName.toLowerCase().includes(p.name.toLowerCase()) ||
+              p.name.toLowerCase().includes(diskName.toLowerCase());
+          });
+          return diskMatch ? { ...p, installed: true } : p;
+        });
+
+        // B. Inject custom disk libraries
+        for (const diskLib of installedLibsOnDisk) {
+          const diskName = typeof diskLib === 'string' ? diskLib : diskLib.name;
+          if (!diskName) continue;
+          const idx = updated.findIndex(p => p.name.toLowerCase() === diskName.toLowerCase());
+          const isObj = typeof diskLib === 'object' && diskLib !== null;
+          if (idx >= 0) {
+            updated[idx] = {
+              ...updated[idx],
+              installed: true,
+              isCustom: true,
+              headers: isObj && diskLib.headers ? diskLib.headers : updated[idx].headers,
+            };
+          } else {
+            updated.push({
+              name: diskName,
+              desc: isObj ? (diskLib.desc || `Library kustom di akun Anda (${diskName})`) : `Custom Library (${diskName})`,
+              version: isObj ? (diskLib.version || '1.0.0-custom') : '1.0.0-custom',
+              author: isObj ? (diskLib.author || (authUser?.name || 'Akun Anda')) : (authUser?.name || 'Akun Anda'),
+              installed: true,
+              isCustom: true,
+              userId: isObj ? diskLib.userId : authUser?.id,
+              headers: isObj ? diskLib.headers : [],
+            });
+          }
+        }
+
+        // C. Inject Supabase cloud libraries
+        for (const cLib of cloudLibs) {
+          if (!cLib.name) continue;
+          const idx = updated.findIndex(p => p.name.toLowerCase() === cLib.name.toLowerCase());
+          if (idx >= 0) {
+            updated[idx] = {
+              ...updated[idx],
+              installed: true,
+              isCustom: true,
+              userId: authUser?.id,
+              headers: cLib.headers || updated[idx].headers || [],
+            };
+          } else {
+            updated.push({
+              name: cLib.name,
+              desc: `Library akun dari Cloud (${cLib.source_type}): ${cLib.source_url || ''}`,
+              version: cLib.version || '1.0.0',
+              author: authUser?.name || 'Akun Anda',
+              installed: true,
+              isCustom: true,
+              userId: authUser?.id,
+              headers: cLib.headers || [],
+            });
+          }
+        }
+
+        // D. Board cores
+        let updatedBoards = prev.boards;
+        if (Array.isArray(installedCoresOnDisk) && installedCoresOnDisk.length > 0) {
+          const coreNameMap: Record<string, string> = {
+            'ESP32 Arduino': 'esp32:esp32',
+            'Arduino AVR Boards': 'arduino:avr',
+            'MegaCore (ATmega128)': 'MegaCore:avr',
+            'ESP8266 Arduino': 'esp8266:esp8266',
+            'STM32 Boards': 'STMicroelectronics:stm32',
+            'Raspberry Pi Pico': 'rp2040:rp2040'
+          };
+          updatedBoards = prev.boards.map((b: any) => {
             const targetCore = coreNameMap[b.name] || b.name;
             const isInstalled = installedCoresOnDisk.some(c => c.toLowerCase() === targetCore.toLowerCase());
             return { ...b, installed: isInstalled };
-          })
-        }));
-      }
+          });
+        }
 
-      // 3. Sync from Supabase Cloud if user is authenticated
-      if (authUser?.id) {
-        fetchUserCustomLibraries(authUser.id).then(cloudLibs => {
-          if (Array.isArray(cloudLibs) && cloudLibs.length > 0) {
-            setPackages((prev: any) => {
-              const current = [...(prev.arduino || [])];
-              for (const cLib of cloudLibs) {
-                if (!current.some(p => p.name.toLowerCase() === cLib.name.toLowerCase())) {
-                  current.push({
-                    name: cLib.name,
-                    desc: `Library akun dari Cloud (${cLib.source_type}): ${cLib.source_url || ''}`,
-                    version: cLib.version || '1.0.0',
-                    author: authUser.name || 'Akun Anda',
-                    installed: true,
-                    isCustom: true,
-                    userId: authUser.id
-                  });
-                }
-              }
-              return { ...prev, arduino: current };
-            });
-          }
-        }).catch(() => {});
-      }
+        return {
+          ...prev,
+          arduino: updated,
+          boards: updatedBoards,
+        };
+      });
     } catch (err: any) {
-      console.warn('Failed to sync installed libs:', err);
+      console.warn('[RoboLab] Failed to sync installed libs:', err);
     } finally {
       setIsSyncingLibs(false);
     }
@@ -8227,7 +8253,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             }}
                           >
                             <BlocklyEditor 
-                              key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount}
+                              key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount + "_" + packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}
                               codeType={activeFile.endsWith('.py') ? 'python' : 'arduino'} 
                               board={board}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
@@ -8985,7 +9011,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
                       >
                         <BlocklyEditor
-                          key={`sim_blockly_${themeMode}_${simResetKey}`}
+                          key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
                           installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}

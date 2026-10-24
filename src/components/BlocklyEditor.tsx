@@ -3579,13 +3579,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core'];
     const customLibs = libs.filter(lib => {
       const lower = lib.toLowerCase().trim();
-      if (!lower || builtinCoreLibs.includes(lower)) return false;
-      // Skip if matched by hardcoded modules that already render dedicated blocks:
-      if (lower.includes('dht') || lower.includes('mpu6050') || lower.includes('mpu_6050') || lower.includes('neopixel') || lower.includes('neo_pixel') || lower.includes('irremote') || lower.includes('ultrasonic') || lower.includes('hcsr04')) return false;
-      // Skip other static signature matches (except display, since users frequently add custom LCD/OLED/I2C libs)
-      const matchesNonDisplaySig = LIBRARY_SIGNATURES.some(sig => sig.categoryName.toLowerCase() !== 'display' && sig.patterns.some(p => lower.includes(p)));
-      if (matchesNonDisplaySig) return false;
-      return true;
+      return lower && !builtinCoreLibs.includes(lower);
     });
 
     if (customLibs.length > 0) {
@@ -3596,59 +3590,54 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const typePrint = `custom_${safeName}_print`.toLowerCase();
         const typeCall  = `custom_${safeName}_call`.toLowerCase();
 
-        // Register generic blocks on-the-fly for this custom/GitHub library
-        const genericDefs: any[] = [];
+        // Direct registration onto Blockly.Blocks (guaranteed error-free)
         if (!Blockly.Blocks[typeBegin]) {
-          genericDefs.push({
-            type: typeBegin,
-            message0: `${lib} Begin / Setup`,
-            previousStatement: null,
-            nextStatement: null,
-            colour: '#6366f1',
-            tooltip: `Inisialisasi library ${lib}`,
-            helpUrl: ''
-          });
+          Blockly.Blocks[typeBegin] = {
+            init: function () {
+              this.appendDummyInput().appendField(`${lib} Begin / Setup`);
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#6366f1');
+              this.setTooltip(`Inisialisasi library ${lib}`);
+            }
+          };
         }
         if (!Blockly.Blocks[typeRead]) {
-          genericDefs.push({
-            type: typeRead,
-            message0: `${lib} Baca Nilai`,
-            output: 'Number',
-            colour: '#6366f1',
-            tooltip: `Baca nilai dari library ${lib}`,
-            helpUrl: ''
-          });
+          Blockly.Blocks[typeRead] = {
+            init: function () {
+              this.appendDummyInput().appendField(`${lib} Baca Nilai`);
+              this.setOutput(true, 'Number');
+              this.setColour('#6366f1');
+              this.setTooltip(`Baca nilai dari library ${lib}`);
+            }
+          };
         }
         if (!Blockly.Blocks[typePrint]) {
-          genericDefs.push({
-            type: typePrint,
-            message0: `${lib} Kirim / Print %1`,
-            args0: [{ type: 'input_value', name: 'DATA' }],
-            previousStatement: null,
-            nextStatement: null,
-            colour: '#6366f1',
-            tooltip: `Kirim data via library ${lib}`,
-            helpUrl: ''
-          });
+          Blockly.Blocks[typePrint] = {
+            init: function () {
+              this.appendValueInput('DATA').appendField(`${lib} Kirim / Print`);
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#6366f1');
+              this.setTooltip(`Kirim data via library ${lib}`);
+            }
+          };
         }
         if (!Blockly.Blocks[typeCall]) {
-          genericDefs.push({
-            type: typeCall,
-            message0: `${lib} Panggil %1 ( %2 )`,
-            args0: [
-              { type: 'field_input', name: 'METHOD', text: 'update' },
-              { type: 'input_value', name: 'PARAM' }
-            ],
-            previousStatement: null,
-            nextStatement: null,
-            colour: '#6366f1',
-            tooltip: `Panggil method dari library ${lib}`,
-            helpUrl: ''
-          });
+          Blockly.Blocks[typeCall] = {
+            init: function () {
+              this.appendDummyInput().appendField(`${lib} Panggil`).appendField(new Blockly.FieldTextInput('update'), 'METHOD');
+              this.appendValueInput('PARAM').appendField('Param');
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#6366f1');
+              this.setTooltip(`Panggil method dari library ${lib}`);
+            }
+          };
         }
-        try { if (genericDefs.length > 0) Blockly.defineBlocksWithJsonArray(genericDefs); } catch (_) {}
 
-        xml += `<category name="${lib}" colour="#6366f1" css-row="cat-default">`;
+        const escapedName = lib.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        xml += `<category name="${escapedName}" colour="#6366f1" css-row="cat-default">`;
         xml += `<block type="${typeBegin}"></block>`;
         xml += `<block type="${typeRead}"></block>`;
         xml += `<block type="${typePrint}"></block>`;
@@ -3664,13 +3653,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   // Trigger code update and toolbox update when installed libraries or board changes
   useEffect(() => {
     if (workspaceRef.current) {
-      const xmlText = getToolboxXml(installedLibraries, board);
-      const xmlDom = Blockly.utils.xml.textToDom(xmlText);
-      workspaceRef.current.updateToolbox(xmlDom);
+      try {
+        const xmlText = getToolboxXml(installedLibraries, board);
+        const xmlDom = Blockly.utils.xml.textToDom(xmlText);
+        workspaceRef.current.updateToolbox(xmlDom);
+      } catch (err) {
+        console.warn('[BlocklyEditor] Failed to update toolbox:', err);
+      }
       if (updateCodeRef.current) {
         updateCodeRef.current();
       }
-      setTimeout(() => updateToolboxUI(), 100);
+      setTimeout(() => updateToolboxUI(), 50);
+      setTimeout(() => updateToolboxUI(), 200);
     }
   }, [installedLibrariesStr, board, robotHardwareConfig?.sensorCount, updateToolboxUI]);
 
