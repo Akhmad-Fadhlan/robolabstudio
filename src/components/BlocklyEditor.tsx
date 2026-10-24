@@ -3239,7 +3239,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   }, [installedLibrariesStr]);
 
   // Dynamic XML Toolbox generator based on installed libraries and active board
-  const getToolboxXml = (libs: string[], boardType?: string) => {
+  const getToolboxXml = (libs: (string | { name: string; [key: string]: any })[] = [], boardType?: string) => {
     // ── BBC micro:bit: isolated toolbox with only Micro:bit categories ──
     if (boardType === 'BBC micro:bit') {
       return `
@@ -3622,7 +3622,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
     `;
 
-    const normalizedLibs = libs.map(l => l.toLowerCase());
+    const normalizedLibs = (Array.isArray(libs) ? libs : []).map(l => (typeof l === 'string' ? l : (l && typeof l === 'object' ? l.name : '') || '').toLowerCase());
 
     // Hardcoded essential library categories (blocks defined at module level)
     const hasDht = normalizedLibs.some(l => l.includes('dht'));
