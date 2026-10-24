@@ -1731,11 +1731,12 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   }
   
   // 3. Unknown/GitHub libraries
-  const safeName = libName.replace(/[^a-zA-Z0-9_\-]/g, '');
+  const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
   return [
     `custom_${safeName}_begin`.toLowerCase(),
     `custom_${safeName}_read`.toLowerCase(),
-    `custom_${safeName}_print`.toLowerCase()
+    `custom_${safeName}_print`.toLowerCase(),
+    `custom_${safeName}_call`.toLowerCase()
   ];
 };
 
@@ -3574,43 +3575,84 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       xml += `</category>`;
     });
 
-    // ── Catch-all: GitHub libs not matched by any known pattern ────────────
-    // Known patterns from hardcoded + LIBRARY_SIGNATURES patterns:
-    const allKnownPatterns = [
-      'dht', 'mpu6050', 'neopixel', 'mqtt', 'pubsub', 'servo',
-      'irremote', 'infrared', 'ultrasonic', 'hcsr04',
-      'robolab', 'arduinojson', 'wire', 'spi', 'wifi', 'bluetooth',
-      'webserver', 'esp32', 'esp8266', 'arduino',
-      ...LIBRARY_SIGNATURES.flatMap(s => s.patterns)
-    ];
-    const unknownLibs = libs.filter(lib => {
-      const lower = lib.toLowerCase();
-      return !allKnownPatterns.some(pat => lower.includes(pat));
+    // ── Dynamic Custom / GitHub Libraries Generator ────────────────────────
+    const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core'];
+    const customLibs = libs.filter(lib => {
+      const lower = lib.toLowerCase().trim();
+      if (!lower || builtinCoreLibs.includes(lower)) return false;
+      // Skip if matched by hardcoded modules that already render dedicated blocks:
+      if (lower.includes('dht') || lower.includes('mpu6050') || lower.includes('mpu_6050') || lower.includes('neopixel') || lower.includes('neo_pixel') || lower.includes('irremote') || lower.includes('ultrasonic') || lower.includes('hcsr04')) return false;
+      // Skip other static signature matches (except display, since users frequently add custom LCD/OLED/I2C libs)
+      const matchesNonDisplaySig = LIBRARY_SIGNATURES.some(sig => sig.categoryName.toLowerCase() !== 'display' && sig.patterns.some(p => lower.includes(p)));
+      if (matchesNonDisplaySig) return false;
+      return true;
     });
-    if (unknownLibs.length > 0) {
-      unknownLibs.forEach(lib => {
-        const safeName = lib.replace(/[^a-zA-Z0-9_\-]/g, '');
+
+    if (customLibs.length > 0) {
+      customLibs.forEach(lib => {
+        const safeName = lib.replace(/[^a-zA-Z0-9_]/g, '_');
         const typeBegin = `custom_${safeName}_begin`.toLowerCase();
         const typeRead  = `custom_${safeName}_read`.toLowerCase();
         const typePrint = `custom_${safeName}_print`.toLowerCase();
+        const typeCall  = `custom_${safeName}_call`.toLowerCase();
 
-        // Register generic blocks on-the-fly for this unknown library
+        // Register generic blocks on-the-fly for this custom/GitHub library
         const genericDefs: any[] = [];
         if (!Blockly.Blocks[typeBegin]) {
-          genericDefs.push({ type: typeBegin, message0: `${safeName} Begin / Init`, previousStatement: null, nextStatement: null, colour: 45, tooltip: `Initialize ${lib}`, helpUrl: '' });
+          genericDefs.push({
+            type: typeBegin,
+            message0: `${lib} Begin / Setup`,
+            previousStatement: null,
+            nextStatement: null,
+            colour: '#6366f1',
+            tooltip: `Inisialisasi library ${lib}`,
+            helpUrl: ''
+          });
         }
         if (!Blockly.Blocks[typeRead]) {
-          genericDefs.push({ type: typeRead, message0: `${safeName} Read`, output: 'Number', colour: 45, tooltip: `Read value from ${lib}`, helpUrl: '' });
+          genericDefs.push({
+            type: typeRead,
+            message0: `${lib} Baca Nilai`,
+            output: 'Number',
+            colour: '#6366f1',
+            tooltip: `Baca nilai dari library ${lib}`,
+            helpUrl: ''
+          });
         }
         if (!Blockly.Blocks[typePrint]) {
-          genericDefs.push({ type: typePrint, message0: `${safeName} Print / Send %1`, args0: [{ type: 'input_value', name: 'DATA' }], previousStatement: null, nextStatement: null, colour: 45, tooltip: `Send data via ${lib}`, helpUrl: '' });
+          genericDefs.push({
+            type: typePrint,
+            message0: `${lib} Kirim / Print %1`,
+            args0: [{ type: 'input_value', name: 'DATA' }],
+            previousStatement: null,
+            nextStatement: null,
+            colour: '#6366f1',
+            tooltip: `Kirim data via library ${lib}`,
+            helpUrl: ''
+          });
+        }
+        if (!Blockly.Blocks[typeCall]) {
+          genericDefs.push({
+            type: typeCall,
+            message0: `${lib} Panggil %1 ( %2 )`,
+            args0: [
+              { type: 'field_input', name: 'METHOD', text: 'update' },
+              { type: 'input_value', name: 'PARAM' }
+            ],
+            previousStatement: null,
+            nextStatement: null,
+            colour: '#6366f1',
+            tooltip: `Panggil method dari library ${lib}`,
+            helpUrl: ''
+          });
         }
         try { if (genericDefs.length > 0) Blockly.defineBlocksWithJsonArray(genericDefs); } catch (_) {}
 
-        xml += `<category name="${safeName}" colour="#6c757d" css-row="cat-variables">`;
+        xml += `<category name="${lib}" colour="#6366f1" css-row="cat-default">`;
         xml += `<block type="${typeBegin}"></block>`;
         xml += `<block type="${typeRead}"></block>`;
         xml += `<block type="${typePrint}"></block>`;
+        xml += `<block type="${typeCall}"></block>`;
         xml += `</category>`;
       });
     }
@@ -4119,8 +4161,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `robot.keypad_read()`;
     }
     if (block.type.startsWith('custom_') && block.type.endsWith('_read')) {
-      if (lang === 'arduino') return `0`;
-      return `0`;
+      const libSafe = block.type.replace(/^custom_/, '').replace(/_read$/, '');
+      if (lang === 'arduino') return `${libSafe}.read()`;
+      return `${libSafe}_read()`;
     }
     if (block.type === 'arduino_serial_available') {
       if (lang === 'arduino') return `Serial.available()`;
@@ -4893,10 +4936,37 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}robot.keypad_begin()\n`;
         }
       } else if (currentBlock.type.startsWith('custom_')) {
-        if (lang === 'arduino') {
-          code += `${indent}// Custom library statement\n`;
+        const typeStr = currentBlock.type;
+        const libSafe = typeStr.replace(/^custom_/, '').replace(/_(begin|read|print|call)$/, '');
+        if (typeStr.endsWith('_begin')) {
+          if (lang === 'arduino') {
+            code += `${indent}// Inisialisasi library ${libSafe}\n${indent}${libSafe}.begin();\n`;
+          } else {
+            code += `${indent}# Inisialisasi library ${libSafe}\n${indent}${libSafe}_begin()\n`;
+          }
+        } else if (typeStr.endsWith('_print')) {
+          const dataBlock = currentBlock.getInputTargetBlock('DATA');
+          const dataVal = dataBlock ? getBlockValue(dataBlock, lang) : '""';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.println(${dataVal});\n`;
+          } else {
+            code += `${indent}print(${dataVal})\n`;
+          }
+        } else if (typeStr.endsWith('_call')) {
+          const method = currentBlock.getFieldValue('METHOD') || 'update';
+          const paramBlock = currentBlock.getInputTargetBlock('PARAM');
+          const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : '';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.${method}(${paramVal});\n`;
+          } else {
+            code += `${indent}${libSafe}_${method}(${paramVal})\n`;
+          }
         } else {
-          code += `${indent}pass # Custom library statement\n`;
+          if (lang === 'arduino') {
+            code += `${indent}// Custom library statement\n`;
+          } else {
+            code += `${indent}pass # Custom library statement\n`;
+          }
         }
       } else if (currentBlock.type === 'neopixel_init') {
         const pin = currentBlock.getFieldValue('PIN');

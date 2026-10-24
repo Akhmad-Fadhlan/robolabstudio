@@ -8529,7 +8529,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             success = true;
                             if (res.libName) repoName = res.libName;
                             if (authUser?.id) {
-                              saveUserCustomLibrary(authUser.id, {
+                              await saveUserCustomLibrary(authUser.id, {
                                 name: res.libName || repoName,
                                 source_type: 'github',
                                 source_url: url,
@@ -8537,21 +8537,30 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 headers: res.headers || []
                               });
                             }
-                            syncInstalledLibraries();
+                            await syncInstalledLibraries();
                           }
                         } catch (e: any) {
                           console.warn('GitHub install error:', e);
                         }
                       } else {
                         success = true;
+                        if (authUser?.id) {
+                          await saveUserCustomLibrary(authUser.id, {
+                            name: repoName,
+                            source_type: 'github',
+                            source_url: url,
+                            version: 'latest-git',
+                            headers: []
+                          });
+                        }
                       }
 
                       if (success) {
                         setPackages((prev: any) => ({
                           ...prev,
-                          arduino: prev.arduino.some((p: any) => p.name === repoName)
-                            ? prev.arduino.map((p: any) => p.name === repoName ? { ...p, installed: true } : p)
-                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true }]
+                          arduino: prev.arduino.some((p: any) => p.name.toLowerCase() === repoName.toLowerCase())
+                            ? prev.arduino.map((p: any) => p.name.toLowerCase() === repoName.toLowerCase() ? { ...p, installed: true, isCustom: true, userId: authUser?.id } : p)
+                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true, isCustom: true, userId: authUser?.id }]
                         }));
                         setTerminalLogs((prev: any) => [
                           ...prev,
@@ -10715,7 +10724,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             ]
                           }));
                           if (authUser?.id) {
-                            saveUserCustomLibrary(authUser.id, {
+                            await saveUserCustomLibrary(authUser.id, {
                               name: installedName,
                               source_type: 'github',
                               source_url: customGithubUrl.trim(),
@@ -10728,7 +10737,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             { text: `[LIB] ✓ Library '${installedName}' berhasil diinstal ke akun Anda!`, type: 'success' }
                           ]);
                           setCustomGithubUrl('');
-                          syncInstalledLibraries();
+                          await syncInstalledLibraries();
                         }
                       } catch (_) {}
                     }

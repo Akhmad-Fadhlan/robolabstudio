@@ -581,22 +581,59 @@ export async function saveUserCustomLibrary(
 ): Promise<boolean> {
   if (!userId) return false;
   try {
+    const payload = {
+      user_id: userId,
+      name: lib.name,
+      source_type: lib.source_type,
+      source_url: lib.source_url || null,
+      version: lib.version || '1.0.0',
+      headers: lib.headers || [],
+    };
+
+    // 1. Coba upsert langsung menggunakan constraint (user_id, name)
     const { error } = await supabase
       .from('user_custom_libraries')
-      .upsert({
-        user_id: userId,
-        name: lib.name,
-        source_type: lib.source_type,
-        source_url: lib.source_url || null,
-        version: lib.version || '1.0.0',
-        headers: lib.headers || [],
-      }, { onConflict: 'user_id, name' });
+      .upsert(payload, { onConflict: 'user_id, name' });
 
-    if (error) {
-      console.warn('[RoboLab] saveUserCustomLibrary notice:', error.message);
-      return false;
+    if (!error) {
+      return true;
     }
-    return true;
+
+    console.warn('[RoboLab] saveUserCustomLibrary upsert notice (fallback aktif):', error.message);
+
+    // 2. Fallback jika constraint UNIQUE belum dibuat di Supabase
+    const { data: existing } = await supabase
+      .from('user_custom_libraries')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('name', lib.name)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { error: updateErr } = await supabase
+        .from('user_custom_libraries')
+        .update({
+          source_type: lib.source_type,
+          source_url: lib.source_url || null,
+          version: lib.version || '1.0.0',
+          headers: lib.headers || [],
+        })
+        .eq('id', existing.id);
+
+      if (!updateErr) return true;
+      console.warn('[RoboLab] saveUserCustomLibrary fallback update failed:', updateErr.message);
+    } else {
+      const { error: insertErr } = await supabase
+        .from('user_custom_libraries')
+        .insert({
+          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined,
+          ...payload
+        });
+
+      if (!insertErr) return true;
+      console.warn('[RoboLab] saveUserCustomLibrary fallback insert failed:', insertErr.message);
+    }
+    return false;
   } catch (err: any) {
     console.warn('[RoboLab] saveUserCustomLibrary exception:', err.message);
     return false;
