@@ -3775,49 +3775,49 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (!Blockly.Blocks[typeBegin]) {
           Blockly.Blocks[typeBegin] = {
             init: function () {
-
+              this.appendDummyInput().appendField(`${libName} Inisialisasi`);
               this.setPreviousStatement(true, null);
               this.setNextStatement(true, null);
               this.setColour('#6366f1');
-              this.setTooltip(`Inisialisasi library ${lib}`);
+              this.setTooltip(`Inisialisasi library ${libName}`);
             }
           };
         }
         if (!Blockly.Blocks[typeRead]) {
           Blockly.Blocks[typeRead] = {
             init: function () {
-              this.appendDummyInput().appendField(`${lib} Baca Nilai`);
+              this.appendDummyInput().appendField(`${libName} Baca Nilai`);
               this.setOutput(true, 'Number');
               this.setColour('#6366f1');
-              this.setTooltip(`Baca nilai dari library ${lib}`);
+              this.setTooltip(`Baca nilai dari library ${libName}`);
             }
           };
         }
         if (!Blockly.Blocks[typePrint]) {
           Blockly.Blocks[typePrint] = {
             init: function () {
-              this.appendValueInput('DATA').appendField(`${lib} Kirim / Print`);
+              this.appendValueInput('DATA').appendField(`${libName} Kirim / Print`);
               this.setPreviousStatement(true, null);
               this.setNextStatement(true, null);
               this.setColour('#6366f1');
-              this.setTooltip(`Kirim data via library ${lib}`);
+              this.setTooltip(`Kirim data via library ${libName}`);
             }
           };
         }
         if (!Blockly.Blocks[typeCall]) {
           Blockly.Blocks[typeCall] = {
             init: function () {
-              this.appendDummyInput().appendField(`${lib} Panggil`).appendField(new Blockly.FieldTextInput('update'), 'METHOD');
+              this.appendDummyInput().appendField(`${libName} Panggil`).appendField(new Blockly.FieldTextInput('update'), 'METHOD');
               this.appendValueInput('PARAM').appendField('Param');
               this.setPreviousStatement(true, null);
               this.setNextStatement(true, null);
               this.setColour('#6366f1');
-              this.setTooltip(`Panggil method dari library ${lib}`);
+              this.setTooltip(`Panggil method dari library ${libName}`);
             }
           };
         }
 
-        const escapedName = lib.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const escapedName = libName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         xml += `<category name="${escapedName}" colour="#6366f1" css-row="cat-default">`;
         xml += `<block type="${typeBegin}"></block>`;
         xml += `<block type="${typeRead}"></block>`;
