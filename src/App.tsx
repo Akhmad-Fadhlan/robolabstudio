@@ -6,7 +6,7 @@ import {
   Cpu, Activity, ChevronRight, ChevronLeft, 
   Plus, Search, Smartphone, X, Sliders, Download, 
   File as FileIcon, FileText, Folder, Play, Square, RotateCcw, Blocks, Code,
-  FolderOpen, Check, Save, Upload, Terminal as TerminalIcon,
+  FolderOpen, Check, Save, Upload, Terminal as TerminalIcon, Trash2,
   HelpCircle, Compass, ArrowRight, Copy, Loader2,
   Info, MessageSquare, Package, Monitor, Lock, Clock, Star
 } from 'lucide-react';
@@ -58,7 +58,7 @@ import { arduinoToBlocklyXml } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
 import { processAiMessage, DEFAULT_KILOCODE_CONFIG } from './services/kilocodeService';
 import type { KiloCodeConfig, ChatMessage } from './services/kilocodeService';
-import { checkTrialStatus, fetchUserCustomLibraries, saveUserCustomLibrary } from './services/supabaseClient';
+import { checkTrialStatus, fetchUserCustomLibraries, saveUserCustomLibrary, deleteUserCustomLibrary } from './services/supabaseClient';
 import type { TrialStatus } from './services/supabaseClient';
 import {
   isElectronEnv,
@@ -3892,6 +3892,75 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [isInstallingGithub, setIsInstallingGithub] = useState(false);
   const [isSyncingLibs, setIsSyncingLibs] = useState(false);
   const [installingMap, setInstallingMap] = useState<Record<string, { loading: boolean; progress?: string }>>({});
+  const [uninstallingMap, setUninstallingMap] = useState<{ [pkgName: string]: boolean }>({});
+
+  const handleUninstallPkg = async (type: 'arduino' | 'python', name: string) => {
+    if (!name) return;
+    const confirmed = window.confirm(`Apakah Anda yakin ingin menghapus/uninstall ${type === 'arduino' ? 'library' : 'package'} '${name}'?`);
+    if (!confirmed) return;
+
+    setIsTerminalCollapsed(false);
+    setTerminalTab('terminal');
+    setUninstallingMap(prev => ({ ...prev, [name]: true }));
+    setTerminalLogs((prev: any) => [...prev, { text: `🗑️ Memulai penghapusan package ${name}...`, type: 'info' }]);
+
+    const req = (window as any).__electronRequire || (window as any).require;
+    if (!req) {
+      setTimeout(() => {
+        setPackages((prev: any) => ({
+          ...prev,
+          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: false, isCustom: false } : p)
+            .filter((p: any) => {
+              if (type === 'arduino') {
+                const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
+                if (!isInitial && p.name.toLowerCase() === name.toLowerCase()) return false;
+              }
+              return true;
+            })
+        }));
+        setUninstallingMap(prev => ({ ...prev, [name]: false }));
+        setTerminalLogs((prev: any) => [...prev, { text: `✓ Package ${name} dihapus (Web Demo mode).`, type: 'success' }]);
+      }, 800);
+      return;
+    }
+
+    try {
+      const electron = req('electron');
+      const channel = type === 'arduino' ? 'uninstall-arduino-lib' : 'uninstall-python-pkg';
+      const result = await electron.ipcRenderer.invoke(channel, type === 'arduino' ? { libName: name, userId: authUser?.id } : name);
+
+      if (type === 'arduino' && authUser?.id) {
+        try {
+          await deleteUserCustomLibrary(authUser.id, name);
+        } catch (_) {}
+      }
+
+      if (result && result.success) {
+        setPackages((prev: any) => ({
+          ...prev,
+          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: false, isCustom: false } : p)
+            .filter((p: any) => {
+              if (type === 'arduino') {
+                const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
+                if (!isInitial && p.name.toLowerCase() === name.toLowerCase()) return false;
+              }
+              return true;
+            })
+        }));
+        if (type === 'arduino') {
+          setCustomLibProjects(prev => prev.filter(p => (p.libraryName || '').toLowerCase() !== name.toLowerCase()));
+          await syncInstalledLibraries();
+        }
+        setTerminalLogs((prev: any) => [...prev, { text: `✅ Package ${name} berhasil dihapus dari sistem!`, type: 'success' }]);
+      } else {
+        setTerminalLogs((prev: any) => [...prev, { text: `❌ Gagal menghapus package ${name}.`, type: 'error' }]);
+      }
+    } catch (err: any) {
+      setTerminalLogs((prev: any) => [...prev, { text: `Error: ${err.message || err}`, type: 'error' }]);
+    } finally {
+      setUninstallingMap(prev => ({ ...prev, [name]: false }));
+    }
+  };
 
   // Persist packages state to localStorage per user
   useEffect(() => {
@@ -8780,29 +8849,54 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           </div>
                           <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
                         </div>
-                        <button
-                          disabled={pkg.installed || installingMap[pkg.name]?.loading}
-                          onClick={() => handleInstallPkg('arduino', pkg.name)}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex-shrink-0 flex items-center gap-1.5 ${
-                            pkg.installed
-                              ? 'bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 cursor-default'
-                              : installingMap[pkg.name]?.loading
-                              ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
-                              : 'text-white hover:opacity-90'
-                          }`}
-                          style={!pkg.installed && !installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
-                        >
-                          {installingMap[pkg.name]?.loading ? (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {pkg.installed ? (
                             <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
+                              <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Installed</span>
+                              </span>
+                              <button
+                                disabled={uninstallingMap[pkg.name]}
+                                onClick={() => handleUninstallPkg('arduino', pkg.name)}
+                                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
+                                title={`Hapus library ${pkg.name}`}
+                              >
+                                {uninstallingMap[pkg.name] ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Menghapus...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Hapus</span>
+                                  </>
+                                )}
+                              </button>
                             </>
-                          ) : pkg.installed ? (
-                            '✓ Installed'
                           ) : (
-                            'Install'
+                            <button
+                              disabled={installingMap[pkg.name]?.loading}
+                              onClick={() => handleInstallPkg('arduino', pkg.name)}
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
+                                installingMap[pkg.name]?.loading
+                                  ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
+                                  : 'text-white hover:opacity-90'
+                              }`}
+                              style={!installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
+                            >
+                              {installingMap[pkg.name]?.loading ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
+                                </>
+                              ) : (
+                                'Install'
+                              )}
+                            </button>
                           )}
-                        </button>
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -8823,29 +8917,54 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           </div>
                           <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
                         </div>
-                        <button
-                          disabled={pkg.installed || installingMap[pkg.name]?.loading}
-                          onClick={() => handleInstallPkg('python', pkg.name)}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex-shrink-0 flex items-center gap-1.5 ${
-                            pkg.installed
-                              ? 'bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 cursor-default'
-                              : installingMap[pkg.name]?.loading
-                              ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
-                              : 'text-white hover:opacity-90'
-                          }`}
-                          style={!pkg.installed && !installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
-                        >
-                          {installingMap[pkg.name]?.loading ? (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {pkg.installed ? (
                             <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
+                              <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Installed</span>
+                              </span>
+                              <button
+                                disabled={uninstallingMap[pkg.name]}
+                                onClick={() => handleUninstallPkg('python', pkg.name)}
+                                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
+                                title={`Hapus package ${pkg.name}`}
+                              >
+                                {uninstallingMap[pkg.name] ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Menghapus...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Hapus</span>
+                                  </>
+                                )}
+                              </button>
                             </>
-                          ) : pkg.installed ? (
-                            '✓ Installed'
                           ) : (
-                            'Install'
+                            <button
+                              disabled={installingMap[pkg.name]?.loading}
+                              onClick={() => handleInstallPkg('python', pkg.name)}
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
+                                installingMap[pkg.name]?.loading
+                                  ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
+                                  : 'text-white hover:opacity-90'
+                              }`}
+                              style={!installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
+                            >
+                              {installingMap[pkg.name]?.loading ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
+                                </>
+                              ) : (
+                                'Install'
+                              )}
+                            </button>
                           )}
-                        </button>
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -10957,9 +11076,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       <p className="text-[10px] text-slate-400">{lib.desc} &bull; <span className="text-slate-500">by {lib.author}</span></p>
                     </div>
                     {isLibInstalled ? (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 flex-shrink-0">
-                        <Check className="w-3 h-3" /> Installed
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Installed
+                        </span>
+                        <button
+                          disabled={uninstallingMap[lib.name]}
+                          onClick={() => handleUninstallPkg('arduino', lib.name)}
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                          title={`Hapus library ${lib.name}`}
+                        >
+                          {uninstallingMap[lib.name] ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                          <span>Hapus</span>
+                        </button>
+                      </div>
                     ) : (
                       <button
                         disabled={installingLib === lib.name}

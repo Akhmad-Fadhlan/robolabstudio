@@ -2460,6 +2460,86 @@ ipcMain.handle('get-library-examples', async (event, payloadUserId) => {
   }
 });
 
+// IPC Handler: Uninstall/Delete an Arduino library from user account and disk
+ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
+  try {
+    const libName = typeof payload === 'object' && payload ? payload.libName : payload;
+    const userId = typeof payload === 'object' && payload ? payload.userId : null;
+
+    if (!libName || typeof libName !== 'string' || !libName.trim()) {
+      return { success: false, error: 'Nama library tidak valid' };
+    }
+
+    const cleanName = libName.trim();
+    safeSend(event, 'arduino-log', { text: `🗑️ Memulai penghapusan library '${cleanName}'...`, type: 'info' });
+
+    let deletedAny = false;
+    const userLibDir = getUserLibraryDir(userId);
+    const globalDirs = getGlobalLibraryDirs();
+    const candidateDirs = [userLibDir, ...globalDirs];
+
+    const cleanSafe = cleanName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+
+    for (const baseDir of candidateDirs) {
+      if (!baseDir || !fs.existsSync(baseDir)) continue;
+      try {
+        const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+        for (const ent of entries) {
+          if (ent.isDirectory()) {
+            const entName = ent.name;
+            const entSafe = entName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+            if (entName.toLowerCase() === cleanName.toLowerCase() || entSafe === cleanSafe) {
+              const targetPath = path.join(baseDir, entName);
+              try {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+                deletedAny = true;
+                console.log(`[RoboLab] Removed library directory: ${targetPath}`);
+              } catch (rmErr) {
+                console.warn(`[RoboLab] Failed to remove library directory ${targetPath}:`, rmErr.message);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Attempt arduino-cli lib uninstall if available
+    const { execFile } = require('child_process');
+    const cliPath = findArduinoCLI();
+    if (cliPath && fs.existsSync(cliPath)) {
+      try {
+        await new Promise((resolve) => {
+          execFile(cliPath, ['lib', 'uninstall', cleanName], { timeout: 10000 }, () => resolve());
+        });
+      } catch (_) {}
+    }
+
+    purgeBuildDirs();
+    safeSend(event, 'arduino-log', { text: `✅ Library '${cleanName}' berhasil dihapus dari sistem!`, type: 'success' });
+    return { success: true, libName: cleanName };
+  } catch (err) {
+    console.error('[RoboLab] Error in uninstall-arduino-lib:', err);
+    safeSend(event, 'arduino-log', { text: `❌ Gagal menghapus library: ${err.message}`, type: 'error' });
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC Handler: Real Python package uninstallation via pip
+ipcMain.handle('uninstall-python-pkg', async (event, pkgName) => {
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    safeSend(event, 'python-output', { text: `🗑️ Menghapus package Python '${pkgName}' via pip...`, type: 'info' });
+    exec(`python -m pip uninstall -y ${pkgName}`, { timeout: 60000 }, (error, stdout, stderr) => {
+      if (error) {
+        safeSend(event, 'python-output', { text: `❌ Gagal menghapus '${pkgName}': ${error.message}`, type: 'error' });
+        resolve({ success: false, error: error.message });
+      } else {
+        safeSend(event, 'python-output', { text: `✅ Package Python '${pkgName}' berhasil dihapus!`, type: 'info' });
+        resolve({ success: true });
+      }
+    });
+  });
+});
 
 // IPC Handler: Real Python package installation via pip
 ipcMain.handle('install-python-pkg', async (event, pkgName) => {
