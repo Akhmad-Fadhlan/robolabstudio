@@ -470,6 +470,268 @@ const getGlobalLibraryDirs = () => {
   return dirs;
 };
 
+// --- Arduino Library Parser: Extract headers, classes, #define pins & constants, and methods ---
+const parseArduinoLibrary = (libPath, libName) => {
+  const result = {
+    name: libName,
+    mainHeader: null,
+    className: null,
+    pins: [],       // Array<{ name: string, value: string, isPin: boolean }>
+    constants: [],  // Array<{ name: string, value: string, isPin: boolean }>
+    methods: [],    // Array<{ name: string, returnType: string, params: string[] }>
+    constructors: []
+  };
+  if (!libPath || !fs.existsSync(libPath)) return result;
+
+  try {
+    const headerFiles = [];
+    const rootFiles = fs.readdirSync(libPath);
+    for (const f of rootFiles) {
+      if (f.endsWith('.h') || f.endsWith('.hpp')) headerFiles.push(path.join(libPath, f));
+    }
+    const srcDir = path.join(libPath, 'src');
+    if (fs.existsSync(srcDir) && fs.statSync(srcDir).isDirectory()) {
+      const srcFiles = fs.readdirSync(srcDir);
+      for (const f of srcFiles) {
+        if (f.endsWith('.h') || f.endsWith('.hpp')) headerFiles.push(path.join(srcDir, f));
+      }
+    }
+
+    if (headerFiles.length > 0) {
+      const cleanLib = libName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const matched = headerFiles.find(h => path.basename(h).replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(cleanLib));
+      result.mainHeader = matched ? path.basename(matched) : path.basename(headerFiles[0]);
+    }
+
+    // 1. Parse keywords.txt if present
+    const keywordsPath = path.join(libPath, 'keywords.txt');
+    if (fs.existsSync(keywordsPath)) {
+      try {
+        const kwLines = fs.readFileSync(keywordsPath, 'utf8').split(/\r?\n/);
+        for (const line of kwLines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const parts = trimmed.split(/\s+/);
+          if (parts.length >= 2) {
+            const kw = parts[0];
+            const type = parts[1].toUpperCase();
+            if (type === 'KEYWORD1' && !result.className) {
+              result.className = kw;
+            } else if (type === 'KEYWORD2') {
+              if (!result.methods.some(m => m.name.toLowerCase() === kw.toLowerCase())) {
+                const isGetter = /^(?:get|read|is|has|check|ping|analog|digital)/i.test(kw);
+                result.methods.push({
+                  name: kw,
+                  returnType: isGetter ? 'Number' : 'void',
+                  params: []
+                });
+              }
+            } else if (type === 'LITERAL1' || type === 'LITERAL2') {
+              const isPin = /(?:pin|trig|echo|sda|scl|cs|rst|irq|led|rx|tx|btn|button|relay|buzzer)/i.test(kw);
+              if (isPin) {
+                if (!result.pins.some(p => p.name === kw)) {
+                  result.pins.push({ name: kw, value: '2', isPin: true });
+                }
+              } else {
+                if (!result.constants.some(c => c.name === kw)) {
+                  result.constants.push({ name: kw, value: '0', isPin: false });
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Parse C++ header files
+    const pinKeywordsRegex = /(?:pin|trig|echo|sda|scl|cs|ss|rst|reset|irq|led|rx|tx|btn|button|relay|buzzer|sensor|pot|adc|servo)/i;
+
+    for (const hFile of headerFiles) {
+      try {
+        let content = fs.readFileSync(hFile, 'utf8');
+        content = content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\r\n]*/g, '');
+
+        // #define
+        const defRegex = /#define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+([^\r\n]+)/g;
+        let dm;
+        const fileNameBase = path.basename(hFile, path.extname(hFile)).toUpperCase();
+        while ((dm = defRegex.exec(content)) !== null) {
+          const dName = dm[1].trim();
+          const dVal = dm[2].trim().replace(/^\(|\)$/g, '');
+          if (dName.toUpperCase() === `_${fileNameBase}_H_` || dName.toUpperCase() === `${fileNameBase}_H` || dName.toUpperCase() === `_${fileNameBase}_H`) continue;
+          if (dName.endsWith('_H') && (!dVal || dVal === '1')) continue;
+          if (dVal.startsWith('(') && dVal.includes(')')) continue;
+
+          const isPin = pinKeywordsRegex.test(dName) || /^(?:[AD]?\d+)$/.test(dVal);
+          if (isPin) {
+            if (!result.pins.some(p => p.name === dName)) {
+              result.pins.push({ name: dName, value: dVal || '2', isPin: true });
+            }
+          } else if (dVal && !dVal.includes('(')) {
+            if (!result.constants.some(c => c.name === dName)) {
+              result.constants.push({ name: dName, value: dVal, isPin: false });
+            }
+          }
+        }
+
+        // Classes & public methods
+        const classRegex = /class\s+([a-zA-Z0-9_]+)\s*(?::\s*public\s+[a-zA-Z0-9_]+)?\s*\{([\s\S]*?)\};/g;
+        let cm;
+        while ((cm = classRegex.exec(content)) !== null) {
+          const clsName = cm[1];
+          if (!result.className) result.className = clsName;
+          const classBody = cm[2];
+
+          const publicSections = classBody.split(/\bpublic\s*:/i).slice(1);
+          for (const pub of publicSections) {
+            const cleanPub = pub.split(/\b(?:private|protected)\s*:/i)[0];
+
+            // Method declarations
+            const methodRegex = /\b(?:void|int|float|double|bool|boolean|uint8_t|uint16_t|uint32_t|int16_t|int32_t|long|unsigned\s+long|size_t|String|char\s*\*?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
+            let mm;
+            while ((mm = methodRegex.exec(cleanPub)) !== null) {
+              const mName = mm[1];
+              const mParams = mm[2].split(',').map(p => p.trim().split(/\s+/).pop()).filter(Boolean);
+              if (mName.startsWith('_') || mName.startsWith('operator') || mName === clsName) continue;
+
+              if (!result.methods.some(m => m.name.toLowerCase() === mName.toLowerCase())) {
+                const returnType = /\b(?:void)\b/.test(mm[0]) ? 'void' : (/\b(?:bool|boolean)\b/.test(mm[0]) ? 'Boolean' : 'Number');
+                result.methods.push({ name: mName, returnType, params: mParams });
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!result.className) {
+      result.className = libName;
+    }
+  } catch (_) {}
+
+  return result;
+};
+
+
+const scanLibraryExamples = (libPath, libName, parsedApi = null) => {
+  const examples = [];
+  if (!libPath || !fs.existsSync(libPath)) return examples;
+
+  const candidateDirNames = ['examples', 'Examples', 'example'];
+  let exampleDir = null;
+  for (const c of candidateDirNames) {
+    const p = path.join(libPath, c);
+    if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+      exampleDir = p;
+      break;
+    }
+  }
+
+  if (exampleDir) {
+    const findInoFiles = (dir, depth = 0) => {
+      if (depth > 3) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const ent of entries) {
+          const fullPath = path.join(dir, ent.name);
+          if (ent.isDirectory()) {
+            findInoFiles(fullPath, depth + 1);
+          } else if (ent.isFile() && (ent.name.endsWith('.ino') || ent.name.endsWith('.pde') || ent.name.endsWith('.cpp'))) {
+            try {
+              const code = fs.readFileSync(fullPath, 'utf8');
+              const baseName = path.basename(ent.name, path.extname(ent.name));
+              const parentDir = path.basename(dir);
+              const titleName = (parentDir && parentDir !== 'examples' && parentDir !== 'Examples')
+                ? `${libName} - ${parentDir}`
+                : `${libName} - ${baseName}`;
+
+              let desc = `Contoh program ${titleName} dari library ${libName}.`;
+              const commentMatch = code.match(/^\/\*([\s\S]*?)\*\//) || code.match(/^\/\/\s*([^\r\n]+)/);
+              if (commentMatch && commentMatch[1]) {
+                const cleaned = commentMatch[1].replace(/\*+/g, '').trim().split('\n')[0].trim();
+                if (cleaned.length > 5 && cleaned.length < 120) {
+                  desc = cleaned;
+                }
+              }
+
+              const isEsp32 = /WiFi\.h|esp_wifi|esp32|ESP32|freertos/i.test(code);
+              const board = isEsp32 ? 'ESP32 DevKit V1' : 'Arduino Uno';
+
+              examples.push({
+                name: titleName,
+                fileName: ent.name,
+                library: libName,
+                board: board,
+                description: desc,
+                code: code,
+                path: fullPath
+              });
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    };
+
+    findInoFiles(exampleDir);
+  }
+
+  // If no examples were found on disk, generate a starter example sketch from parsedApi
+  if (examples.length === 0 && parsedApi) {
+    const mainHeader = parsedApi.mainHeader || (parsedApi.name ? `${parsedApi.name}.h` : null);
+    const clsName = parsedApi.className || parsedApi.name || 'MySensor';
+    const varName = clsName ? clsName.charAt(0).toLowerCase() + clsName.slice(1) : 'mySensor';
+
+    let pinDefs = '';
+    let pinInits = '';
+    if (Array.isArray(parsedApi.pins) && parsedApi.pins.length > 0) {
+      pinDefs = parsedApi.pins.slice(0, 3).map(p => `#define ${p.name} ${p.value || '2'}`).join('\n') + '\n';
+      pinInits = parsedApi.pins.slice(0, 3).map(p => `  pinMode(${p.name}, OUTPUT);`).join('\n') + '\n';
+    }
+
+    let methodCalls = '';
+    if (Array.isArray(parsedApi.methods) && parsedApi.methods.length > 0) {
+      const demoMethods = parsedApi.methods.slice(0, 3);
+      methodCalls = demoMethods.map(m => {
+        if (m.returnType === 'void') {
+          return `  ${varName}.${m.name}();`;
+        } else {
+          return `  Serial.print("${m.name}: ");\n  Serial.println(${varName}.${m.name}());`;
+        }
+      }).join('\n');
+    } else {
+      methodCalls = `  Serial.println("Running ${libName}...");`;
+    }
+
+    const starterCode = `// Program Contoh: ${libName} Starter
+${mainHeader ? `#include <${mainHeader}>` : `// #include <${libName}.h>`}
+
+${pinDefs}
+${clsName} ${varName};
+
+void setup() {
+  Serial.begin(9600);
+${pinInits}  Serial.println("${libName} diinisialisasi!");
+}
+
+void loop() {
+${methodCalls}
+  delay(1000);
+}`;
+
+    examples.push({
+      name: `${libName} - Starter Demo`,
+      fileName: 'StarterDemo.ino',
+      library: libName,
+      board: 'Arduino Uno',
+      description: `Program contoh starter otomatis untuk library ${libName}.`,
+      code: starterCode,
+      path: null
+    });
+  }
+
+  return examples;
+};
+
 const scanLibrariesInFolder = (folderPath, isCustom = false, userId = null) => {
   const list = [];
   if (!folderPath || !fs.existsSync(folderPath)) return list;
@@ -516,6 +778,9 @@ const scanLibrariesInFolder = (folderPath, isCustom = false, userId = null) => {
         }
       } catch (_) {}
 
+      const parsedApi = parseArduinoLibrary(libPath, name);
+      const examples = scanLibraryExamples(libPath, name, parsedApi);
+
       list.push({
         name,
         folderName: ent.name,
@@ -524,6 +789,8 @@ const scanLibrariesInFolder = (folderPath, isCustom = false, userId = null) => {
         desc,
         path: libPath,
         headers,
+        parsedApi,
+        examples,
         isCustom,
         userId: userId || null,
         installed: true
@@ -2018,6 +2285,8 @@ ipcMain.handle('install-lib-from-github', async (event, payload) => {
       }
     } catch (_) {}
 
+    const parsedApi = parseArduinoLibrary(targetPath, safeFinalName);
+    const examples = scanLibraryExamples(targetPath, safeFinalName, parsedApi);
     purgeBuildDirs();
     safeSend(event, 'arduino-log', { text: `✅ Library '${safeFinalName}' berhasil diinstal ke akun Anda!`, type: 'success' });
     return {
@@ -2026,7 +2295,9 @@ ipcMain.handle('install-lib-from-github', async (event, payload) => {
       isCustom: true,
       userId: userId || null,
       path: targetPath,
-      headers
+      headers,
+      parsedApi,
+      examples
     };
   } catch (err) {
     safeSend(event, 'arduino-log', { text: `Error GitHub install: ${err.message}`, type: 'error' });
@@ -2112,6 +2383,8 @@ ipcMain.handle('install-lib-from-zip', async (event, payload) => {
       }
     } catch (_) {}
 
+    const parsedApi = parseArduinoLibrary(targetPath, safeName);
+    const examples = scanLibraryExamples(targetPath, safeName, parsedApi);
     purgeBuildDirs();
     safeSend(event, 'arduino-log', { text: `✅ Library '${safeName}' dari ZIP berhasil diinstal ke akun Anda!`, type: 'success' });
     return {
@@ -2120,13 +2393,73 @@ ipcMain.handle('install-lib-from-zip', async (event, payload) => {
       isCustom: true,
       userId: userId || null,
       path: targetPath,
-      headers
+      headers,
+      parsedApi,
+      examples
     };
   } catch (err) {
     safeSend(event, 'arduino-log', { text: `Error ZIP install: ${err.message}`, type: 'error' });
     return { success: false, error: err.message };
   }
 });
+
+// IPC Handler: Get API definitions, pins, and methods from installed library
+ipcMain.handle('get-library-api', async (event, payload) => {
+  try {
+    const libName = typeof payload === 'object' && payload ? payload.libName : payload;
+    const userId = typeof payload === 'object' && payload ? payload.userId : null;
+    const userLibDir = getUserLibraryDir(userId);
+    const globalDirs = getGlobalLibraryDirs();
+
+    const candidateDirs = [path.join(userLibDir, libName), ...globalDirs.map(gd => path.join(gd, libName))];
+    for (const cDir of candidateDirs) {
+      if (fs.existsSync(cDir)) {
+        return parseArduinoLibrary(cDir, libName);
+      }
+    }
+    return { name: libName, pins: [], constants: [], methods: [] };
+  } catch (err) {
+    return { name: payload?.libName || '', error: err.message, pins: [], constants: [], methods: [] };
+  }
+});
+
+// IPC Handler: Get all example sketches from installed & custom libraries
+ipcMain.handle('get-library-examples', async (event, payloadUserId) => {
+  try {
+    const userId = (typeof payloadUserId === 'string') ? payloadUserId : (payloadUserId?.userId || null);
+    const userLibDir = getUserLibraryDir(userId);
+    const globalDirs = getGlobalLibraryDirs();
+
+    const allExamples = [];
+    const scannedCustom = scanLibrariesInFolder(userLibDir, true, userId);
+    for (const lib of scannedCustom) {
+      if (Array.isArray(lib.examples)) {
+        for (const ex of lib.examples) {
+          allExamples.push({ ...ex, isCustom: true, libraryAuthor: lib.author });
+        }
+      }
+    }
+
+    for (const gd of globalDirs) {
+      const scannedGlobal = scanLibrariesInFolder(gd, false, null);
+      for (const lib of scannedGlobal) {
+        if (Array.isArray(lib.examples)) {
+          for (const ex of lib.examples) {
+            if (!allExamples.some(e => e.name === ex.name)) {
+              allExamples.push({ ...ex, isCustom: false, libraryAuthor: lib.author });
+            }
+          }
+        }
+      }
+    }
+
+    return allExamples;
+  } catch (err) {
+    console.warn('[RoboLab] Error in get-library-examples:', err.message);
+    return [];
+  }
+});
+
 
 // IPC Handler: Real Python package installation via pip
 ipcMain.handle('install-python-pkg', async (event, pkgName) => {

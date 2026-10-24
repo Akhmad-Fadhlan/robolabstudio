@@ -439,6 +439,124 @@ function parseStatement(line: string, variables: Record<string, string>): string
   line = line.trim();
   if (line === 'pass' || line.startsWith('pass ')) return '__SKIP__';
 
+  // 0. Pin Definition and Setup Statements
+  const defPinMatch = line.match(/^robot\.define_pin\(\s*["']([^"']+)["']\s*,\s*["']?([^"')]+)["']?\s*\)$/);
+  if (defPinMatch) {
+    return `
+      <block type="arduino_define_pin">
+        <field name="PIN_NAME">${escapeXml(defPinMatch[1])}</field>
+        <field name="PIN_NUM">${escapeXml(defPinMatch[2])}</field>
+      </block>
+    `;
+  }
+
+  const defConstMatch = line.match(/^robot\.define_const\(\s*["']([^"']+)["']\s*,\s*["']?([^"')]+)["']?\s*\)$/);
+  if (defConstMatch) {
+    return `
+      <block type="arduino_define_const">
+        <field name="NAME">${escapeXml(defConstMatch[1])}</field>
+        <field name="VALUE">${escapeXml(defConstMatch[2])}</field>
+      </block>
+    `;
+  }
+
+  const pinModeMatch = line.match(/^robot\.pin_mode\(\s*([^,]+?)\s*,\s*["']([^"']+)["']\s*\)$/);
+  if (pinModeMatch) {
+    const p = pinModeMatch[1].trim().replace(/^["']|["']$/g, '');
+    const m = pinModeMatch[2].trim();
+    return `
+      <block type="arduino_pin_mode">
+        <field name="PIN">${escapeXml(p)}</field>
+        <field name="MODE">${escapeXml(m)}</field>
+      </block>
+    `;
+  }
+
+  // Custom Library Calls from Arduino converter
+  const libSetPin = line.match(/^robot\.custom_lib_set_pin\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\)$/);
+  if (libSetPin) {
+    const safe = libSetPin[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const pinVal = libSetPin[2].trim().replace(/^["']|["']$/g, '');
+    return `
+      <block type="custom_${safe}_set_pin">
+        <field name="PIN">${escapeXml(pinVal)}</field>
+        <field name="MODE">OUTPUT</field>
+      </block>
+    `;
+  }
+
+  const libBegin = line.match(/^robot\.custom_lib_begin\(\s*["']([^"']+)["']\s*\)$/);
+  if (libBegin) {
+    const safe = libBegin[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    return `
+      <block type="custom_${safe}_begin"></block>
+    `;
+  }
+
+  const libBeginPin = line.match(/^robot\.custom_lib_begin_pin\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\)$/);
+  if (libBeginPin) {
+    const safe = libBeginPin[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const pinVal = libBeginPin[2].trim().replace(/^["']|["']$/g, '');
+    return `
+      <block type="custom_${safe}_begin_pin">
+        <field name="PIN">${escapeXml(pinVal)}</field>
+      </block>
+    `;
+  }
+
+  const libInitObj = line.match(/^robot\.custom_lib_init\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']([^"']*)["'])?\s*\)$/);
+  if (libInitObj) {
+    const safe = libInitObj[2].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const pinVal = (libInitObj[3] || '2').split(',')[0].trim().replace(/^["']|["']$/g, '');
+    return `
+      <block type="custom_${safe}_init_pin">
+        <field name="PIN">${escapeXml(pinVal || '2')}</field>
+      </block>
+    `;
+  }
+
+  const libWrite = line.match(/^robot\.custom_lib_write\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\)$/);
+  if (libWrite) {
+    const safe = libWrite[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    return `
+      <block type="custom_${safe}_write">
+        <value name="VAL">${parseExpression(libWrite[2], variables)}</value>
+      </block>
+    `;
+  }
+
+  const libUpdate = line.match(/^robot\.custom_lib_update\(\s*["']([^"']+)["']\s*\)$/);
+  if (libUpdate) {
+    const safe = libUpdate[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    return `
+      <block type="custom_${safe}_update"></block>
+    `;
+  }
+
+  const libReset = line.match(/^robot\.custom_lib_reset\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)$/);
+  if (libReset) {
+    const safe = libReset[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const act = libReset[2];
+    return `
+      <block type="custom_${safe}_reset">
+        <field name="ACTION">${escapeXml(act)}()</field>
+      </block>
+    `;
+  }
+
+  const libCall = line.match(/^robot\.custom_lib_call\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*(.+?))?\s*\)$/);
+  if (libCall) {
+    const safe = libCall[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const method = libCall[2];
+    const arg = libCall[3] && libCall[3] !== '""' ? libCall[3].trim() : '';
+    return `
+      <block type="custom_${safe}_call">
+        <field name="METHOD">${escapeXml(method)}</field>
+        ${arg ? `<value name="PARAM">${parseExpression(arg, variables)}</value>` : ''}
+      </block>
+    `;
+  }
+
   // Custom Object-Oriented PWM/Pin resolution: led_pwm.duty(duty)
   const pwmMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.duty\(\s*(.+?)\s*\)$/);
   if (pwmMatch) {
@@ -1123,6 +1241,34 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   }
   if (expr === 'False' || expr === 'false' || expr === 'LOW') {
     return `<block type="logic_boolean"><field name="BOOL">FALSE</field></block>`;
+  }
+
+  // 2c. Custom Library Value Expressions: robot.custom_lib_val("inst", "method", arg) or inst.method(arg)
+  const libValMatch = expr.match(/^robot\.custom_lib_val\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*(.+?))?\s*\)$/) ||
+                      expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
+  if (libValMatch) {
+    const inst = libValMatch[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const method = libValMatch[2];
+    const param = libValMatch[3] && libValMatch[3] !== '""' ? libValMatch[3].trim() : '';
+    const skipInsts = ['math', 'time', 'robot', 'machine', 'display', 'oled', 'pixels', 'FastLED', 'Serial', 'WiFi', 'wifi', 'Blynk', 'blynk'];
+    if (!skipInsts.includes(inst)) {
+      if (method === 'read' || method === 'readVal' || method === 'getValue') {
+        return `<block type="custom_${inst}_read"></block>`;
+      }
+      if (method === 'available' || method === 'isReady' || method === 'connected') {
+        return `
+          <block type="custom_${inst}_status">
+            <field name="CHECK">${escapeXml(method)}()</field>
+          </block>
+        `;
+      }
+      return `
+        <block type="custom_${inst}_call_val">
+          <field name="METHOD">${escapeXml(method)}</field>
+          ${param ? `<value name="PARAM">${parseExpression(param, variables)}</value>` : ''}
+        </block>
+      `;
+    }
   }
 
   // 3. WiFi & Bluetooth & Blynk & Sensor status expressions (before splitting by ==)

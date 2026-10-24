@@ -489,6 +489,73 @@ try {
     },
     // 2. Pin blocks
     {
+      "type": "arduino_define_pin",
+      "message0": "#define Pin %1 = %2",
+      "args0": [
+        {
+          "type": "field_input",
+          "name": "PIN_NAME",
+          "text": "PIN_LED"
+        },
+        {
+          "type": "field_input",
+          "name": "PIN_NUM",
+          "text": "2"
+        }
+      ],
+      "previousStatement": null,
+      "nextStatement": null,
+      "colour": "#8B5CF6",
+      "tooltip": "Definisikan konstanta pin Arduino (#define PIN_NAME PIN_NUM)",
+      "helpUrl": ""
+    },
+    {
+      "type": "arduino_define_const",
+      "message0": "#define %1 %2",
+      "args0": [
+        {
+          "type": "field_input",
+          "name": "NAME",
+          "text": "MY_CONST"
+        },
+        {
+          "type": "field_input",
+          "name": "VALUE",
+          "text": "100"
+        }
+      ],
+      "previousStatement": null,
+      "nextStatement": null,
+      "colour": "#8B5CF6",
+      "tooltip": "Definisikan konstanta atau macro Arduino (#define NAME VALUE)",
+      "helpUrl": ""
+    },
+    {
+      "type": "arduino_pin_mode",
+      "message0": "pinMode Pin %1 Mode %2",
+      "args0": [
+        {
+          "type": "field_input",
+          "name": "PIN",
+          "text": "2"
+        },
+        {
+          "type": "field_dropdown",
+          "name": "MODE",
+          "options": [
+            ["OUTPUT", "OUTPUT"],
+            ["INPUT", "INPUT"],
+            ["INPUT_PULLUP", "INPUT_PULLUP"]
+          ]
+        }
+      ],
+      "previousStatement": null,
+      "nextStatement": null,
+      "colour": "#9966FF",
+      "tooltip": "Atur mode pin GPIO (OUTPUT, INPUT, atau INPUT_PULLUP)",
+      "helpUrl": ""
+    },
+    {
       "type": "pin_digital_write",
       "message0": "digitalWrite Pin %1 to %2",
       "args0": [
@@ -1674,7 +1741,7 @@ interface BlocklyEditorProps {
   board?: string;
   onCodeChange: (code: string, otherCode?: string) => void;
   onCollapse?: () => void;
-  installedLibraries?: string[];
+  installedLibraries?: (string | { name: string; parsedApi?: any; headers?: string[]; isCustom?: boolean })[];
   isSyncWithBlocks?: boolean;
   workspaceXml?: string | null;
   onWorkspaceChange?: (xmlText: string) => void;
@@ -1733,7 +1800,18 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   // 3. Unknown/GitHub libraries
   const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
   return [
+    `custom_${safeName}_define_pin`.toLowerCase(),
+    `custom_${safeName}_set_pin`.toLowerCase(),
+    `custom_${safeName}_attach_pin`.toLowerCase(),
     `custom_${safeName}_begin`.toLowerCase(),
+    `custom_${safeName}_begin_pin`.toLowerCase(),
+    `custom_${safeName}_init_pin`.toLowerCase(),
+    `custom_${safeName}_read_func`.toLowerCase(),
+    `custom_${safeName}_call_val`.toLowerCase(),
+    `custom_${safeName}_status`.toLowerCase(),
+    `custom_${safeName}_write`.toLowerCase(),
+    `custom_${safeName}_update`.toLowerCase(),
+    `custom_${safeName}_reset`.toLowerCase(),
     `custom_${safeName}_read`.toLowerCase(),
     `custom_${safeName}_print`.toLowerCase(),
     `custom_${safeName}_call`.toLowerCase()
@@ -1776,6 +1854,8 @@ export const isBlockActive = (block: any): boolean => {
   const validRootTypes = new Set([
     'arduino_setup',
     'arduino_loop',
+    'arduino_define_pin',
+    'arduino_define_const',
     'procedures_defnoreturn',
     'procedures_defreturn',
     'blynk_on_write',
@@ -1804,7 +1884,8 @@ export const isBlockActive = (block: any): boolean => {
   return false;
 };
 
-const isLibraryNeeded = (libName: string, workspace: any): boolean => {
+const isLibraryNeeded = (lib: any, workspace: any): boolean => {
+  const libName = (typeof lib === 'string' ? lib : lib?.name) || '';
   const lower = libName.toLowerCase();
   
   if (lower === 'wire') {
@@ -1826,6 +1907,12 @@ const isLibraryNeeded = (libName: string, workspace: any): boolean => {
   if (lower === 'robolab_core' || lower === 'robolab') {
     return false;
   }
+
+  const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+  const hasCustomBlock = workspace.getAllBlocks(false).some((b: any) =>
+    isBlockActive(b) && (b.type || '').toLowerCase().startsWith(`custom_${safeName}_`)
+  );
+  if (hasCustomBlock) return true;
 
   const blockTypes = getBlockTypesForLibrary(libName);
   if (blockTypes.length === 0) return false;
@@ -2534,8 +2621,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const libs = installedLibrariesRef.current || [];
       libs.forEach((lib) => {
         if (isLibraryNeeded(lib, workspace)) {
-          let header = lib;
-          const lowerLib = lib.toLowerCase();
+          const libName = (typeof lib === 'string' ? lib : lib?.name) || '';
+          let header = (typeof lib === 'object' && lib?.mainHeader) ? lib.mainHeader.replace(/\.h(pp)?$/i, '') : libName;
+          const className = (typeof lib === 'object' && lib?.className) ? lib.className : libName;
+          const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
+          const lowerLib = libName.toLowerCase();
+
           if (lowerLib.includes('dht')) {
             header = 'DHT';
           } else if (lowerLib.includes('pn532') || lowerLib.includes('adafruit-pn532') || lowerLib.includes('rfid')) {
@@ -2556,6 +2647,22 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const sanitizedHeader = header.replace(/[^a-zA-Z0-9_]/g, '');
           if (!generatedCode.includes(`#include <${sanitizedHeader}.h>`)) {
             generatedCode += `#include <${sanitizedHeader}.h>\n`;
+          }
+
+          // Declare object instance for custom library if methods are called
+          const hasCustomMethodCalls = workspace.getAllBlocks(false).some((b: any) =>
+            isBlockActive(b) && (b.type || '').toLowerCase().startsWith(`custom_${safeName.toLowerCase()}_`)
+          );
+          if (hasCustomMethodCalls && !generatedCode.includes(`${className} ${safeName.toLowerCase()};`)) {
+            const initBlock = workspace.getAllBlocks(false).find((b: any) =>
+              isBlockActive(b) && b.type === `custom_${safeName.toLowerCase()}_init_pin`
+            );
+            if (initBlock) {
+              const p = initBlock.getFieldValue('PIN') || '2';
+              generatedCode += `${className} ${safeName.toLowerCase()}(${p});\n`;
+            } else {
+              generatedCode += `${className} ${safeName.toLowerCase()};\n`;
+            }
           }
         }
       });
@@ -3448,6 +3555,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="arduino_loop"></block>
       </category>
       <category name="Input/Output" colour="#9966FF" css-container="cat-io" css-row="cat-io">
+        <block type="arduino_define_pin"></block>
+        <block type="arduino_define_const"></block>
+        <block type="arduino_pin_mode"></block>
         <block type="pin_digital_write"></block>
         <block type="pin_digital_read"></block>
         <block type="pin_analog_write"></block>
@@ -3577,24 +3687,95 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
     // ── Dynamic Custom / GitHub Libraries Generator ────────────────────────
     const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core'];
-    const customLibs = libs.filter(lib => {
-      const lower = lib.toLowerCase().trim();
+    const customLibs = (libs || []).filter((lib: any) => {
+      const name = (typeof lib === 'string' ? lib : lib?.name) || '';
+      const lower = name.toLowerCase().trim();
       return lower && !builtinCoreLibs.includes(lower);
     });
 
     if (customLibs.length > 0) {
       customLibs.forEach(lib => {
-        const safeName = lib.replace(/[^a-zA-Z0-9_]/g, '_');
-        const typeBegin = `custom_${safeName}_begin`.toLowerCase();
-        const typeRead  = `custom_${safeName}_read`.toLowerCase();
-        const typePrint = `custom_${safeName}_print`.toLowerCase();
-        const typeCall  = `custom_${safeName}_call`.toLowerCase();
+        const libName = (typeof lib === 'string' ? lib : (lib as any)?.name) || 'CustomLib';
+        const parsedApi = typeof lib === 'object' ? (lib as any)?.parsedApi : null;
+        const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const prefix = `custom_${safeName}`.toLowerCase();
 
-        // Direct registration onto Blockly.Blocks (guaranteed error-free)
+        const typeDefPin    = `${prefix}_define_pin`;
+        const typeSetPin    = `${prefix}_set_pin`;
+        const typeAttachPin = `${prefix}_attach_pin`;
+        const typeBegin     = `${prefix}_begin`;
+        const typeBeginPin  = `${prefix}_begin_pin`;
+        const typeInitPin   = `${prefix}_init_pin`;
+        const typeRead      = `${prefix}_read`;
+        const typeReadFunc  = `${prefix}_read_func`;
+        const typeCallVal   = `${prefix}_call_val`;
+        const typeStatus    = `${prefix}_status`;
+        const typeWrite     = `${prefix}_write`;
+        const typePrint     = `${prefix}_print`;
+        const typeCall      = `${prefix}_call`;
+        const typeUpdate    = `${prefix}_update`;
+        const typeReset     = `${prefix}_reset`;
+
+        // 1. Define Pin Block
+        if (!Blockly.Blocks[typeDefPin]) {
+          Blockly.Blocks[typeDefPin] = {
+            init: function () {
+              this.appendDummyInput()
+                .appendField(`${libName} #define Pin`)
+                .appendField(new Blockly.FieldTextInput(`${safeName.toUpperCase()}_PIN`), 'PIN_NAME')
+                .appendField('=')
+                .appendField(new Blockly.FieldTextInput('2'), 'PIN_NUM');
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#8B5CF6');
+              this.setTooltip(`Definisikan pin untuk library ${libName} (#define PIN_NAME PIN_NUM)`);
+            }
+          };
+        }
+
+        // 2. Setup Pin Block
+        if (!Blockly.Blocks[typeSetPin]) {
+          Blockly.Blocks[typeSetPin] = {
+            init: function () {
+              this.appendDummyInput()
+                .appendField(`${libName} Setup Pin`)
+                .appendField(new Blockly.FieldTextInput('2'), 'PIN')
+                .appendField('Mode')
+                .appendField(new Blockly.FieldDropdown([['OUTPUT', 'OUTPUT'], ['INPUT', 'INPUT'], ['INPUT_PULLUP', 'INPUT_PULLUP']]), 'MODE');
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#8B5CF6');
+              this.setTooltip(`Konfigurasi pin untuk ${libName}`);
+            }
+          };
+        }
+
+        // 3. Attach Pin Block
+        if (!Blockly.Blocks[typeAttachPin]) {
+          Blockly.Blocks[typeAttachPin] = {
+            init: function () {
+              this.appendDummyInput()
+                .appendField(`${libName} Hubungkan / Attach Pin`)
+                .appendField(new Blockly.FieldTextInput('2'), 'PIN');
+              this.setPreviousStatement(true, null);
+              this.setNextStatement(true, null);
+              this.setColour('#8B5CF6');
+              this.setTooltip(`Hubungkan pin ke library ${libName}`);
+            }
+          };
+        }
+
+        // 4. Begin Block
+
+
+
+
+
+
         if (!Blockly.Blocks[typeBegin]) {
           Blockly.Blocks[typeBegin] = {
             init: function () {
-              this.appendDummyInput().appendField(`${lib} Begin / Setup`);
+
               this.setPreviousStatement(true, null);
               this.setNextStatement(true, null);
               this.setColour('#6366f1');
@@ -4154,10 +4335,38 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (lang === 'arduino') return `keypad.getKey()`;
       return `robot.keypad_read()`;
     }
-    if (block.type.startsWith('custom_') && block.type.endsWith('_read')) {
-      const libSafe = block.type.replace(/^custom_/, '').replace(/_read$/, '');
-      if (lang === 'arduino') return `${libSafe}.read()`;
-      return `${libSafe}_read()`;
+    if (block.type.startsWith('custom_')) {
+      const typeStr = block.type;
+      const libSafe = typeStr.replace(/^custom_/, '').replace(/_(read|read_func|call_val|status|m_.*)$/, '');
+
+      if (typeStr.endsWith('_read')) {
+        if (lang === 'arduino') return `${libSafe}.read()`;
+        return `${libSafe}_read()`;
+      }
+      if (typeStr.endsWith('_read_func')) {
+        const func = block.getFieldValue('FUNC') || 'read';
+        const paramBlock = block.getInputTargetBlock('PARAM');
+        const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : '';
+        if (lang === 'arduino') return `${libSafe}.${func}(${paramVal})`;
+        return `${libSafe}_${func}(${paramVal})`;
+      }
+      if (typeStr.endsWith('_call_val')) {
+        const method = block.getFieldValue('METHOD') || 'getValue';
+        const paramBlock = block.getInputTargetBlock('PARAM');
+        const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : '';
+        if (lang === 'arduino') return `${libSafe}.${method}(${paramVal})`;
+        return `${libSafe}_${method}(${paramVal})`;
+      }
+      if (typeStr.endsWith('_status')) {
+        const check = block.getFieldValue('CHECK') || 'available()';
+        if (lang === 'arduino') return `${libSafe}.${check}`;
+        return `${libSafe}_${check.replace(/\(\)/, '')}()`;
+      }
+      if (typeStr.includes('_m_')) {
+        const methodName = typeStr.split('_m_')[1];
+        if (lang === 'arduino') return `${libSafe}.${methodName}()`;
+        return `${libSafe}_${methodName}()`;
+      }
     }
     if (block.type === 'arduino_serial_available') {
       if (lang === 'arduino') return `Serial.available()`;
@@ -4929,14 +5138,113 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         } else {
           code += `${indent}robot.keypad_begin()\n`;
         }
+      } else if (currentBlock.type === 'arduino_define_pin') {
+        const pinName = currentBlock.getFieldValue('PIN_NAME') || 'PIN_LED';
+        const pinNum = currentBlock.getFieldValue('PIN_NUM') || '2';
+        if (lang === 'arduino') {
+          code += `${indent}#define ${pinName} ${pinNum}\n`;
+        } else {
+          code += `${indent}${pinName} = ${pinNum}\n`;
+        }
+      } else if (currentBlock.type === 'arduino_define_const') {
+        const name = currentBlock.getFieldValue('NAME') || 'MY_CONST';
+        const val = currentBlock.getFieldValue('VALUE') || '100';
+        if (lang === 'arduino') {
+          code += `${indent}#define ${name} ${val}\n`;
+        } else {
+          code += `${indent}${name} = ${val}\n`;
+        }
+      } else if (currentBlock.type === 'arduino_pin_mode') {
+        const pin = currentBlock.getFieldValue('PIN') || '2';
+        const mode = currentBlock.getFieldValue('MODE') || 'OUTPUT';
+        if (lang === 'arduino') {
+          code += `${indent}pinMode(${pin}, ${mode});\n`;
+        } else {
+          code += `${indent}pin${pin} = machine.Pin(${pin}, machine.Pin.${mode})\n`;
+        }
       } else if (currentBlock.type.startsWith('custom_')) {
         const typeStr = currentBlock.type;
-        const libSafe = typeStr.replace(/^custom_/, '').replace(/_(begin|read|print|call)$/, '');
-        if (typeStr.endsWith('_begin')) {
+        const libSafe = typeStr.replace(/^custom_/, '').replace(/_(define_pin|set_pin|attach_pin|begin|begin_pin|init_pin|read|read_func|call_val|status|write|print|call|update|reset|def_.*|const_.*|m_.*)$/, '');
+
+        if (typeStr.endsWith('_define_pin')) {
+          const pinName = currentBlock.getFieldValue('PIN_NAME') || `${libSafe.toUpperCase()}_PIN`;
+          const pinNum = currentBlock.getFieldValue('PIN_NUM') || '2';
           if (lang === 'arduino') {
-            code += `${indent}// Inisialisasi library ${libSafe}\n${indent}${libSafe}.begin();\n`;
+            code += `${indent}#define ${pinName} ${pinNum}\n`;
           } else {
-            code += `${indent}# Inisialisasi library ${libSafe}\n${indent}${libSafe}_begin()\n`;
+            code += `${indent}${pinName} = ${pinNum}\n`;
+          }
+        } else if (typeStr.includes('_def_')) {
+          const pinNum = currentBlock.getFieldValue('PIN_NUM') || '2';
+          const macroName = typeStr.split('_def_')[1].toUpperCase();
+          if (lang === 'arduino') {
+            code += `${indent}#define ${macroName} ${pinNum}\n`;
+          } else {
+            code += `${indent}${macroName} = ${pinNum}\n`;
+          }
+        } else if (typeStr.includes('_const_')) {
+          const val = currentBlock.getFieldValue('VAL') || '0';
+          const macroName = typeStr.split('_const_')[1].toUpperCase();
+          if (lang === 'arduino') {
+            code += `${indent}#define ${macroName} ${val}\n`;
+          } else {
+            code += `${indent}${macroName} = ${val}\n`;
+          }
+        } else if (typeStr.endsWith('_set_pin')) {
+          const pin = currentBlock.getFieldValue('PIN') || '2';
+          const mode = currentBlock.getFieldValue('MODE') || 'OUTPUT';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.setPin(${pin}); // atau pinMode(${pin}, ${mode})\n`;
+          } else {
+            code += `${indent}${libSafe}_set_pin(${pin})\n`;
+          }
+        } else if (typeStr.endsWith('_attach_pin')) {
+          const pin = currentBlock.getFieldValue('PIN') || '2';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.attach(${pin});\n`;
+          } else {
+            code += `${indent}${libSafe}_attach(${pin})\n`;
+          }
+        } else if (typeStr.endsWith('_begin')) {
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.begin();\n`;
+          } else {
+            code += `${indent}${libSafe}_begin()\n`;
+          }
+        } else if (typeStr.endsWith('_begin_pin')) {
+          const pin = currentBlock.getFieldValue('PIN') || '2';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.begin(${pin});\n`;
+          } else {
+            code += `${indent}${libSafe}_begin(${pin})\n`;
+          }
+        } else if (typeStr.endsWith('_init_pin')) {
+          const pin = currentBlock.getFieldValue('PIN') || '2';
+          if (lang === 'arduino') {
+            code += `${indent}// Objek ${libSafe} terhubung ke pin ${pin}\n`;
+          } else {
+            code += `${indent}# Objek ${libSafe} terhubung ke pin ${pin}\n`;
+          }
+        } else if (typeStr.endsWith('_write')) {
+          const valBlock = currentBlock.getInputTargetBlock('VAL');
+          const valStr = valBlock ? getBlockValue(valBlock, lang) : '0';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.write(${valStr});\n`;
+          } else {
+            code += `${indent}${libSafe}_write(${valStr})\n`;
+          }
+        } else if (typeStr.endsWith('_update')) {
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.update();\n`;
+          } else {
+            code += `${indent}${libSafe}_update()\n`;
+          }
+        } else if (typeStr.endsWith('_reset')) {
+          const act = currentBlock.getFieldValue('ACTION') || 'reset';
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.${act}();\n`;
+          } else {
+            code += `${indent}${libSafe}_${act}()\n`;
           }
         } else if (typeStr.endsWith('_print')) {
           const dataBlock = currentBlock.getInputTargetBlock('DATA');
@@ -4954,6 +5262,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             code += `${indent}${libSafe}.${method}(${paramVal});\n`;
           } else {
             code += `${indent}${libSafe}_${method}(${paramVal})\n`;
+          }
+        } else if (typeStr.includes('_m_')) {
+          const methodName = typeStr.split('_m_')[1];
+          if (lang === 'arduino') {
+            code += `${indent}${libSafe}.${methodName}();\n`;
+          } else {
+            code += `${indent}${libSafe}_${methodName}()\n`;
           }
         } else {
           if (lang === 'arduino') {

@@ -39,6 +39,20 @@ import {
   generateRobotPlanPythonCode,
   buildRobotPlanBlocklyXml,
 } from './types/robotSimulator';
+
+import { LIBRARY_PROJECT_TEMPLATES } from './data/libraryProjectTemplates';
+import { ARDUINO_HARDWARE_LESSONS } from './data/arduinoHardwareLessons';
+import {
+  ArduinoPinoutVisualizer,
+  DigitalOutputVisualizer,
+  DigitalInputVisualizer,
+  AdcHardwareVisualizer,
+  PwmHardwareVisualizer,
+  SerialHardwareVisualizer,
+  I2cBusVisualizer,
+  InterruptHardwareVisualizer
+} from './components/learning/HardwareVisualizers';
+
 import './App.css';
 import { arduinoToBlocklyXml } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
@@ -2032,7 +2046,7 @@ const smartFanXml = `<xml xmlns="https://developers.google.com/blockly/xml">
 </xml>`;
 
 
-const PROJECTS_LIST = [
+const BASE_PROJECTS_LIST = [
   {
     name: "LED Dimmer & Switch",
     board: "Arduino Uno",
@@ -3161,6 +3175,8 @@ if __name__ == '__main__':
   }
 ];
 
+const PROJECTS_LIST = [...BASE_PROJECTS_LIST, ...LIBRARY_PROJECT_TEMPLATES];
+
 interface AuthUser {
   id: string;
   email: string;
@@ -3194,6 +3210,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Semua');
+  const [customLibProjects, setCustomLibProjects] = useState<any[]>([]);
+  const allProjectsList = useMemo(() => [...PROJECTS_LIST, ...customLibProjects], [customLibProjects]);
   const [showLoading, setShowLoading] = useState(true);
 
   // Theme & Modal States
@@ -3602,7 +3620,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [uiMode, setUiMode] = useState<'student' | 'pro'>('pro');
   const [studentSubMode, setStudentSubMode] = useState<'block' | 'code'>('block');
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
-  const [learningCategory, setLearningCategory] = useState<'fundamental' | 'micropython'>('fundamental');
+  const [learningCategory, setLearningCategory] = useState<'fundamental' | 'micropython' | 'hardware'>('fundamental');
 
   // Code Synchronization with Blockly statuses (Real Device Workspace)
   const [syncStatuses, setSyncStatuses] = useState<{ [filename: string]: boolean }>({
@@ -3894,6 +3912,29 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           const electron = req('electron');
           installedLibsOnDisk = (await electron.ipcRenderer.invoke('get-installed-libs', authUser?.id)) || [];
           installedCoresOnDisk = (await electron.ipcRenderer.invoke('get-installed-cores')) || [];
+          try {
+            const diskExamples = (await electron.ipcRenderer.invoke('get-library-examples', authUser?.id)) || [];
+            if (Array.isArray(diskExamples) && diskExamples.length > 0) {
+              const formattedExamples = diskExamples.map((ex: any) => ({
+                name: ex.name,
+                board: ex.board || 'Arduino Uno',
+                description: ex.description || `Contoh program ${ex.name} dari library ${ex.library}.`,
+                iconColor: ex.isCustom ? 'emerald' : 'cyan',
+                components: ['custom_lib'],
+                libraryName: ex.library,
+                category: 'Library Example',
+                isLibraryExample: true,
+                isCustom: !!ex.isCustom,
+                isGitHubLib: !!ex.isCustom,
+                ino: ex.code,
+                xml: '',
+                py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+              }));
+              setCustomLibProjects(formattedExamples);
+            }
+          } catch (exErr) {
+            console.warn('[RoboLab] Error loading library examples:', exErr);
+          }
         } catch (e) {
           console.warn('[RoboLab] Error invoking electron ipc:', e);
         }
@@ -3936,6 +3977,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               installed: true,
               isCustom: true,
               headers: isObj && diskLib.headers ? diskLib.headers : updated[idx].headers,
+              parsedApi: isObj && diskLib.parsedApi ? diskLib.parsedApi : updated[idx].parsedApi,
             };
           } else {
             updated.push({
@@ -3947,6 +3989,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               isCustom: true,
               userId: isObj ? diskLib.userId : authUser?.id,
               headers: isObj ? diskLib.headers : [],
+              parsedApi: isObj ? diskLib.parsedApi : undefined,
             });
           }
         }
@@ -4046,7 +4089,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   useEffect(() => {
     if (currentTab !== 'home') return;
     const interval = setInterval(() => {
-      setActiveCardIndex((prev) => (prev + 1) % PROJECTS_LIST.length);
+      setActiveCardIndex((prev) => (prev + 1) % allProjectsList.length);
     }, 3800);
     return () => clearInterval(interval);
   }, [currentTab]);
@@ -7226,7 +7269,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleOpenTemplate = (name: string) => {
     setShowExplorer(true);
-    const proj = PROJECTS_LIST.find(p => p.name === name);
+    const proj = allProjectsList.find(p => p.name === name) || PROJECTS_LIST.find(p => p.name === name);
     if (!proj) return;
 
     // Choose active file based on board
@@ -7249,10 +7292,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': proj.py || ''
     }));
 
+    // Auto-generate blockly XML jika template dari library belum memiliki XML
+    let targetXml = proj.xml;
+    if ((!targetXml || targetXml.trim() === '') && proj.ino) {
+      try {
+        targetXml = arduinoToBlocklyXml(proj.ino);
+      } catch (err) {
+        targetXml = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
+      }
+    }
+
     // Load XML ke workspace Blockly
     setWorkspaceXmls({
-      'firmware/main.ino': proj.xml,
-      'python/main.py': proj.xml
+      'firmware/main.ino': targetXml,
+      'python/main.py': targetXml
     });
 
     // AKTIFKAN auto-sync = true dari awal
@@ -7359,6 +7412,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
 
   const renderLearningVisualizer = () => {
+    if (learningCategory === 'hardware') {
+      switch (activeLessonIndex) {
+        case 0: return <ArduinoPinoutVisualizer />;
+        case 1: return <DigitalOutputVisualizer />;
+        case 2: return <DigitalInputVisualizer />;
+        case 3: return <AdcHardwareVisualizer />;
+        case 4: return <PwmHardwareVisualizer />;
+        case 5: return <SerialHardwareVisualizer />;
+        case 6: return <I2cBusVisualizer />;
+        case 7: return <InterruptHardwareVisualizer />;
+        default: return <ArduinoPinoutVisualizer />;
+      }
+    }
+
     if (learningCategory === 'fundamental') {
       switch (activeLessonIndex) {
         case 0:
@@ -7675,8 +7742,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 
                 {/* 3D Stack Container */}
                 <div className="relative w-full max-w-none h-[380px] flex items-center justify-center overflow-visible">
-                  {PROJECTS_LIST.map((proj, index) => {
-                    const totalCards = PROJECTS_LIST.length;
+                  {allProjectsList.map((proj, index) => {
+                    const totalCards = allProjectsList.length;
                     let diff = index - activeCardIndex;
                     
                     // Wrap-around for circular math
@@ -7843,7 +7910,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setActiveCardIndex((prev) => (prev - 1 + PROJECTS_LIST.length) % PROJECTS_LIST.length);
+                    setActiveCardIndex((prev) => (prev - 1 + allProjectsList.length) % allProjectsList.length);
                   }}
                   className="absolute left-6 w-10 h-10 rounded-full flex items-center justify-center bg-slate-900/60 hover:bg-slate-800 border border-white/10 text-white/70 hover:text-white transition duration-200 cursor-pointer z-20"
                 >
@@ -7864,7 +7931,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
               {/* Progress Indicator dots */}
               <div className="pb-8 w-full flex items-center justify-center gap-1.5 select-none relative z-10">
-                {PROJECTS_LIST.map((_, i) => (
+                {allProjectsList.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => setActiveCardIndex(i)}
@@ -7915,15 +7982,26 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       <option value="Arduino Uno">Arduino Uno</option>
                       <option value="ESP32 DevKit V1">ESP32 DevKit V1</option>
                       <option value="BBC micro:bit">BBC micro:bit</option>
+                    
+                      <option value="Library Examples">📚 Library Examples</option>
+                      <option value="GitHub Libraries">🐙 GitHub Libraries</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {PROJECTS_LIST.filter(p => {
-                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-                    const matchesCategory = categoryFilter === 'Semua' || p.board === categoryFilter;
+                  {allProjectsList.filter(p => {
+                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      ((p as any).libraryName || '').toLowerCase().includes(searchQuery.toLowerCase());
+                    const matchesCategory = categoryFilter === 'Semua'
+                      ? true
+                      : categoryFilter === 'Library Examples'
+                        ? (p.isLibraryExample || (p as any).category === 'Library Example')
+                        : categoryFilter === 'GitHub Libraries'
+                          ? (p.isCustom || (p as any).isGitHubLib)
+                          : p.board === categoryFilter;
                     return matchesSearch && matchesCategory;
                   }).map((proj, idx) => {
                     let IconComponent = Cpu;
@@ -7967,6 +8045,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             </span>
                           </div>
                           <div className={`flex items-center gap-1.5 mb-1 px-1 font-semibold select-none ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-400'}`}>
+                            {(proj as any).libraryName && (
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                                📚 {(proj as any).libraryName}
+                              </span>
+                            )}
+                            {(proj as any).isCustom && (
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                🐙 GitHub Lib
+                              </span>
+                            )}
                           </div>
                           <h4 className="font-bold text-lg mb-2 line-clamp-1">{proj.name}</h4>
                           <p className={`text-xs line-clamp-3 leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
@@ -7983,9 +8071,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     );
                   })}
                   
-                  {PROJECTS_LIST.filter(p => {
-                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-                    const matchesCategory = categoryFilter === 'Semua' || p.board === categoryFilter;
+                  {allProjectsList.filter(p => {
+                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      ((p as any).libraryName || '').toLowerCase().includes(searchQuery.toLowerCase());
+                    const matchesCategory = categoryFilter === 'Semua'
+                      ? true
+                      : categoryFilter === 'Library Examples'
+                        ? (p.isLibraryExample || (p as any).category === 'Library Example')
+                        : categoryFilter === 'GitHub Libraries'
+                          ? (p.isCustom || (p as any).isGitHubLib)
+                          : p.board === categoryFilter;
                     return matchesSearch && matchesCategory;
                   }).length === 0 && (
                     <div className={`col-span-full text-center py-12 rounded-2xl border border-dashed ${themeMode === 'light' ? 'border-slate-300 text-slate-500' : 'border-slate-800 text-slate-400'}`}>
@@ -8256,7 +8352,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount + "_" + packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}
                               codeType={activeFile.endsWith('.py') ? 'python' : 'arduino'} 
                               board={board}
-                              installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
+                              installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
+                                name: p.name,
+                                parsedApi: p.parsedApi,
+                                headers: p.headers,
+                                isCustom: p.isCustom
+                              }))}
                               isSyncWithBlocks={(activeFile.endsWith('.ino') || activeFile.endsWith('.py')) && syncStatuses[activeFile] === true}
                               workspaceXml={workspaceXmls[activeFile] || workspaceXmls['firmware/main.ino'] || workspaceXmls['python/main.py'] || null}
                               onWorkspaceChange={(xmlText) => {
@@ -8548,12 +8649,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                       const req = (window as any).__electronRequire || (window as any).require;
                       let success = false;
+                      let installedParsedApi: any = undefined;
                       if (req) {
                         try {
                           const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: url, userId: authUser?.id });
                           if (res && res.success) {
                             success = true;
                             if (res.libName) repoName = res.libName;
+                            installedParsedApi = res.parsedApi;
                             if (authUser?.id) {
                               await saveUserCustomLibrary(authUser.id, {
                                 name: res.libName || repoName,
@@ -8585,8 +8688,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         setPackages((prev: any) => ({
                           ...prev,
                           arduino: prev.arduino.some((p: any) => p.name.toLowerCase() === repoName.toLowerCase())
-                            ? prev.arduino.map((p: any) => p.name.toLowerCase() === repoName.toLowerCase() ? { ...p, installed: true, isCustom: true, userId: authUser?.id } : p)
-                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true, isCustom: true, userId: authUser?.id }]
+                            ? prev.arduino.map((p: any) => p.name.toLowerCase() === repoName.toLowerCase() ? { ...p, installed: true, isCustom: true, userId: authUser?.id, parsedApi: installedParsedApi || p.parsedApi } : p)
+                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true, isCustom: true, userId: authUser?.id, parsedApi: installedParsedApi }]
                         }));
                         setTerminalLogs((prev: any) => [
                           ...prev,
@@ -9014,7 +9117,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
-                          installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name)}
+                          installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
+                            name: p.name,
+                            parsedApi: p.parsedApi,
+                            headers: p.headers,
+                            isCustom: p.isCustom
+                          }))}
                           isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
                           workspaceXml={simWorkspaceXmls[simActiveFile] || simWorkspaceXmls['firmware/main.ino'] || simWorkspaceXmls['python/main.py'] || null}
                           onWorkspaceChange={(xmlText) => {
@@ -9303,7 +9411,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
           {/* TAB 4: LEARNING PORTAL */}
           {currentTab === 'learning' && (() => {
-            const currentLessons = learningCategory === 'fundamental' ? PYTHON_LESSONS : MICROPYTHON_LESSONS;
+            const currentLessons = learningCategory === 'fundamental' ? PYTHON_LESSONS : (learningCategory === 'hardware' ? ARDUINO_HARDWARE_LESSONS : MICROPYTHON_LESSONS);
             const currentLesson = currentLessons[activeLessonIndex] || currentLessons[0];
             
             return (
@@ -9345,6 +9453,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       >
                         {t(language, 'learning', 'microPython')}
                       </button>
+                      <button
+                        onClick={() => { setLearningCategory('hardware'); setActiveLessonIndex(0); }}
+                        className={`flex-1 py-1.5 text-[8.5px] font-bold rounded-lg transition select-none cursor-pointer text-center flex items-center justify-center gap-1 ${
+                          learningCategory === 'hardware'
+                            ? 'bg-blue-600 text-white shadow'
+                            : themeMode === 'light' ? 'text-slate-600 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Cpu className="w-3 h-3" />
+                        <span>Hardware Arduino</span>
+                      </button>
                     </div>
 
                     {/* Lesson Buttons List */}
@@ -9377,7 +9496,37 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       <button
                         onClick={() => {
                           setLearningLessonLoadedCount(prev => prev + 1);
-                          if (learningCategory === 'micropython') {
+                          if (learningCategory === 'hardware') {
+                            const blocklyXml = (currentLesson as any).xml || '';
+                            const cppCode = currentLesson.code || '';
+
+                            setBoard('Arduino Uno');
+                            setFiles(prev => ({
+                              ...prev,
+                              'firmware/main.ino': cppCode,
+                              'python/main.py': `# Hardware Arduino: ${currentLesson.title}\n`
+                            }));
+
+                            setWorkspaceXmls(prev => ({
+                              ...prev,
+                              'firmware/main.ino': blocklyXml,
+                              'python/main.py': blocklyXml
+                            }));
+
+                            setSyncStatuses(prev => ({
+                              ...prev,
+                              'firmware/main.ino': false,
+                              'python/main.py': false
+                            }));
+
+                            setActiveFile('firmware/main.ino');
+                            setCurrentTab('ide');
+                            setWorkspaceMode('split');
+                            setTerminalLogs(prev => [
+                              ...prev,
+                              { text: `✓ Memuat materi Hardware Arduino '${currentLesson.title}' ke workspace editor!`, type: 'success' }
+                            ]);
+                          } else if (learningCategory === 'micropython') {
                             const blocklyXml = (currentLesson as any).xml || '';
                             const cppCode = (currentLesson as any).cppCode || `// C++ counterpart\n`;
 
@@ -10745,7 +10894,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 author: authUser?.name || 'Akun Anda',
                                 installed: true,
                                 isCustom: true,
-                                userId: authUser?.id
+                                userId: authUser?.id,
+                                parsedApi: res.parsedApi
                               }
                             ]
                           }));
