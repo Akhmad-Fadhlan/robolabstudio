@@ -190,12 +190,21 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
   const servoPins: Record<string, string> = {};
   const defineStatements: Array<{ name: string; val: string; isPin: boolean }> = [];
   const libInstantiations: Array<{ className: string; instanceName: string; args: string }> = [];
+  const instanceToClass: Record<string, string> = {};
+  const includeHeaders: string[] = [];
   let dhtConfig: { pin: string; type: string } | null = null;
   let neoConfig: { pin: string; num: string } | null = null;
   let blynkConfig: { tId?: string; tName?: string; auth?: string } = {};
   const userGlobalInits: string[] = [];
 
   for (const line of globalLines) {
+    // #include headers
+    const incMatch = line.match(/^#include\s*[<"]([^>"]+)[>"]/);
+    if (incMatch) {
+      includeHeaders.push(incMatch[1].trim());
+      continue;
+    }
+
     // #define constants
     const defMatch = line.match(/^#define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$/);
     if (defMatch) {
@@ -218,6 +227,7 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
     if (dhtMatch) {
       const rawPin = dhtMatch[1].trim();
       dhtConfig = { pin: pinConstants[rawPin] || rawPin, type: dhtMatch[2].trim() };
+      instanceToClass['dht'] = 'DHT';
       continue;
     }
 
@@ -227,6 +237,7 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
       const rawNum = neoMatch[1].trim();
       const rawPin = neoMatch[2].trim();
       neoConfig = { num: pinConstants[rawNum] || rawNum, pin: pinConstants[rawPin] || rawPin };
+      instanceToClass['pixels'] = 'Adafruit_NeoPixel';
       continue;
     }
 
@@ -236,6 +247,7 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
       const sName = servoDecl[1];
       const numMatch = sName.match(/(\d+)$/);
       servoPins[sName] = numMatch ? numMatch[1] : '9';
+      instanceToClass[sName] = 'Servo';
       continue;
     }
 
@@ -273,15 +285,17 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
       continue;
     }
 
-    // Custom library object instantiation in global scope (e.g. NewPing sonar(12, 11, 200);)
-    const objInstMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?\s*;?$/);
+    // Custom library object instantiation in global scope (e.g. NewPing sonar(12, 11, 200); or LiquidCrystal_I2C lcd(0x27, 16, 2);)
+    const objInstMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?\s*;?$/);
     if (objInstMatch) {
-      const cls = objInstMatch[1];
-      const inst = objInstMatch[2];
+      const cls = objInstMatch[1].trim();
+      const inst = objInstMatch[2].trim();
       const args = (objInstMatch[3] || '').trim();
-      const knownBuiltins = ['Servo', 'DHT', 'Adafruit_NeoPixel', 'Adafruit_MPU6050', 'WiFiClient', 'PubSubClient', 'BluetoothSerial', 'SoftwareSerial'];
-      if (!knownBuiltins.includes(cls) && !/^(?:unsigned\s+long|long|int|float|double|bool|boolean|byte|uint8_t|char\s*\*|String|void)$/.test(cls)) {
+      const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
+      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+      if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
         libInstantiations.push({ className: cls, instanceName: inst, args });
+        instanceToClass[inst] = cls;
       }
     }
   }
@@ -293,30 +307,38 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
       const sName = attachMatch[1];
       const rawPin = attachMatch[2].trim();
       servoPins[sName] = pinConstants[rawPin] || rawPin;
+      instanceToClass[sName] = 'Servo';
     }
   }
 
-  return { variables, pinConstants, servoPins, dhtConfig, neoConfig, blynkConfig, userGlobalInits, defineStatements, libInstantiations };
+  return { variables, pinConstants, servoPins, dhtConfig, neoConfig, blynkConfig, userGlobalInits, defineStatements, libInstantiations, instanceToClass, includeHeaders };
 }
 
-function convertCppCondition(cond: string, pinConstants: Record<string, string>): string {
-  let res = cond.trim();
-  res = res.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
-  res = res.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
-  res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
-  res = res.replace(/digitalRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `digital_read(${pinConstants[p] || p})`);
-  res = res.replace(/analogRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `analog_read(${pinConstants[p] || p})`);
-  res = res.replace(/touchRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `touch_read(${pinConstants[p] || p})`);
-  return res;
-}
-
-function convertCppExpr(expr: string, pinConstants: Record<string, string>): string {
+function convertCppExpr(expr: string, pinConstants: Record<string, string>, instanceToClass: Record<string, string> = {}): string {
   let res = expr.trim();
   res = res.replace(/digitalRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `digital_read(${pinConstants[p] || p})`);
   res = res.replace(/analogRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `analog_read(${pinConstants[p] || p})`);
   res = res.replace(/touchRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `touch_read(${pinConstants[p] || p})`);
   res = res.replace(/pulseIn\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p, st) => `pulse_in(${pinConstants[p] || p}, "${st}")`);
   res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  res = res.replace(/\bdht\.readTemperature\s*\(\s*\)/g, 'robot.dht_read_temp()');
+  res = res.replace(/\bdht\.readHumidity\s*\(\s*\)/g, 'robot.dht_read_humi()');
+
+  // Convert custom object method calls in expressions: sonar.ping_cm(), myObj.calc(x)
+  res = res.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g, (full, inst, method, args) => {
+    const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot', 'display', 'oled'];
+    if (skipInsts.includes(inst)) return full;
+    const cleanArgs = (args || '').trim();
+    return `robot.custom_lib_val("${inst}", "${method}", "${cleanArgs.replace(/"/g, '\\"')}")`;
+  });
+
+  return res;
+}
+
+function convertCppCondition(cond: string, pinConstants: Record<string, string>, instanceToClass: Record<string, string> = {}): string {
+  let res = convertCppExpr(cond, pinConstants, instanceToClass);
+  res = res.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
+  res = res.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
   return res;
 }
 
@@ -327,7 +349,7 @@ function convertCtoPython(
 ): string[] {
   const pyLines: string[] = [];
   let indentLevel = indentOffset;
-  const { pinConstants, servoPins, dhtConfig, neoConfig } = ctx;
+  const { pinConstants, servoPins, dhtConfig, neoConfig, instanceToClass } = ctx;
 
   const emitLine = (pyStmt: string) => {
     pyLines.push('    '.repeat(indentLevel) + pyStmt);
@@ -726,29 +748,24 @@ function convertCtoPython(
       const rawArgs = objCallMatch[3].trim();
       const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'pixels', 'FastLED', 'ss'];
       if (!skipInstances.includes(inst)) {
-        if (method === 'setPin' || method === 'attach') {
-          emitLine(`robot.custom_lib_set_pin("${inst}", ${resolvePin(rawArgs)})`);
-          continue;
-        } else if (method === 'begin' || method === 'init') {
-          if (rawArgs) {
-            emitLine(`robot.custom_lib_begin_pin("${inst}", ${resolvePin(rawArgs)})`);
-          } else {
-            emitLine(`robot.custom_lib_begin("${inst}")`);
-          }
-          continue;
-        } else if (method === 'write') {
-          emitLine(`robot.custom_lib_write("${inst}", ${convertCppExpr(rawArgs, pinConstants)})`);
-          continue;
-        } else if (method === 'update' || method === 'loop') {
-          emitLine(`robot.custom_lib_update("${inst}")`);
-          continue;
-        } else if (method === 'reset' || method === 'stop' || method === 'end') {
-          emitLine(`robot.custom_lib_reset("${inst}", "${method}")`);
-          continue;
-        } else {
-          emitLine(`robot.custom_lib_call("${inst}", "${method}", ${rawArgs ? convertCppExpr(rawArgs, pinConstants) : '""'})`);
+        if (servoPins[inst] && (method === 'write' || method === 'writeMicroseconds')) {
+          const pin = servoPins[inst];
+          emitLine(`servo_write(${pin}, ${convertCppExpr(rawArgs, pinConstants, instanceToClass)})`);
           continue;
         }
+        if (inst === 'dht' && method === 'begin') {
+          const pin = dhtConfig?.pin || '4';
+          const type = dhtConfig?.type || 'DHT11';
+          emitLine(`robot.dht_init(${pin}, "${type}")`);
+          continue;
+        }
+        if (method === 'setPin') {
+          emitLine(`robot.custom_lib_set_pin("${inst}", ${resolvePin(rawArgs)})`);
+          continue;
+        }
+        // General custom library call: preserves exact instance, method, and arguments
+        emitLine(`robot.custom_lib_call("${inst}", "${method}", "${rawArgs.replace(/"/g, '\\"')}")`);
+        continue;
       }
     }
 
@@ -779,7 +796,7 @@ export function arduinoToBlocklyXml(code: string): string {
   }
   // Emit custom library object init statements
   for (const libInst of ctx.libInstantiations) {
-    setupPyLines.push(`robot.custom_lib_init("${libInst.className}", "${libInst.instanceName}", "${libInst.args}")`);
+    setupPyLines.push(`robot.custom_lib_init("${libInst.className}", "${libInst.instanceName}", "${libInst.args.replace(/"/g, '\\"')}")`);
   }
   setupPyLines.push(...ctx.userGlobalInits);
   setupPyLines.push(...convertCtoPython(setupLines, ctx));

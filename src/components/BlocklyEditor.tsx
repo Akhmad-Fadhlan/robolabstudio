@@ -1818,6 +1818,300 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   ];
 };
 
+export const registerCustomLibBlocks = (prefix: string, libName: string) => {
+  const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
+  const typeDefPin    = `${prefix}_define_pin`;
+  const typeSetPin    = `${prefix}_set_pin`;
+  const typeAttachPin = `${prefix}_attach_pin`;
+  const typeBegin     = `${prefix}_begin`;
+  const typeBeginPin  = `${prefix}_begin_pin`;
+  const typeInitPin   = `${prefix}_init_pin`;
+  const typeRead      = `${prefix}_read`;
+  const typeReadFunc  = `${prefix}_read_func`;
+  const typeCallVal   = `${prefix}_call_val`;
+  const typeStatus    = `${prefix}_status`;
+  const typeWrite     = `${prefix}_write`;
+  const typePrint     = `${prefix}_print`;
+  const typeCall      = `${prefix}_call`;
+  const typeUpdate    = `${prefix}_update`;
+  const typeReset     = `${prefix}_reset`;
+
+  if (!Blockly.Blocks[typeDefPin]) {
+    Blockly.Blocks[typeDefPin] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} #define Pin`)
+          .appendField(new Blockly.FieldTextInput(`${safeName.toUpperCase()}_PIN`), 'PIN_NAME')
+          .appendField('=')
+          .appendField(new Blockly.FieldTextInput('2'), 'PIN_NUM');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#8B5CF6');
+        this.setTooltip(`Definisikan pin untuk ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeSetPin]) {
+    Blockly.Blocks[typeSetPin] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Setup Pin`)
+          .appendField(new Blockly.FieldTextInput('2'), 'PIN')
+          .appendField('Mode')
+          .appendField(new Blockly.FieldDropdown([['OUTPUT', 'OUTPUT'], ['INPUT', 'INPUT'], ['INPUT_PULLUP', 'INPUT_PULLUP']]), 'MODE');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#8B5CF6');
+        this.setTooltip(`Konfigurasi pin untuk ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeAttachPin]) {
+    Blockly.Blocks[typeAttachPin] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Attach Pin`)
+          .appendField(new Blockly.FieldTextInput('2'), 'PIN');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#8B5CF6');
+        this.setTooltip(`Hubungkan pin ke ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeBegin]) {
+    Blockly.Blocks[typeBegin] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${libName} Inisialisasi`);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Inisialisasi library ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeBeginPin]) {
+    Blockly.Blocks[typeBeginPin] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Inisialisasi Pin`)
+          .appendField(new Blockly.FieldTextInput('2'), 'PIN');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Inisialisasi library ${libName} dengan pin`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeInitPin]) {
+    Blockly.Blocks[typeInitPin] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Hubungkan Pin`)
+          .appendField(new Blockly.FieldTextInput('2'), 'PIN');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#8B5CF6');
+        this.setTooltip(`Inisialisasi objek ${libName} ke pin`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeRead]) {
+    Blockly.Blocks[typeRead] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${libName} Baca Nilai`);
+        this.setOutput(true, 'Number');
+        this.setColour('#6366f1');
+        this.setTooltip(`Baca nilai dari ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeReadFunc]) {
+    Blockly.Blocks[typeReadFunc] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Baca`)
+          .appendField(new Blockly.FieldTextInput('read'), 'FUNC');
+        this.appendValueInput('PARAM').appendField('Param');
+        this.setOutput(true, 'Number');
+        this.setColour('#6366f1');
+        this.setTooltip(`Panggil fungsi baca dari ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeCallVal]) {
+    Blockly.Blocks[typeCallVal] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} .`)
+          .appendField(new Blockly.FieldTextInput('getValue'), 'METHOD')
+          .appendField('(')
+          .appendField(new Blockly.FieldTextInput(''), 'PARAM')
+          .appendField(')');
+        this.setOutput(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Panggil method mengembalikan nilai dari ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeStatus]) {
+    Blockly.Blocks[typeStatus] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Status`)
+          .appendField(new Blockly.FieldTextInput('available()'), 'CHECK');
+        this.setOutput(true, 'Boolean');
+        this.setColour('#6366f1');
+        this.setTooltip(`Cek status dari ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeWrite]) {
+    Blockly.Blocks[typeWrite] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${libName} Tulis / Write`);
+        this.appendValueInput('VAL').appendField('Nilai');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Tulis data ke ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typePrint]) {
+    Blockly.Blocks[typePrint] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${libName} Print`);
+        this.appendValueInput('DATA').appendField('Data');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Kirim data via ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeCall]) {
+    Blockly.Blocks[typeCall] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} .`)
+          .appendField(new Blockly.FieldTextInput('update'), 'METHOD')
+          .appendField('(')
+          .appendField(new Blockly.FieldTextInput(''), 'PARAM')
+          .appendField(')');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Panggil method dari ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeUpdate]) {
+    Blockly.Blocks[typeUpdate] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${libName} Update / Loop`);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Update loop ${libName}`);
+      }
+    };
+  }
+
+  if (!Blockly.Blocks[typeReset]) {
+    Blockly.Blocks[typeReset] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField(`${libName} Aksi`)
+          .appendField(new Blockly.FieldTextInput('reset'), 'ACTION');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip(`Reset atau hentikan ${libName}`);
+      }
+    };
+  }
+};
+
+export const ensureCustomBlocks = (xmlText?: string | null) => {
+  // Register universal blocks
+  if (!Blockly.Blocks['custom_library_init']) {
+    Blockly.Blocks['custom_library_init'] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField('📚 Objek Library')
+          .appendField(new Blockly.FieldTextInput('NewPing'), 'CLASS')
+          .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
+          .appendField('(')
+          .appendField(new Blockly.FieldTextInput('12, 11, 200'), 'ARGS')
+          .appendField(')');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#8B5CF6');
+        this.setTooltip('Inisialisasi objek library (contoh: NewPing sonar(12, 11, 200);)');
+      }
+    };
+  }
+  if (!Blockly.Blocks['custom_library_call']) {
+    Blockly.Blocks['custom_library_call'] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField('⚡ Panggil')
+          .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
+          .appendField('.')
+          .appendField(new Blockly.FieldTextInput('ping_cm'), 'METHOD')
+          .appendField('(')
+          .appendField(new Blockly.FieldTextInput(''), 'PARAM')
+          .appendField(')');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip('Panggil fungsi/method objek library');
+      }
+    };
+  }
+  if (!Blockly.Blocks['custom_library_call_val']) {
+    Blockly.Blocks['custom_library_call_val'] = {
+      init: function () {
+        this.appendDummyInput()
+          .appendField('📊 Nilai')
+          .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
+          .appendField('.')
+          .appendField(new Blockly.FieldTextInput('ping_cm'), 'METHOD')
+          .appendField('(')
+          .appendField(new Blockly.FieldTextInput(''), 'PARAM')
+          .appendField(')');
+        this.setOutput(true, null);
+        this.setColour('#6366f1');
+        this.setTooltip('Ambil nilai kembalian dari method objek library');
+      }
+    };
+  }
+
+  if (!xmlText) return;
+
+  // Scan any custom_${prefix}_* blocks in XML
+  const regex = /<block\s+[^>]*type="custom_([a-zA-Z0-9_]+)_(define_pin|set_pin|attach_pin|begin|begin_pin|init_pin|read|read_func|call_val|status|write|print|call|update|reset)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(xmlText)) !== null) {
+    const rawSafe = m[1];
+    registerCustomLibBlocks(`custom_${rawSafe}`.toLowerCase(), rawSafe);
+  }
+};
+
 /**
  * Checks whether a block is active (not disabled) and connected to a valid
  * root execution structure (setup, loop, function, event handler, container).
@@ -1910,7 +2204,12 @@ const isLibraryNeeded = (lib: any, workspace: any): boolean => {
 
   const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
   const hasCustomBlock = workspace.getAllBlocks(false).some((b: any) =>
-    isBlockActive(b) && (b.type || '').toLowerCase().startsWith(`custom_${safeName}_`)
+    isBlockActive(b) && (
+      (b.type || '').toLowerCase().startsWith(`custom_${safeName}_`) ||
+      (b.type === 'custom_library_init' && (b.getFieldValue('CLASS') || '').toLowerCase() === safeName) ||
+      (b.type === 'custom_library_call' && (b.getFieldValue('INSTANCE') || '').toLowerCase() === safeName) ||
+      (b.type === 'custom_library_call_val' && (b.getFieldValue('INSTANCE') || '').toLowerCase() === safeName)
+    )
   );
   if (hasCustomBlock) return true;
 
@@ -2664,6 +2963,46 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               generatedCode += `${className} ${safeName.toLowerCase()};\n`;
             }
           }
+        }
+      });
+
+      // Custom Library Declarations & Headers from custom_library_init and custom_library_call
+      const customInitBlocks = workspace.getAllBlocks(false).filter((b: any) => isBlockActive(b) && b.type === 'custom_library_init');
+      customInitBlocks.forEach((b: any) => {
+        const cls = (b.getFieldValue('CLASS') || '').trim();
+        const inst = (b.getFieldValue('INSTANCE') || '').trim();
+        const args = (b.getFieldValue('ARGS') || '').trim();
+        if (cls) {
+          if (cls.toLowerCase().includes('liquidcrystal') && !generatedCode.includes('#include <Wire.h>')) {
+            generatedCode += '#include <Wire.h>\n';
+          }
+          if (cls.toLowerCase().includes('mpu6050')) {
+            if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
+            if (!generatedCode.includes('#include <Adafruit_Sensor.h>')) generatedCode += '#include <Adafruit_Sensor.h>\n';
+          }
+          if (!generatedCode.includes(`#include <${cls}.h>`) && !generatedCode.includes(`#include "${cls}.h"`)) {
+            generatedCode += `#include <${cls}.h>\n`;
+          }
+          if (inst) {
+            const decl = args ? `${cls} ${inst}(${args});\n` : `${cls} ${inst};\n`;
+            if (!generatedCode.includes(decl)) {
+              generatedCode += decl;
+            }
+          }
+        }
+      });
+
+      // Also scan custom_library_call and custom_library_call_val for Wire or SPI
+      const allLibCalls = workspace.getAllBlocks(false).filter((b: any) =>
+        isBlockActive(b) && (b.type === 'custom_library_call' || b.type === 'custom_library_call_val')
+      );
+      allLibCalls.forEach((b: any) => {
+        const inst = (b.getFieldValue('INSTANCE') || '').trim();
+        if (inst.toLowerCase() === 'wire' && !generatedCode.includes('#include <Wire.h>')) {
+          generatedCode += '#include <Wire.h>\n';
+        }
+        if (inst.toLowerCase() === 'spi' && !generatedCode.includes('#include <SPI.h>')) {
+          generatedCode += '#include <SPI.h>\n';
         }
       });
 
@@ -3693,136 +4032,35 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return lower && !builtinCoreLibs.includes(lower);
     });
 
+    // Universal Library Blocks Category
+    xml += `<category name="📚 Library Kustom" colour="#8B5CF6" css-row="cat-default">`;
+    xml += `<block type="custom_library_init"></block>`;
+    xml += `<block type="custom_library_call"></block>`;
+    xml += `<block type="custom_library_call_val"></block>`;
+    xml += `</category>`;
+
     if (customLibs.length > 0) {
       customLibs.forEach(lib => {
         const libName = (typeof lib === 'string' ? lib : (lib as any)?.name) || 'CustomLib';
-        const parsedApi = typeof lib === 'object' ? (lib as any)?.parsedApi : null;
         const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
         const prefix = `custom_${safeName}`.toLowerCase();
 
-        const typeDefPin    = `${prefix}_define_pin`;
-        const typeSetPin    = `${prefix}_set_pin`;
-        const typeAttachPin = `${prefix}_attach_pin`;
-        const typeBegin     = `${prefix}_begin`;
-        const typeBeginPin  = `${prefix}_begin_pin`;
-        const typeInitPin   = `${prefix}_init_pin`;
-        const typeRead      = `${prefix}_read`;
-        const typeReadFunc  = `${prefix}_read_func`;
-        const typeCallVal   = `${prefix}_call_val`;
-        const typeStatus    = `${prefix}_status`;
-        const typeWrite     = `${prefix}_write`;
-        const typePrint     = `${prefix}_print`;
-        const typeCall      = `${prefix}_call`;
-        const typeUpdate    = `${prefix}_update`;
-        const typeReset     = `${prefix}_reset`;
-
-        // 1. Define Pin Block
-        if (!Blockly.Blocks[typeDefPin]) {
-          Blockly.Blocks[typeDefPin] = {
-            init: function () {
-              this.appendDummyInput()
-                .appendField(`${libName} #define Pin`)
-                .appendField(new Blockly.FieldTextInput(`${safeName.toUpperCase()}_PIN`), 'PIN_NAME')
-                .appendField('=')
-                .appendField(new Blockly.FieldTextInput('2'), 'PIN_NUM');
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#8B5CF6');
-              this.setTooltip(`Definisikan pin untuk library ${libName} (#define PIN_NAME PIN_NUM)`);
-            }
-          };
-        }
-
-        // 2. Setup Pin Block
-        if (!Blockly.Blocks[typeSetPin]) {
-          Blockly.Blocks[typeSetPin] = {
-            init: function () {
-              this.appendDummyInput()
-                .appendField(`${libName} Setup Pin`)
-                .appendField(new Blockly.FieldTextInput('2'), 'PIN')
-                .appendField('Mode')
-                .appendField(new Blockly.FieldDropdown([['OUTPUT', 'OUTPUT'], ['INPUT', 'INPUT'], ['INPUT_PULLUP', 'INPUT_PULLUP']]), 'MODE');
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#8B5CF6');
-              this.setTooltip(`Konfigurasi pin untuk ${libName}`);
-            }
-          };
-        }
-
-        // 3. Attach Pin Block
-        if (!Blockly.Blocks[typeAttachPin]) {
-          Blockly.Blocks[typeAttachPin] = {
-            init: function () {
-              this.appendDummyInput()
-                .appendField(`${libName} Hubungkan / Attach Pin`)
-                .appendField(new Blockly.FieldTextInput('2'), 'PIN');
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#8B5CF6');
-              this.setTooltip(`Hubungkan pin ke library ${libName}`);
-            }
-          };
-        }
-
-        // 4. Begin Block
-
-
-
-
-
-
-        if (!Blockly.Blocks[typeBegin]) {
-          Blockly.Blocks[typeBegin] = {
-            init: function () {
-              this.appendDummyInput().appendField(`${libName} Inisialisasi`);
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#6366f1');
-              this.setTooltip(`Inisialisasi library ${libName}`);
-            }
-          };
-        }
-        if (!Blockly.Blocks[typeRead]) {
-          Blockly.Blocks[typeRead] = {
-            init: function () {
-              this.appendDummyInput().appendField(`${libName} Baca Nilai`);
-              this.setOutput(true, 'Number');
-              this.setColour('#6366f1');
-              this.setTooltip(`Baca nilai dari library ${libName}`);
-            }
-          };
-        }
-        if (!Blockly.Blocks[typePrint]) {
-          Blockly.Blocks[typePrint] = {
-            init: function () {
-              this.appendValueInput('DATA').appendField(`${libName} Kirim / Print`);
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#6366f1');
-              this.setTooltip(`Kirim data via library ${libName}`);
-            }
-          };
-        }
-        if (!Blockly.Blocks[typeCall]) {
-          Blockly.Blocks[typeCall] = {
-            init: function () {
-              this.appendDummyInput().appendField(`${libName} Panggil`).appendField(new Blockly.FieldTextInput('update'), 'METHOD');
-              this.appendValueInput('PARAM').appendField('Param');
-              this.setPreviousStatement(true, null);
-              this.setNextStatement(true, null);
-              this.setColour('#6366f1');
-              this.setTooltip(`Panggil method dari library ${libName}`);
-            }
-          };
-        }
+        registerCustomLibBlocks(prefix, libName);
 
         const escapedName = libName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         xml += `<category name="${escapedName}" colour="#6366f1" css-row="cat-default">`;
-        xml += `<block type="${typeBegin}"></block>`;
-        xml += `<block type="${typeRead}"></block>`;
-        xml += `<block type="${typePrint}"></block>`;
-        xml += `<block type="${typeCall}"></block>`;
+        xml += `<block type="${prefix}_init_pin"></block>`;
+        xml += `<block type="${prefix}_begin"></block>`;
+        xml += `<block type="${prefix}_begin_pin"></block>`;
+        xml += `<block type="${prefix}_set_pin"></block>`;
+        xml += `<block type="${prefix}_attach_pin"></block>`;
+        xml += `<block type="${prefix}_read"></block>`;
+        xml += `<block type="${prefix}_call_val"></block>`;
+        xml += `<block type="${prefix}_print"></block>`;
+        xml += `<block type="${prefix}_call"></block>`;
+        xml += `<block type="${prefix}_write"></block>`;
+        xml += `<block type="${prefix}_update"></block>`;
+        xml += `<block type="${prefix}_reset"></block>`;
         xml += `</category>`;
       });
     }
@@ -3951,11 +4189,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       isLoadingXmlRef.current = true;
       Blockly.Events.disable();
       try {
+        ensureCustomBlocks(xmlToLoad);
         Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlToLoad), workspace);
       } catch (xmlErr) {
         console.warn("[RoboLab] Failed to load workspace XML, trying default XML:", xmlErr);
         workspace.clear();
         try {
+          ensureCustomBlocks(defaultXml);
           Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(defaultXml), workspace);
         } catch (_) {}
       } finally {
@@ -4224,6 +4464,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           isLoadingXmlRef.current = true;
           Blockly.Events.disable();
           try {
+            ensureCustomBlocks(workspaceXml);
             workspaceRef.current.clear();
             Blockly.Xml.domToWorkspace(
               Blockly.utils.xml.textToDom(workspaceXml),
@@ -4335,6 +4576,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (lang === 'arduino') return `keypad.getKey()`;
       return `robot.keypad_read()`;
     }
+    if (block.type === 'custom_library_call_val') {
+      const inst = block.getFieldValue('INSTANCE') || 'customLib';
+      const method = block.getFieldValue('METHOD') || 'getValue';
+      const paramField = block.getFieldValue('PARAM') || '';
+      const paramBlock = block.getInputTargetBlock('PARAM_VAL');
+      const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
+      if (lang === 'arduino') return `${inst}.${method}(${paramVal})`;
+      return `${inst}_${method}(${paramVal})`;
+    }
     if (block.type.startsWith('custom_')) {
       const typeStr = block.type;
       const libSafe = typeStr.replace(/^custom_/, '').replace(/_(read|read_func|call_val|status|m_.*)$/, '');
@@ -4352,8 +4602,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
       if (typeStr.endsWith('_call_val')) {
         const method = block.getFieldValue('METHOD') || 'getValue';
+        const paramField = block.getFieldValue('PARAM') || '';
         const paramBlock = block.getInputTargetBlock('PARAM');
-        const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : '';
+        const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
         if (lang === 'arduino') return `${libSafe}.${method}(${paramVal})`;
         return `${libSafe}_${method}(${paramVal})`;
       }
@@ -5162,6 +5413,24 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         } else {
           code += `${indent}pin${pin} = machine.Pin(${pin}, machine.Pin.${mode})\n`;
         }
+      } else if (currentBlock.type === 'custom_library_init') {
+        const inst = currentBlock.getFieldValue('INSTANCE') || 'customLib';
+        if (lang === 'arduino') {
+          code += `${indent}// Objek ${inst} diinisialisasi\n`;
+        } else {
+          code += `${indent}# Objek ${inst} diinisialisasi\n`;
+        }
+      } else if (currentBlock.type === 'custom_library_call') {
+        const inst = currentBlock.getFieldValue('INSTANCE') || 'customLib';
+        const method = currentBlock.getFieldValue('METHOD') || 'update';
+        const paramField = currentBlock.getFieldValue('PARAM') || '';
+        const paramBlock = currentBlock.getInputTargetBlock('PARAM_VAL');
+        const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
+        if (lang === 'arduino') {
+          code += `${indent}${inst}.${method}(${paramVal});\n`;
+        } else {
+          code += `${indent}${inst}_${method}(${paramVal})\n`;
+        }
       } else if (currentBlock.type.startsWith('custom_')) {
         const typeStr = currentBlock.type;
         const libSafe = typeStr.replace(/^custom_/, '').replace(/_(define_pin|set_pin|attach_pin|begin|begin_pin|init_pin|read|read_func|call_val|status|write|print|call|update|reset|def_.*|const_.*|m_.*)$/, '');
@@ -5250,14 +5519,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const dataBlock = currentBlock.getInputTargetBlock('DATA');
           const dataVal = dataBlock ? getBlockValue(dataBlock, lang) : '""';
           if (lang === 'arduino') {
-            code += `${indent}${libSafe}.println(${dataVal});\n`;
+            const printFn = libSafe.toLowerCase().includes('lcd') ? 'print' : 'println';
+            code += `${indent}${libSafe}.${printFn}(${dataVal});\n`;
           } else {
             code += `${indent}print(${dataVal})\n`;
           }
         } else if (typeStr.endsWith('_call')) {
           const method = currentBlock.getFieldValue('METHOD') || 'update';
+          const paramField = currentBlock.getFieldValue('PARAM') || '';
           const paramBlock = currentBlock.getInputTargetBlock('PARAM');
-          const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : '';
+          const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
           if (lang === 'arduino') {
             code += `${indent}${libSafe}.${method}(${paramVal});\n`;
           } else {

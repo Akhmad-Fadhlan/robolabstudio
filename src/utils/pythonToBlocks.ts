@@ -506,11 +506,14 @@ function parseStatement(line: string, variables: Record<string, string>): string
 
   const libInitObj = line.match(/^robot\.custom_lib_init\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']([^"']*)["'])?\s*\)$/);
   if (libInitObj) {
-    const safe = libInitObj[2].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-    const pinVal = (libInitObj[3] || '2').split(',')[0].trim().replace(/^["']|["']$/g, '');
+    const cls = libInitObj[1].trim();
+    const inst = libInitObj[2].trim();
+    const args = (libInitObj[3] || '').trim().replace(/\\"/g, '"');
     return `
-      <block type="custom_${safe}_init_pin">
-        <field name="PIN">${escapeXml(pinVal || '2')}</field>
+      <block type="custom_library_init">
+        <field name="CLASS">${escapeXml(cls)}</field>
+        <field name="INSTANCE">${escapeXml(inst)}</field>
+        <field name="ARGS">${escapeXml(args)}</field>
       </block>
     `;
   }
@@ -544,15 +547,17 @@ function parseStatement(line: string, variables: Record<string, string>): string
     `;
   }
 
-  const libCall = line.match(/^robot\.custom_lib_call\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*(.+?))?\s*\)$/);
+  const libCall = line.match(/^robot\.custom_lib_call\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']?(.*?)["']?)?\s*\)$/);
   if (libCall) {
-    const safe = libCall[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-    const method = libCall[2];
-    const arg = libCall[3] && libCall[3] !== '""' ? libCall[3].trim() : '';
+    const inst = libCall[1].trim();
+    const method = libCall[2].trim();
+    let arg = libCall[3] ? libCall[3].trim().replace(/\\"/g, '"') : '';
+    if (arg === '""') arg = '';
     return `
-      <block type="custom_${safe}_call">
+      <block type="custom_library_call">
+        <field name="INSTANCE">${escapeXml(inst)}</field>
         <field name="METHOD">${escapeXml(method)}</field>
-        ${arg ? `<value name="PARAM">${parseExpression(arg, variables)}</value>` : ''}
+        <field name="PARAM">${escapeXml(arg)}</field>
       </block>
     `;
   }
@@ -1244,28 +1249,20 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   }
 
   // 2c. Custom Library Value Expressions: robot.custom_lib_val("inst", "method", arg) or inst.method(arg)
-  const libValMatch = expr.match(/^robot\.custom_lib_val\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*(.+?))?\s*\)$/) ||
+  const libValMatch = expr.match(/^robot\.custom_lib_val\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']?(.*?)["']?)?\s*\)$/) ||
                       expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
   if (libValMatch) {
-    const inst = libValMatch[1].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-    const method = libValMatch[2];
-    const param = libValMatch[3] && libValMatch[3] !== '""' ? libValMatch[3].trim() : '';
+    const inst = libValMatch[1].trim();
+    const method = libValMatch[2].trim();
+    let param = libValMatch[3] ? libValMatch[3].trim().replace(/\\"/g, '"') : '';
+    if (param === '""') param = '';
     const skipInsts = ['math', 'time', 'robot', 'machine', 'display', 'oled', 'pixels', 'FastLED', 'Serial', 'WiFi', 'wifi', 'Blynk', 'blynk'];
     if (!skipInsts.includes(inst)) {
-      if (method === 'read' || method === 'readVal' || method === 'getValue') {
-        return `<block type="custom_${inst}_read"></block>`;
-      }
-      if (method === 'available' || method === 'isReady' || method === 'connected') {
-        return `
-          <block type="custom_${inst}_status">
-            <field name="CHECK">${escapeXml(method)}()</field>
-          </block>
-        `;
-      }
       return `
-        <block type="custom_${inst}_call_val">
+        <block type="custom_library_call_val">
+          <field name="INSTANCE">${escapeXml(inst)}</field>
           <field name="METHOD">${escapeXml(method)}</field>
-          ${param ? `<value name="PARAM">${parseExpression(param, variables)}</value>` : ''}
+          <field name="PARAM">${escapeXml(param)}</field>
         </block>
       `;
     }
