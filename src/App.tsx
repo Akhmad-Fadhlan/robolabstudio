@@ -3997,6 +3997,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 isGitHubLib: !!ex.isCustom,
                 ino: ex.code,
                 xml: '',
+                parsedApi: ex.parsedApi,
                 py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
               }));
               setCustomLibProjects(formattedExamples);
@@ -7365,7 +7366,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     let targetXml = proj.xml;
     if ((!targetXml || targetXml.trim() === '') && proj.ino) {
       try {
-        targetXml = arduinoToBlocklyXml(proj.ino);
+        const libName = ((proj as any).libraryName || '').toLowerCase();
+        const libInfo = packages.arduino.find((p: any) => (p.name || '').toLowerCase() === libName);
+        const api = (proj as any).parsedApi || libInfo?.parsedApi;
+        targetXml = arduinoToBlocklyXml(proj.ino, api);
       } catch (err) {
         targetXml = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
       }

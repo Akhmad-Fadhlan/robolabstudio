@@ -184,7 +184,7 @@ function parseCppSections(code: string) {
   return { globalLines, setupLines, loopLines, blynkBlocks };
 }
 
-function buildArduinoConvertContext(globalLines: string[], setupLines: string[]) {
+function buildArduinoConvertContext(globalLines: string[], setupLines: string[], parsedApi?: any) {
   const variables: Record<string, string> = {};
   const pinConstants: Record<string, string> = {};
   const servoPins: Record<string, string> = {};
@@ -296,6 +296,43 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[])
       if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
         libInstantiations.push({ className: cls, instanceName: inst, args });
         instanceToClass[inst] = cls;
+      }
+    }
+  }
+
+  // Scan setupLines for object declarations (some examples declare instances in setup)
+  for (const line of setupLines) {
+    const objInstMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?\s*;?$/);
+    if (objInstMatch) {
+      const cls = objInstMatch[1].trim();
+      const inst = objInstMatch[2].trim();
+      const args = (objInstMatch[3] || '').trim();
+      const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
+      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+      if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
+        if (!libInstantiations.some(li => li.instanceName === inst)) {
+          libInstantiations.push({ className: cls, instanceName: inst, args });
+          instanceToClass[inst] = cls;
+        }
+      }
+    }
+  }
+
+  // If parsedApi is known and no instance found, check if code references methods of parsedApi
+  if (parsedApi?.className && !libInstantiations.some(li => li.className.toLowerCase() === parsedApi.className.toLowerCase())) {
+    const knownMethods = (parsedApi.methods || []).map((m: any) => m.name.toLowerCase());
+    if (knownMethods.length > 0) {
+      for (const line of [...setupLines, ...globalLines]) {
+        const mCall = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+        if (mCall) {
+          const varInst = mCall[1];
+          const methodName = mCall[2];
+          if (knownMethods.includes(methodName.toLowerCase()) && !['Serial', 'SerialBT', 'WiFi'].includes(varInst)) {
+            libInstantiations.push({ className: parsedApi.className, instanceName: varInst, args: '' });
+            instanceToClass[varInst] = parsedApi.className;
+            break;
+          }
+        }
       }
     }
   }
@@ -778,9 +815,9 @@ function convertCtoPython(
   return pyLines;
 }
 
-export function arduinoToBlocklyXml(code: string): string {
+export function arduinoToBlocklyXml(code: string, parsedApi?: any): string {
   const { globalLines, setupLines, loopLines, blynkBlocks } = parseCppSections(code);
-  const ctx = buildArduinoConvertContext(globalLines, setupLines);
+  const ctx = buildArduinoConvertContext(globalLines, setupLines, parsedApi);
 
   const setupPyLines: string[] = [];
   if (ctx.blynkConfig.tId && ctx.blynkConfig.tName && ctx.blynkConfig.auth) {
@@ -836,9 +873,9 @@ export function arduinoToBlocklyXml(code: string): string {
   return finalXml;
 }
 
-export function arduinoToPython(code: string): string {
+export function arduinoToPython(code: string, parsedApi?: any): string {
   const { globalLines, setupLines, loopLines } = parseCppSections(code);
-  const ctx = buildArduinoConvertContext(globalLines, setupLines);
+  const ctx = buildArduinoConvertContext(globalLines, setupLines, parsedApi);
 
   const globalPy = ctx.userGlobalInits;
   const setupPy = convertCtoPython(setupLines, ctx);

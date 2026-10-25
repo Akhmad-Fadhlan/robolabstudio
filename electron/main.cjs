@@ -586,6 +586,16 @@ const parseArduinoLibrary = (libPath, libName) => {
           for (const pub of publicSections) {
             const cleanPub = pub.split(/\b(?:private|protected)\s*:/i)[0];
 
+            // Constructors
+            const ctorRegex = new RegExp(`\\b${clsName}\\s*\\(([^)]*)\\)`, 'g');
+            let ctm;
+            while ((ctm = ctorRegex.exec(cleanPub)) !== null) {
+              const cParams = ctm[1].split(',').map(p => p.trim().split(/\s+/).pop()).filter(Boolean);
+              if (!result.constructors.some(c => c.params.join(',') === cParams.join(','))) {
+                result.constructors.push({ params: cParams });
+              }
+            }
+
             // Method declarations
             const methodRegex = /\b(?:void|int|float|double|bool|boolean|uint8_t|uint16_t|uint32_t|int16_t|int32_t|long|unsigned\s+long|size_t|String|char\s*\*?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
             let mm;
@@ -594,8 +604,14 @@ const parseArduinoLibrary = (libPath, libName) => {
               const mParams = mm[2].split(',').map(p => p.trim().split(/\s+/).pop()).filter(Boolean);
               if (mName.startsWith('_') || mName.startsWith('operator') || mName === clsName) continue;
 
-              if (!result.methods.some(m => m.name.toLowerCase() === mName.toLowerCase())) {
-                const returnType = /\b(?:void)\b/.test(mm[0]) ? 'void' : (/\b(?:bool|boolean)\b/.test(mm[0]) ? 'Boolean' : 'Number');
+              const existingIdx = result.methods.findIndex(m => m.name.toLowerCase() === mName.toLowerCase());
+              const returnType = /\b(?:void)\b/.test(mm[0]) ? 'void' : (/\b(?:bool|boolean)\b/.test(mm[0]) ? 'Boolean' : 'Number');
+              if (existingIdx >= 0) {
+                if (result.methods[existingIdx].params.length === 0 && mParams.length > 0) {
+                  result.methods[existingIdx].params = mParams;
+                  result.methods[existingIdx].returnType = returnType;
+                }
+              } else {
                 result.methods.push({ name: mName, returnType, params: mParams });
               }
             }
@@ -664,7 +680,8 @@ const scanLibraryExamples = (libPath, libName, parsedApi = null) => {
                 board: board,
                 description: desc,
                 code: code,
-                path: fullPath
+                path: fullPath,
+                parsedApi: parsedApi
               });
             } catch (_) {}
           }
@@ -2435,7 +2452,7 @@ ipcMain.handle('get-library-examples', async (event, payloadUserId) => {
     for (const lib of scannedCustom) {
       if (Array.isArray(lib.examples)) {
         for (const ex of lib.examples) {
-          allExamples.push({ ...ex, isCustom: true, libraryAuthor: lib.author });
+          allExamples.push({ ...ex, isCustom: true, libraryAuthor: lib.author, parsedApi: ex.parsedApi || lib.parsedApi });
         }
       }
     }
@@ -2446,7 +2463,7 @@ ipcMain.handle('get-library-examples', async (event, payloadUserId) => {
         if (Array.isArray(lib.examples)) {
           for (const ex of lib.examples) {
             if (!allExamples.some(e => e.name === ex.name)) {
-              allExamples.push({ ...ex, isCustom: false, libraryAuthor: lib.author });
+              allExamples.push({ ...ex, isCustom: false, libraryAuthor: lib.author, parsedApi: ex.parsedApi || lib.parsedApi });
             }
           }
         }

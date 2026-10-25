@@ -2202,15 +2202,32 @@ const isLibraryNeeded = (lib: any, workspace: any): boolean => {
     return false;
   }
 
+  const parsedCls = (typeof lib === 'object' && lib?.parsedApi?.className) ? String(lib.parsedApi.className).toLowerCase() : '';
   const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-  const hasCustomBlock = workspace.getAllBlocks(false).some((b: any) =>
-    isBlockActive(b) && (
-      (b.type || '').toLowerCase().startsWith(`custom_${safeName}_`) ||
-      (b.type === 'custom_library_init' && (b.getFieldValue('CLASS') || '').toLowerCase() === safeName) ||
-      (b.type === 'custom_library_call' && (b.getFieldValue('INSTANCE') || '').toLowerCase() === safeName) ||
-      (b.type === 'custom_library_call_val' && (b.getFieldValue('INSTANCE') || '').toLowerCase() === safeName)
-    )
-  );
+  const hasCustomBlock = workspace.getAllBlocks(false).some((b: any) => {
+    if (!isBlockActive(b)) return false;
+    const bType = (b.type || '').toLowerCase();
+    if (bType.startsWith(`custom_${safeName}_`)) return true;
+    if (parsedCls && bType.startsWith(`custom_${parsedCls}_`)) return true;
+
+    if (b.type === 'custom_library_init') {
+      const cls = (b.getFieldValue('CLASS') || '').toLowerCase();
+      if (cls === safeName || cls === parsedCls) return true;
+      if (cls.includes(safeName) || safeName.includes(cls)) return true;
+    }
+    if (b.type === 'custom_library_call' || b.type === 'custom_library_call_val') {
+      const inst = (b.getFieldValue('INSTANCE') || '').toLowerCase();
+      if (inst === safeName || inst === parsedCls) return true;
+      const initBlock = workspace.getAllBlocks(false).find((ib: any) =>
+        ib.type === 'custom_library_init' && (ib.getFieldValue('INSTANCE') || '').toLowerCase() === inst
+      );
+      if (initBlock) {
+        const cls = (initBlock.getFieldValue('CLASS') || '').toLowerCase();
+        if (cls === safeName || cls === parsedCls || cls.includes(safeName) || safeName.includes(cls)) return true;
+      }
+    }
+    return false;
+  });
   if (hasCustomBlock) return true;
 
   const blockTypes = getBlockTypesForLibrary(libName);
@@ -2921,8 +2938,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       libs.forEach((lib) => {
         if (isLibraryNeeded(lib, workspace)) {
           const libName = (typeof lib === 'string' ? lib : lib?.name) || '';
-          let header = (typeof lib === 'object' && lib?.mainHeader) ? lib.mainHeader.replace(/\.h(pp)?$/i, '') : libName;
-          const className = (typeof lib === 'object' && lib?.className) ? lib.className : libName;
+          let header = (typeof lib === 'object' && (lib?.parsedApi?.mainHeader || lib?.mainHeader)) ? (lib?.parsedApi?.mainHeader || lib?.mainHeader).replace(/\.h(pp)?$/i, '') : libName;
+          const className = (typeof lib === 'object' && (lib?.parsedApi?.className || lib?.className)) ? (lib?.parsedApi?.className || lib?.className) : libName;
           const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
           const lowerLib = libName.toLowerCase();
 
@@ -2965,6 +2982,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
         }
       });
+
+      // Scan and emit all #define pin and const macros at top of sketch (before object instantiations)
+      const definePinBlocks = workspace.getAllBlocks(false).filter((b: any) => isBlockActive(b) && b.type === 'arduino_define_pin');
+      const defineConstBlocks = workspace.getAllBlocks(false).filter((b: any) => isBlockActive(b) && b.type === 'arduino_define_const');
+      if (definePinBlocks.length > 0 || defineConstBlocks.length > 0) {
+        generatedCode += '// Pin & Constant Definitions\n';
+        definePinBlocks.forEach((b: any) => {
+          const pinName = b.getFieldValue('PIN_NAME') || 'PIN_LED';
+          const pinNum = b.getFieldValue('PIN_NUM') || '2';
+          const line = `#define ${pinName} ${pinNum}\n`;
+          if (!generatedCode.includes(line)) generatedCode += line;
+        });
+        defineConstBlocks.forEach((b: any) => {
+          const name = b.getFieldValue('NAME') || 'MY_CONST';
+          const val = b.getFieldValue('VALUE') || '100';
+          const line = `#define ${name} ${val}\n`;
+          if (!generatedCode.includes(line)) generatedCode += line;
+        });
+        generatedCode += '\n';
+      }
 
       // Custom Library Declarations & Headers from custom_library_init and custom_library_call
       const customInitBlocks = workspace.getAllBlocks(false).filter((b: any) => isBlockActive(b) && b.type === 'custom_library_init');
@@ -4040,27 +4077,118 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     xml += `</category>`;
 
     if (customLibs.length > 0) {
+      const escapeXmlVal = (str: string) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       customLibs.forEach(lib => {
         const libName = (typeof lib === 'string' ? lib : (lib as any)?.name) || 'CustomLib';
         const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
         const prefix = `custom_${safeName}`.toLowerCase();
+        const parsedApi = (typeof lib === 'object' && lib) ? (lib as any).parsedApi : null;
 
         registerCustomLibBlocks(prefix, libName);
 
-        const escapedName = libName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const className = parsedApi?.className || libName;
+        let instName = 'my' + className;
+        const lowerCls = className.toLowerCase();
+        if (lowerCls.includes('liquidcrystal') || lowerCls.includes('lcd')) instName = 'lcd';
+        else if (lowerCls.includes('newping') || lowerCls.includes('ultrasonic')) instName = 'sonar';
+        else if (lowerCls.includes('dht')) instName = 'dht';
+        else if (lowerCls.includes('mpu')) instName = 'mpu';
+        else if (lowerCls.includes('servo')) instName = 'myServo';
+        else {
+          const stripped = className.replace(/^(?:Adafruit_|DFRobot_|SparkFun_)/i, '');
+          instName = stripped.charAt(0).toLowerCase() + stripped.slice(1);
+        }
+
+        let defaultArgs = '';
+        if (parsedApi?.constructors && parsedApi.constructors.length > 0 && parsedApi.constructors[0].params) {
+          defaultArgs = parsedApi.constructors[0].params.join(', ');
+        } else if (lowerCls.includes('liquidcrystal')) {
+          defaultArgs = '0x27, 16, 2';
+        } else if (lowerCls.includes('newping')) {
+          defaultArgs = '12, 11, 200';
+        } else if (parsedApi?.pins && parsedApi.pins.length > 0) {
+          defaultArgs = parsedApi.pins.slice(0, 3).map((p: any) => p.name || p.value || '2').join(', ');
+        }
+
+        const escapedName = escapeXmlVal(libName);
         xml += `<category name="${escapedName}" colour="#6366f1" css-row="cat-default">`;
-        xml += `<block type="${prefix}_init_pin"></block>`;
-        xml += `<block type="${prefix}_begin"></block>`;
-        xml += `<block type="${prefix}_begin_pin"></block>`;
-        xml += `<block type="${prefix}_set_pin"></block>`;
-        xml += `<block type="${prefix}_attach_pin"></block>`;
-        xml += `<block type="${prefix}_read"></block>`;
-        xml += `<block type="${prefix}_call_val"></block>`;
-        xml += `<block type="${prefix}_print"></block>`;
-        xml += `<block type="${prefix}_call"></block>`;
-        xml += `<block type="${prefix}_write"></block>`;
-        xml += `<block type="${prefix}_update"></block>`;
-        xml += `<block type="${prefix}_reset"></block>`;
+
+        // 1. Inisialisasi Objek Library
+        xml += `<block type="custom_library_init">`;
+        xml += `<field name="CLASS">${escapeXmlVal(className)}</field>`;
+        xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+        xml += `<field name="ARGS">${escapeXmlVal(defaultArgs)}</field>`;
+        xml += `</block>`;
+
+        // 2. #define Pin Definitions jika ada
+        if (Array.isArray(parsedApi?.pins) && parsedApi.pins.length > 0) {
+          parsedApi.pins.slice(0, 5).forEach((p: any) => {
+            xml += `<block type="arduino_define_pin">`;
+            xml += `<field name="PIN_NAME">${escapeXmlVal(p.name)}</field>`;
+            xml += `<field name="PIN_NUM">${escapeXmlVal(p.value || '2')}</field>`;
+            xml += `</block>`;
+          });
+        }
+
+        // 3. #define Constants jika ada
+        if (Array.isArray(parsedApi?.constants) && parsedApi.constants.length > 0) {
+          parsedApi.constants.slice(0, 5).forEach((c: any) => {
+            xml += `<block type="arduino_define_const">`;
+            xml += `<field name="NAME">${escapeXmlVal(c.name)}</field>`;
+            xml += `<field name="VALUE">${escapeXmlVal(c.value || '0')}</field>`;
+            xml += `</block>`;
+          });
+        }
+
+        // 4. Specific Methods dari library
+        const methods: any[] = Array.isArray(parsedApi?.methods) ? parsedApi.methods.filter((m: any) =>
+          m.name &&
+          !m.name.startsWith('_') &&
+          !m.name.startsWith('operator') &&
+          m.name.toLowerCase() !== className.toLowerCase()
+        ) : [];
+
+        if (methods.length > 0) {
+          methods.forEach((m: any) => {
+            const paramPlaceholder = Array.isArray(m.params) && m.params.length > 0 ? m.params.join(', ') : '';
+            if (m.returnType === 'void') {
+              xml += `<block type="custom_library_call">`;
+              xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+              xml += `<field name="METHOD">${escapeXmlVal(m.name)}</field>`;
+              xml += `<field name="PARAM">${escapeXmlVal(paramPlaceholder)}</field>`;
+              xml += `</block>`;
+            } else {
+              xml += `<block type="custom_library_call_val">`;
+              xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+              xml += `<field name="METHOD">${escapeXmlVal(m.name)}</field>`;
+              xml += `<field name="PARAM">${escapeXmlVal(paramPlaceholder)}</field>`;
+              xml += `</block>`;
+            }
+          });
+        } else {
+          // Fallback blocks jika method belum ter-parse
+          xml += `<block type="${prefix}_init_pin"></block>`;
+          xml += `<block type="${prefix}_begin"></block>`;
+          xml += `<block type="${prefix}_begin_pin"></block>`;
+          xml += `<block type="${prefix}_set_pin"></block>`;
+          xml += `<block type="${prefix}_read"></block>`;
+          xml += `<block type="${prefix}_call_val"></block>`;
+          xml += `<block type="${prefix}_print"></block>`;
+          xml += `<block type="${prefix}_call"></block>`;
+        }
+
+        // Selalu sertakan generic call di akhir
+        xml += `<block type="custom_library_call">`;
+        xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+        xml += `<field name="METHOD">update</field>`;
+        xml += `<field name="PARAM"></field>`;
+        xml += `</block>`;
+        xml += `<block type="custom_library_call_val">`;
+        xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+        xml += `<field name="METHOD">getValue</field>`;
+        xml += `<field name="PARAM"></field>`;
+        xml += `</block>`;
+
         xml += `</category>`;
       });
     }
@@ -5393,7 +5521,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const pinName = currentBlock.getFieldValue('PIN_NAME') || 'PIN_LED';
         const pinNum = currentBlock.getFieldValue('PIN_NUM') || '2';
         if (lang === 'arduino') {
-          code += `${indent}#define ${pinName} ${pinNum}\n`;
+          // #define is already emitted globally at the top of the sketch
         } else {
           code += `${indent}${pinName} = ${pinNum}\n`;
         }
@@ -5401,7 +5529,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const name = currentBlock.getFieldValue('NAME') || 'MY_CONST';
         const val = currentBlock.getFieldValue('VALUE') || '100';
         if (lang === 'arduino') {
-          code += `${indent}#define ${name} ${val}\n`;
+          // #define is already emitted globally at the top of the sketch
         } else {
           code += `${indent}${name} = ${val}\n`;
         }
@@ -5694,8 +5822,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
         }
       } else if (currentBlock.type === 'raw_code') {
-        const raw = currentBlock.getFieldValue('CODE');
-        code += `${indent}${raw}\n`;
+        const raw = (currentBlock.getFieldValue('CODE') || '').trim();
+        if (lang === 'arduino') {
+          const semi = raw.endsWith(';') || raw.endsWith('}') || raw.startsWith('#') || raw.startsWith('//') ? '' : ';';
+          code += `${indent}${raw}${semi}\n`;
+        } else {
+          code += `${indent}${raw}\n`;
+        }
       } else if (currentBlock.type === 'raw_statement') {
         const raw = currentBlock.getFieldValue('CODE');
         code += `${indent}${raw}\n`;
