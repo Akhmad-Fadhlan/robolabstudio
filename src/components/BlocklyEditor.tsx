@@ -4078,7 +4078,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       registerLibraryBlocks(sig);
       if (sig.categoryName.toLowerCase() === 'display') return;
 
-      const isUsedInWorkspace = !!(workspace && workspace.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
+      const ws = workspaceRef.current;
+      const isUsedInWorkspace = !!(ws && ws.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
       const isInstalled = (libs || []).some((l: any) => {
         const name = ((typeof l === 'string' ? l : l?.name) || '').toLowerCase();
         return sig.patterns.some(p => name === p || name.includes(p));
