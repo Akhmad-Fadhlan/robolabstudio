@@ -2112,6 +2112,9 @@ export const ensureCustomBlocks = (xmlText?: string | null) => {
   }
 };
 
+// Immediately initialize universal custom library blocks into Blockly factory
+ensureCustomBlocks();
+
 /**
  * Checks whether a block is active (not disabled) and connected to a valid
  * root execution structure (setup, loop, function, event handler, container).
@@ -4177,8 +4180,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const methods: any[] = Array.isArray(parsedApi?.methods) ? parsedApi.methods.filter((m: any) =>
           m.name &&
           !m.name.startsWith('_') &&
-          !m.name.startsWith('operator') &&
-          m.name.toLowerCase() !== className.toLowerCase()
+          !m.name.startsWith('operator')
         ) : [];
 
         if (methods.length > 0) {
@@ -4198,8 +4200,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               xml += `</block>`;
             }
           });
-        } else {
-          // Fallback blocks jika method belum ter-parse
+        } else if (!parsedApi) {
+          // Hanya tampilkan fallback blocks jika parsedApi benar-benar tidak ada (library belum ter-parse)
           xml += `<block type="${prefix}_init_pin"></block>`;
           xml += `<block type="${prefix}_begin"></block>`;
           xml += `<block type="${prefix}_begin_pin"></block>`;
@@ -4745,7 +4747,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
       const sep = (inst.includes('::') || (/^[A-Z]/.test(inst) && !inst.startsWith('my'))) ? '::' : '.';
       if (lang === 'arduino') return `${inst}${sep}${method}(${paramVal})`;
-      return `${inst}_${method}(${paramVal})`;
+      return `robot.custom_lib_val("${inst}", "${method}", "${String(paramVal || '').replace(/"/g, '\\"')}")`;
     }
     if (block.type.startsWith('custom_')) {
       const typeStr = block.type;
@@ -5592,7 +5594,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           code += `${indent}${inst}${sep}${method}(${paramVal});\n`;
         } else {
-          code += `${indent}${inst}_${method}(${paramVal})\n`;
+          code += `${indent}robot.custom_lib_call("${inst}", "${method}", "${String(paramVal || '').replace(/"/g, '\\"')}")\n`;
         }
       } else if (currentBlock.type.startsWith('custom_')) {
         const typeStr = currentBlock.type;

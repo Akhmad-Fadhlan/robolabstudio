@@ -523,10 +523,11 @@ const parseArduinoLibrary = (libPath, libName) => {
               if (!result.className) result.className = kw;
             } else if (type === 'KEYWORD2') {
               if (!result.methods.some(m => m.name.toLowerCase() === kw.toLowerCase())) {
-                const isGetter = /^(?:get|read|is|has|check|ping|analog|digital)/i.test(kw);
+                const isBool = /^(?:is|has|check)\b/i.test(kw);
+                const isGetter = /^(?:get|read|ping|analog|digital)\b/i.test(kw);
                 result.methods.push({
                   name: kw,
-                  returnType: isGetter ? 'Number' : 'void',
+                  returnType: isBool ? 'Boolean' : (isGetter ? 'Number' : 'void'),
                   params: []
                 });
               }
@@ -578,14 +579,43 @@ const parseArduinoLibrary = (libPath, libName) => {
           }
         }
 
-        // Classes & public methods
-        const classRegex = /class\s+([a-zA-Z0-9_]+)\s*(?::\s*public\s+[a-zA-Z0-9_]+)?\s*\{([\s\S]*?)\};/g;
-        let cm;
-        while ((cm = classRegex.exec(content)) !== null) {
-          const clsName = cm[1];
-          if (!result.classes.includes(clsName)) result.classes.push(clsName);
-          if (!result.className) result.className = clsName;
-          const classBody = cm[2];
+        // Classes & public methods - robust extraction using brace counting
+        // First pass: collect all class names (for complex headers with multiple classes)
+        const classNameRegex = /\bclass\s+([a-zA-Z0-9_]+)\s*(?::\s*(?:public|protected|private)\s+[a-zA-Z0-9_:]+(?:\s*,\s*(?:public|protected|private)\s+[a-zA-Z0-9_:]+)*)?\s*\{/g;
+        let cnm;
+        while ((cnm = classNameRegex.exec(content)) !== null) {
+          const clsName = cnm[1];
+          if (clsName && !['if', 'else', 'for', 'while', 'switch', 'do', 'try', 'catch', 'namespace', 'struct', 'union'].includes(clsName)) {
+            if (!result.classes.includes(clsName)) result.classes.push(clsName);
+            if (!result.className) result.className = clsName;
+          }
+        }
+
+        // Second pass: extract public section content per class using brace-counting
+        const extractClassBody = (src, startIdx) => {
+          let depth = 1;
+          let i = startIdx;
+          let body = '';
+          while (i < src.length && depth > 0) {
+            const ch = src[i];
+            if (ch === '{') depth++;
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0) break;
+            }
+            body += ch;
+            i++;
+          }
+          return body;
+        };
+
+        const classStartRegex = /\bclass\s+([a-zA-Z0-9_]+)\s*(?::\s*(?:public|protected|private)\s+[a-zA-Z0-9_:]+(?:\s*,\s*(?:public|protected|private)\s+[a-zA-Z0-9_:]+)*)?\s*\{/g;
+        let csm;
+        while ((csm = classStartRegex.exec(content)) !== null) {
+          const clsName = csm[1];
+          if (['if', 'else', 'for', 'while', 'switch', 'do', 'try', 'catch', 'namespace', 'struct', 'union'].includes(clsName)) continue;
+
+          const classBody = extractClassBody(content, csm.index + csm[0].length);
 
           const publicSections = classBody.split(/\bpublic\s*:/i).slice(1);
           for (const pub of publicSections) {
@@ -595,22 +625,37 @@ const parseArduinoLibrary = (libPath, libName) => {
             const ctorRegex = new RegExp(`\\b${clsName}\\s*\\(([^)]*)\\)`, 'g');
             let ctm;
             while ((ctm = ctorRegex.exec(cleanPub)) !== null) {
-              const cParams = ctm[1].split(',').map(p => p.trim().split(/\s+/).pop()).filter(Boolean);
+              const rawCParams = ctm[1].trim();
+              const cParams = rawCParams ? rawCParams.split(',').map(p => {
+                const noDefault = p.replace(/=[^,]+$/, '').trim();
+                const token = noDefault.split(/\s+/).pop();
+                return token ? token.replace(/^[*&]/, '') : '';
+              }).filter(Boolean) : [];
               if (!result.constructors.some(c => c.params.join(',') === cParams.join(','))) {
                 result.constructors.push({ params: cParams });
               }
             }
 
-            // Method declarations
-            const methodRegex = /\b(?:void|int|float|double|bool|boolean|uint8_t|uint16_t|uint32_t|int16_t|int32_t|long|unsigned\s+long|size_t|String|char\s*\*?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
+            // Method declarations - flexible C++ method extractor
+            const methodRegex = /(?:virtual\s+)?(?:static\s+)?(?:inline\s+)?(?:const\s+)?([a-zA-Z0-9_:<>\*&]+(?:\s+const)?(?:\s*\*|\s*&)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?:const)?\s*(?:override)?\s*(?:=\s*0)?/g;
             let mm;
             while ((mm = methodRegex.exec(cleanPub)) !== null) {
-              const mName = mm[1];
-              const mParams = mm[2].split(',').map(p => p.trim().split(/\s+/).pop()).filter(Boolean);
-              if (mName.startsWith('_') || mName.startsWith('operator') || mName === clsName) continue;
+              const rawRetType = mm[1].trim();
+              const mName = mm[2];
+              if (['if', 'else', 'for', 'while', 'switch', 'return', 'delete', 'new', clsName].includes(mName)) continue;
+              if (mName.startsWith('_') || mName.startsWith('operator')) continue;
+
+              const rawParams = mm[3].trim();
+              const mParams = rawParams ? rawParams.split(',').map(p => {
+                const noDefault = p.replace(/=[^,]+$/, '').trim();
+                const token = noDefault.split(/\s+/).pop();
+                return token ? token.replace(/^[*&]/, '') : '';
+              }).filter(Boolean) : [];
 
               const existingIdx = result.methods.findIndex(m => m.name.toLowerCase() === mName.toLowerCase());
-              const returnType = /\b(?:void)\b/.test(mm[0]) ? 'void' : (/\b(?:bool|boolean)\b/.test(mm[0]) ? 'Boolean' : 'Number');
+              const isVoid = /\bvoid\b/i.test(rawRetType);
+              const isBool = /\b(?:bool|boolean)\b/i.test(rawRetType) || /^(?:is|has|check)\b/i.test(mName);
+              const returnType = isVoid ? 'void' : (isBool ? 'Boolean' : 'Number');
               if (existingIdx >= 0) {
                 if (result.methods[existingIdx].params.length === 0 && mParams.length > 0) {
                   result.methods[existingIdx].params = mParams;
@@ -789,7 +834,8 @@ ${methodCalls}
       board: 'Arduino Uno',
       description: `Program contoh starter otomatis untuk library ${libName}.`,
       code: starterCode,
-      path: null
+      path: null,
+      parsedApi: parsedApi
     });
   }
 

@@ -480,14 +480,14 @@ function convertCtoPython(
     }
 
     // Control Flow: else if / if / else / for / while
-    const elseIfMatch = trimmed.match(/^else\s+if\s*\((.+)\)$/);
+    const elseIfMatch = trimmed.match(/^else\s+if\s*\((.+?)\)(?:\s*\{)?$/);
     if (elseIfMatch) {
       emitLine(`elif ${convertCppCondition(elseIfMatch[1], pinConstants)}:`);
       if (hasOpeningBrace && !hasInlineClosingBrace) indentLevel++;
       continue;
     }
 
-    const ifMatch = trimmed.match(/^if\s*\((.+)\)$/);
+    const ifMatch = trimmed.match(/^if\s*\((.+?)\)(?:\s*\{)?$/);
     if (ifMatch) {
       const condRaw = ifMatch[1].trim();
       if (condRaw === '!mpu.begin()') {
@@ -561,7 +561,7 @@ function convertCtoPython(
     }
 
     // C++ while loop
-    const whileMatch = trimmed.match(/^while\s*\((.+)\)$/);
+    const whileMatch = trimmed.match(/^while\s*\((.+?)\)(?:\s*\{)?$/);
     if (whileMatch) {
       const condRaw = whileMatch[1].trim();
       if (condRaw.includes('WiFi.status()') && condRaw.includes('WL_CONNECTED')) {

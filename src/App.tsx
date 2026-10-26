@@ -54,8 +54,46 @@ import {
 } from './components/learning/HardwareVisualizers';
 
 import './App.css';
-import { arduinoToBlocklyXml } from './utils/arduinoToBlocks';
+import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
+
+export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'arduino'): boolean => {
+  const trimmed = (code || '').trim();
+  if (trimmed.length < 20) return true;
+  if (lang === 'arduino' || !trimmed.includes('def ')) {
+    const stripped = trimmed
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\r\n]*/g, '')
+      .replace(/^#include\s*[<"][^>"]+[>"]\s*/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (
+      stripped === 'void setup() { Serial.begin(115200); } void loop() { }' ||
+      stripped === 'void setup() { Serial.begin(9600); } void loop() { }' ||
+      stripped === 'void setup() { } void loop() { }' ||
+      stripped === 'void setup() { }' ||
+      stripped === 'void loop() { }'
+    ) {
+      return true;
+    }
+  }
+  if (lang === 'python' || trimmed.includes('def ')) {
+    const strippedPy = trimmed
+      .replace(/#[^\r\n]*/g, '')
+      .replace(/import\s+[a-zA-Z0-9_]+\s*(?:as\s+[a-zA-Z0-9_]+)?\s*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (
+      strippedPy === 'def setup(): pass def loop(): pass if __name__ == "__main__": setup() while True: loop()' ||
+      strippedPy === 'def setup(): pass def loop(): pass' ||
+      strippedPy === 'pass' ||
+      strippedPy === ''
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
 import { processAiMessage, DEFAULT_KILOCODE_CONFIG } from './services/kilocodeService';
 import type { KiloCodeConfig, ChatMessage } from './services/kilocodeService';
 import { checkTrialStatus, fetchUserCustomLibraries, saveUserCustomLibrary, deleteUserCustomLibrary } from './services/supabaseClient';
@@ -3998,7 +4036,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 ino: ex.code,
                 xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi) || '') : '',
                 parsedApi: ex.parsedApi,
-                py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+                py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi) || `# Contoh Library ${ex.library}\n`) : ''
               }));
               setCustomLibProjects(formattedExamples);
             }
@@ -4024,13 +4062,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setPackages((prev: any) => {
         const existingArduino = Array.isArray(prev?.arduino) ? [...prev.arduino] : [...INITIAL_PACKAGES.arduino];
 
-        // A. Match disk libraries
+        // A. Match disk libraries — gunakan exact match dulu, lalu substring hanya jika keduanya cukup panjang (>=5 char)
         let updated = existingArduino.map((p: any) => {
           const diskObj = installedLibsOnDisk.find((diskLib: any) => {
             const diskName = (typeof diskLib === 'string' ? diskLib : diskLib.name) || '';
-            return diskName.toLowerCase() === p.name.toLowerCase() ||
-              diskName.toLowerCase().includes(p.name.toLowerCase()) ||
-              p.name.toLowerCase().includes(diskName.toLowerCase());
+            const pName = p.name.toLowerCase();
+            const dName = diskName.toLowerCase();
+            if (!dName || !pName) return false;
+            // Exact match selalu prioritas
+            if (dName === pName) return true;
+            // Substring match hanya jika keduanya >= 5 karakter (cegah false positive: "SPI" match "Serial" dll.)
+            if (pName.length >= 5 && dName.length >= 5) {
+              return dName.includes(pName) || pName.includes(dName);
+            }
+            return false;
           });
           if (diskObj) {
             const isObj = typeof diskObj === 'object' && diskObj !== null;
@@ -4045,15 +4090,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           return p;
         });
 
-        // B. Inject custom disk libraries
+        // B. Inject custom disk libraries — gunakan exact match dulu, hindari false positive
         for (const diskLib of installedLibsOnDisk) {
           const diskName = typeof diskLib === 'string' ? diskLib : diskLib.name;
           if (!diskName) continue;
-          const idx = updated.findIndex(p =>
-            p.name.toLowerCase() === diskName.toLowerCase() ||
-            p.name.toLowerCase().includes(diskName.toLowerCase()) ||
-            diskName.toLowerCase().includes(p.name.toLowerCase())
-          );
+          const dName = diskName.toLowerCase();
+          // Cari match: exact dulu, lalu substring hanya jika >= 6 karakter
+          const idx = updated.findIndex(p => {
+            const pName = p.name.toLowerCase();
+            if (pName === dName) return true;
+            if (pName.length >= 6 && dName.length >= 6) {
+              return pName.includes(dName) || dName.includes(pName);
+            }
+            return false;
+          });
           const isObj = typeof diskLib === 'object' && diskLib !== null;
           if (idx >= 0) {
             updated[idx] = {
@@ -7369,21 +7419,29 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setCurrentTab('ide');
 
     // Set handcrafted code sebagai fallback awal
-    // (akan digantikan otomatis oleh Blockly setelah workspace selesai load XML)
+    const libName = ((proj as any).libraryName || '').toLowerCase();
+    const libInfo = packages.arduino.find((p: any) => (p.name || '').toLowerCase() === libName);
+    const api = (proj as any).parsedApi || libInfo?.parsedApi;
+
+    const initialIno = proj.ino || '';
+    let initialPy = proj.py || '';
+    if ((!initialPy || initialPy.startsWith('# Contoh Library') || initialPy.trim() === '') && initialIno) {
+      try {
+        initialPy = arduinoToPython(initialIno, api) || initialPy;
+      } catch (_) {}
+    }
+
     setFiles((prev: any) => ({
       ...prev,
-      'firmware/main.ino': proj.ino || '',
-      'python/main.py': proj.py || ''
+      'firmware/main.ino': initialIno,
+      'python/main.py': initialPy
     }));
 
     // Auto-generate blockly XML jika template dari library belum memiliki XML
     let targetXml = proj.xml;
-    if ((!targetXml || targetXml.trim() === '') && proj.ino) {
+    if ((!targetXml || targetXml.trim() === '') && initialIno) {
       try {
-        const libName = ((proj as any).libraryName || '').toLowerCase();
-        const libInfo = packages.arduino.find((p: any) => (p.name || '').toLowerCase() === libName);
-        const api = (proj as any).parsedApi || libInfo?.parsedApi;
-        targetXml = arduinoToBlocklyXml(proj.ino, api);
+        targetXml = arduinoToBlocklyXml(initialIno, api);
       } catch (err) {
         targetXml = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
       }
@@ -7395,12 +7453,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': targetXml
     });
 
-    // AKTIFKAN auto-sync = true dari awal
-    // Blockly akan otomatis generate kode .ino dan .py dari blocks
-    // begitu workspace selesai memuat XML
+    // Aktifkan auto-sync HANYA jika targetXml memiliki block statements (hindari empty overwrite)
+    const hasBlocksInXml = !!(targetXml && (targetXml.includes('<statement name="STACK">') || targetXml.includes('custom_library_')));
     setSyncStatuses({
-      'firmware/main.ino': true,
-      'python/main.py': true
+      'firmware/main.ino': hasBlocksInXml,
+      'python/main.py': hasBlocksInXml
     });
 
     // Reset simulator to show only the components this project uses
@@ -8464,9 +8521,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   return;
                                 }
                                 const currentCode = files[activeFile] || '';
-                                // Safeguard: if user code is non-empty (>30 chars), don't overwrite with empty Blockly code (<15 chars)
-                                if (currentCode.trim().length > 30 && newCode.trim().length < 15) {
-                                  console.warn("[RoboLab] Protected user code from empty Blockly overwrite.");
+                                // Safeguard: if user code is non-empty (>30 chars), don't overwrite with empty Blockly skeleton code
+                                if (currentCode.trim().length > 30 && isBareSkeletonCode(newCode, activeFile.endsWith('.py') ? 'python' : 'arduino')) {
+                                  console.warn("[RoboLab] Protected user code from empty Blockly skeleton overwrite.");
                                   return;
                                 }
 
@@ -8759,7 +8816,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 ino: ex.code,
                                 xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || installedParsedApi) || '') : '',
                                 parsedApi: ex.parsedApi || installedParsedApi,
-                                py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+                                py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || installedParsedApi) || `# Contoh Library ${ex.library}\n`) : ''
                               }));
                               setCustomLibProjects((prev: any[]) => {
                                 const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== (res.libName || repoName).toLowerCase());
@@ -9297,7 +9354,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           onCodeChange={(newCode, otherCode) => {
                             if (simSyncStatuses[simActiveFile] === false) return;
                             const currentCode = simFiles[simActiveFile] || '';
-                            if (currentCode.trim().length > 30 && newCode.trim().length < 15) return;
+                            if (currentCode.trim().length > 30 && isBareSkeletonCode(newCode, simActiveFile.endsWith('.py') ? 'python' : 'arduino')) return;
                             const pyFile = 'python/main.py';
                             const inoFile = 'firmware/main.ino';
                             const otherFile = simActiveFile.endsWith('.ino') ? pyFile : inoFile;
@@ -11057,7 +11114,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               ino: ex.code,
                               xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || res.parsedApi) || '') : '',
                               parsedApi: ex.parsedApi || res.parsedApi,
-                              py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+                              py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || res.parsedApi) || `# Contoh Library ${ex.library}\n`) : ''
                             }));
                             setCustomLibProjects((prev: any[]) => {
                               const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
