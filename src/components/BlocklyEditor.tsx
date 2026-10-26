@@ -1667,8 +1667,8 @@ const LIBRARY_SIGNATURES: Array<{
     ],
   },
   {
-    patterns: ['rfid', 'mfrc522', 'pn532', 'nfc'],
-    categoryName: 'RFID / NFC',
+    patterns: ['pn532', 'adafruit_pn532'],
+    categoryName: 'PN532 NFC',
     colour: '#56ccf2',
     blocks: [
       { type: 'lib_rfid_i2c_begin',  message: 'RFID Begin (I2C) SDA Pin %1 SCL Pin %2', inputs: [{ name: 'SDA', type: 'field_input', text: 'D2' }, { name: 'SCL', type: 'field_input', text: 'D1' }], isStatement: true },
@@ -3017,11 +3017,34 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
             if (!generatedCode.includes('#include <Adafruit_Sensor.h>')) generatedCode += '#include <Adafruit_Sensor.h>\n';
           }
-          if (!generatedCode.includes(`#include <${cls}.h>`) && !generatedCode.includes(`#include "${cls}.h"`)) {
-            generatedCode += `#include <${cls}.h>\n`;
+          const matchedLib = (installedLibraries || []).find((lib: any) => {
+            const api = lib?.parsedApi;
+            if (!api) return false;
+            return (api.className && api.className.toLowerCase() === cls.toLowerCase()) ||
+              (Array.isArray(api.classes) && api.classes.some((c: string) => c.toLowerCase() === cls.toLowerCase())) ||
+              (Array.isArray(api.headers) && api.headers.some((h: string) => h.toLowerCase() === `${cls.toLowerCase()}.h`));
+          });
+          const targetHeader = matchedLib?.parsedApi?.mainHeader || `${cls}.h`;
+          if (!generatedCode.includes(`#include <${targetHeader}>`) && !generatedCode.includes(`#include "${targetHeader}"`)) {
+            generatedCode += `#include <${targetHeader}>\n`;
+          }
+          if (matchedLib?.parsedApi?.headers && Array.isArray(matchedLib.parsedApi.headers)) {
+            const clsHeader = `${cls}.h`;
+            if (matchedLib.parsedApi.headers.includes(clsHeader) && clsHeader.toLowerCase() !== targetHeader.toLowerCase()) {
+              if (!generatedCode.includes(`#include <${clsHeader}>`) && !generatedCode.includes(`#include "${clsHeader}"`)) {
+                generatedCode += `#include <${clsHeader}>\n`;
+              }
+            }
           }
           if (inst) {
-            const decl = args ? `${cls} ${inst}(${args});\n` : `${cls} ${inst};\n`;
+            let decl = '';
+            if (cls.includes('&')) {
+              decl = `${cls} ${inst} = ${args};\n`;
+            } else if (args) {
+              decl = args.startsWith('{') ? `${cls} ${inst}${args};\n` : `${cls} ${inst}(${args});\n`;
+            } else {
+              decl = `${cls} ${inst};\n`;
+            }
             if (!generatedCode.includes(decl)) {
               generatedCode += decl;
             }
@@ -4050,10 +4073,19 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     }
 
     // ── Dynamic & Hardware LIBRARY_SIGNATURES scan ──────────────────────────
-    // Register all library signatures and display their toolbox categories (skip Display since Displays is already in core hardware)
+    // Register library signatures and display toolbox categories only if active on workspace or matching an installed lib
     LIBRARY_SIGNATURES.forEach((sig, idx) => {
       registerLibraryBlocks(sig);
       if (sig.categoryName.toLowerCase() === 'display') return;
+
+      const isUsedInWorkspace = !!(workspace && workspace.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
+      const isInstalled = (libs || []).some((l: any) => {
+        const name = ((typeof l === 'string' ? l : l?.name) || '').toLowerCase();
+        return sig.patterns.some(p => name === p || name.includes(p));
+      });
+
+      if (!isUsedInWorkspace && !isInstalled) return;
+
       xml += `<category name="${sig.categoryName}" colour="${sig.colour}" css-row="cat-lib-${idx}">`;
       sig.blocks.forEach(bd => {
         xml += `<block type="${bd.type}"></block>`;
@@ -4710,7 +4742,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const paramField = block.getFieldValue('PARAM') || '';
       const paramBlock = block.getInputTargetBlock('PARAM_VAL');
       const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
-      if (lang === 'arduino') return `${inst}.${method}(${paramVal})`;
+      const sep = (inst.includes('::') || (/^[A-Z]/.test(inst) && !inst.startsWith('my'))) ? '::' : '.';
+      if (lang === 'arduino') return `${inst}${sep}${method}(${paramVal})`;
       return `${inst}_${method}(${paramVal})`;
     }
     if (block.type.startsWith('custom_')) {
@@ -5554,8 +5587,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const paramField = currentBlock.getFieldValue('PARAM') || '';
         const paramBlock = currentBlock.getInputTargetBlock('PARAM_VAL');
         const paramVal = paramBlock ? getBlockValue(paramBlock, lang) : paramField;
+        const sep = (inst.includes('::') || (/^[A-Z]/.test(inst) && !inst.startsWith('my'))) ? '::' : '.';
         if (lang === 'arduino') {
-          code += `${indent}${inst}.${method}(${paramVal});\n`;
+          code += `${indent}${inst}${sep}${method}(${paramVal});\n`;
         } else {
           code += `${indent}${inst}_${method}(${paramVal})\n`;
         }

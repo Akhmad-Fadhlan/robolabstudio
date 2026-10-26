@@ -438,6 +438,15 @@ function resolvePinVariable(pinOrVar: string, variables: Record<string, string>)
 function parseStatement(line: string, variables: Record<string, string>): string | null {
   line = line.trim();
   if (line === 'pass' || line.startsWith('pass ')) return '__SKIP__';
+  if (line === 'return' || line === 'return;') {
+    return `<block type="raw_code"><field name="CODE">return;</field></block>`;
+  }
+  if (line === 'continue' || line === 'continue;') {
+    return `<block type="controls_flow_statements"><field name="FLOW">CONTINUE</field></block>`;
+  }
+  if (line === 'break' || line === 'break;') {
+    return `<block type="controls_flow_statements"><field name="FLOW">BREAK</field></block>`;
+  }
 
   // 0. Pin Definition and Setup Statements
   const defPinMatch = line.match(/^robot\.define_pin\(\s*["']([^"']+)["']\s*,\s*["']?([^"')]+)["']?\s*\)$/);
@@ -1248,9 +1257,9 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     return `<block type="logic_boolean"><field name="BOOL">FALSE</field></block>`;
   }
 
-  // 2c. Custom Library Value Expressions: robot.custom_lib_val("inst", "method", arg) or inst.method(arg)
+  // 2c. Custom Library Value Expressions: robot.custom_lib_val("inst", "method", arg) or inst.method(arg) or Class::method(arg)
   const libValMatch = expr.match(/^robot\.custom_lib_val\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']?(.*?)["']?)?\s*\)$/) ||
-                      expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
+                      expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\.|::)([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
   if (libValMatch) {
     const inst = libValMatch[1].trim();
     const method = libValMatch[2].trim();

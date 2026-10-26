@@ -286,11 +286,14 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
     }
 
     // Custom library object instantiation in global scope (e.g. NewPing sonar(12, 11, 200); or LiquidCrystal_I2C lcd(0x27, 16, 2);)
-    const objInstMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?\s*;?$/);
+    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s*(?:&\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[\({]([^)}]*)[)}]|=\s*(.+?))\s*;?$/);
     if (objInstMatch) {
       const cls = objInstMatch[1].trim();
       const inst = objInstMatch[2].trim();
-      const args = (objInstMatch[3] || '').trim();
+      let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
+      if (args.startsWith(cls + '(') && args.endsWith(')')) {
+        args = args.substring(cls.length + 1, args.length - 1).trim();
+      }
       const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
       const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
       if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
@@ -302,11 +305,14 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
 
   // Scan setupLines for object declarations (some examples declare instances in setup)
   for (const line of setupLines) {
-    const objInstMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?\s*;?$/);
+    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s*(?:&\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[\({]([^)}]*)[)}]|=\s*(.+?))\s*;?$/);
     if (objInstMatch) {
       const cls = objInstMatch[1].trim();
       const inst = objInstMatch[2].trim();
-      const args = (objInstMatch[3] || '').trim();
+      let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
+      if (args.startsWith(cls + '(') && args.endsWith(')')) {
+        args = args.substring(cls.length + 1, args.length - 1).trim();
+      }
       const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
       const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
       if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
@@ -360,9 +366,10 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
   res = res.replace(/\bdht\.readTemperature\s*\(\s*\)/g, 'robot.dht_read_temp()');
   res = res.replace(/\bdht\.readHumidity\s*\(\s*\)/g, 'robot.dht_read_humi()');
+  res = res.replace(/\bF\(\s*(["'].*?["'])\s*\)/g, '$1');
 
-  // Convert custom object method calls in expressions: sonar.ping_cm(), myObj.calc(x)
-  res = res.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g, (full, inst, method, args) => {
+  // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
+  res = res.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?:\.|::)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g, (full, inst, method, args) => {
     const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot', 'display', 'oled'];
     if (skipInsts.includes(inst)) return full;
     const cleanArgs = (args || '').trim();
@@ -375,7 +382,9 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
 function convertCppCondition(cond: string, pinConstants: Record<string, string>, instanceToClass: Record<string, string> = {}): string {
   let res = convertCppExpr(cond, pinConstants, instanceToClass);
   res = res.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
+  res = res.replace(/(?:^|(?<=[\s(]))!(?!=)\s*/g, 'not ');
   res = res.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
+  res = res.replace(/\s+/g, ' ').trim();
   return res;
 }
 
@@ -453,9 +462,11 @@ function convertCtoPython(
       continue;
     }
 
-    // Skip Serial.begin, Servo.attach, Wire.begin, OLED boilerplate
+    // Skip Serial.begin, while(!Serial), Servo.attach, Wire.begin, OLED boilerplate
     if (
       trimmed.startsWith('Serial.begin(') ||
+      trimmed.startsWith('while (!Serial') ||
+      trimmed.startsWith('while(!Serial') ||
       /^[a-zA-Z_][a-zA-Z0-9_]*\.attach\s*\(/.test(trimmed) ||
       trimmed === 'int param_val = param.asInt()' ||
       trimmed === 'display.display()' ||
@@ -777,8 +788,22 @@ function convertCtoPython(
       continue;
     }
 
-    // 10. Custom library / Object method calls: instance.method(args)
-    const objCallMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
+    // 10. Flow statements: return, continue, break
+    if (trimmed === 'return' || trimmed === 'return;') {
+      emitLine('return');
+      continue;
+    }
+    if (trimmed === 'continue' || trimmed === 'continue;') {
+      emitLine('continue');
+      continue;
+    }
+    if (trimmed === 'break' || trimmed === 'break;') {
+      emitLine('break');
+      continue;
+    }
+
+    // 11. Custom library / Object method calls: instance.method(args) or Class::method(args)
+    const objCallMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\.|::)([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)$/);
     if (objCallMatch) {
       const inst = objCallMatch[1];
       const method = objCallMatch[2];

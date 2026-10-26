@@ -475,7 +475,9 @@ const parseArduinoLibrary = (libPath, libName) => {
   const result = {
     name: libName,
     mainHeader: null,
+    headers: [],    // Array<string> of all header basenames
     className: null,
+    classes: [],    // Array<string> of all detected classes
     pins: [],       // Array<{ name: string, value: string, isPin: boolean }>
     constants: [],  // Array<{ name: string, value: string, isPin: boolean }>
     methods: [],    // Array<{ name: string, returnType: string, params: string[] }>
@@ -485,23 +487,24 @@ const parseArduinoLibrary = (libPath, libName) => {
 
   try {
     const headerFiles = [];
-    const rootFiles = fs.readdirSync(libPath);
-    for (const f of rootFiles) {
-      if (f.endsWith('.h') || f.endsWith('.hpp')) headerFiles.push(path.join(libPath, f));
-    }
-    const srcDir = path.join(libPath, 'src');
-    if (fs.existsSync(srcDir) && fs.statSync(srcDir).isDirectory()) {
-      const srcFiles = fs.readdirSync(srcDir);
-      for (const f of srcFiles) {
-        if (f.endsWith('.h') || f.endsWith('.hpp')) headerFiles.push(path.join(srcDir, f));
-      }
-    }
+    const findHeaders = (dir, depth = 0) => {
+      if (depth > 4) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const ent of entries) {
+          if (ent.isDirectory()) {
+            if (ent.name !== 'examples' && ent.name !== 'Examples' && ent.name !== '.git') {
+              findHeaders(path.join(dir, ent.name), depth + 1);
+            }
+          } else if (ent.isFile() && (ent.name.endsWith('.h') || ent.name.endsWith('.hpp'))) {
+            headerFiles.push(path.join(dir, ent.name));
+          }
+        }
+      } catch (_) {}
+    };
+    findHeaders(libPath);
 
-    if (headerFiles.length > 0) {
-      const cleanLib = libName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      const matched = headerFiles.find(h => path.basename(h).replace(/[^a-zA-Z0-9]/g, '').toLowerCase().includes(cleanLib));
-      result.mainHeader = matched ? path.basename(matched) : path.basename(headerFiles[0]);
-    }
+    result.headers = Array.from(new Set(headerFiles.map(h => path.basename(h))));
 
     // 1. Parse keywords.txt if present
     const keywordsPath = path.join(libPath, 'keywords.txt');
@@ -515,8 +518,9 @@ const parseArduinoLibrary = (libPath, libName) => {
           if (parts.length >= 2) {
             const kw = parts[0];
             const type = parts[1].toUpperCase();
-            if (type === 'KEYWORD1' && !result.className) {
-              result.className = kw;
+            if (type === 'KEYWORD1') {
+              if (!result.classes.includes(kw)) result.classes.push(kw);
+              if (!result.className) result.className = kw;
             } else if (type === 'KEYWORD2') {
               if (!result.methods.some(m => m.name.toLowerCase() === kw.toLowerCase())) {
                 const isGetter = /^(?:get|read|is|has|check|ping|analog|digital)/i.test(kw);
@@ -579,6 +583,7 @@ const parseArduinoLibrary = (libPath, libName) => {
         let cm;
         while ((cm = classRegex.exec(content)) !== null) {
           const clsName = cm[1];
+          if (!result.classes.includes(clsName)) result.classes.push(clsName);
           if (!result.className) result.className = clsName;
           const classBody = cm[2];
 
@@ -620,8 +625,50 @@ const parseArduinoLibrary = (libPath, libName) => {
       } catch (_) {}
     }
 
+    // 3. Intelligent mainHeader selection
+    if (headerFiles.length > 0) {
+      const cleanLib = libName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const strippedLib = cleanLib.replace(/^(?:arduino|rfid|adafruit|sparkfun|dfrobot|sensor|lib|esp32|esp8266)+/i, '');
+
+      let bestHeader = headerFiles[0];
+      let bestScore = -999;
+
+      for (const h of headerFiles) {
+        const base = path.basename(h, path.extname(h));
+        const cleanBase = base.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        let score = 0;
+
+        if (cleanBase === cleanLib) score += 100;
+        else if (strippedLib && cleanBase === strippedLib) score += 90;
+        else if (cleanLib.includes(cleanBase) && cleanBase.length >= 4) score += 50;
+        else if (strippedLib && cleanBase.includes(strippedLib)) score += 40;
+
+        if (result.className) {
+          const cleanCls = result.className.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          if (cleanBase === cleanCls) score += 80;
+          else if (cleanBase.includes(cleanCls) || cleanCls.includes(cleanBase)) score += 30;
+        }
+
+        // Penalize auxiliary/internal headers
+        if (/(?:constants|debug|driver|config|defs|internal|helper|types|require|util|pin)/i.test(base)) {
+          score -= 35;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestHeader = h;
+        }
+      }
+
+      result.mainHeader = path.basename(bestHeader);
+    }
+
     if (!result.className) {
-      result.className = libName;
+      if (result.classes.length > 0) {
+        result.className = result.classes[0];
+      } else {
+        result.className = libName;
+      }
     }
   } catch (_) {}
 

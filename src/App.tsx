@@ -3996,7 +3996,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 isCustom: !!ex.isCustom,
                 isGitHubLib: !!ex.isCustom,
                 ino: ex.code,
-                xml: '',
+                xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi) || '') : '',
                 parsedApi: ex.parsedApi,
                 py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
               }));
@@ -4026,20 +4026,34 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
         // A. Match disk libraries
         let updated = existingArduino.map((p: any) => {
-          const diskMatch = installedLibsOnDisk.some((diskLib: any) => {
+          const diskObj = installedLibsOnDisk.find((diskLib: any) => {
             const diskName = (typeof diskLib === 'string' ? diskLib : diskLib.name) || '';
             return diskName.toLowerCase() === p.name.toLowerCase() ||
               diskName.toLowerCase().includes(p.name.toLowerCase()) ||
               p.name.toLowerCase().includes(diskName.toLowerCase());
           });
-          return diskMatch ? { ...p, installed: true } : p;
+          if (diskObj) {
+            const isObj = typeof diskObj === 'object' && diskObj !== null;
+            return {
+              ...p,
+              installed: true,
+              isCustom: isObj && diskObj.isCustom !== undefined ? diskObj.isCustom : p.isCustom,
+              parsedApi: (isObj && diskObj.parsedApi) ? diskObj.parsedApi : p.parsedApi,
+              headers: (isObj && diskObj.headers) ? diskObj.headers : p.headers
+            };
+          }
+          return p;
         });
 
         // B. Inject custom disk libraries
         for (const diskLib of installedLibsOnDisk) {
           const diskName = typeof diskLib === 'string' ? diskLib : diskLib.name;
           if (!diskName) continue;
-          const idx = updated.findIndex(p => p.name.toLowerCase() === diskName.toLowerCase());
+          const idx = updated.findIndex(p =>
+            p.name.toLowerCase() === diskName.toLowerCase() ||
+            p.name.toLowerCase().includes(diskName.toLowerCase()) ||
+            diskName.toLowerCase().includes(p.name.toLowerCase())
+          );
           const isObj = typeof diskLib === 'object' && diskLib !== null;
           if (idx >= 0) {
             updated[idx] = {
@@ -8730,6 +8744,28 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             success = true;
                             if (res.libName) repoName = res.libName;
                             installedParsedApi = res.parsedApi;
+                            if (Array.isArray(res.examples) && res.examples.length > 0) {
+                              const newCards = res.examples.map((ex: any) => ({
+                                name: ex.name,
+                                board: ex.board || 'Arduino Uno',
+                                description: ex.description || `Contoh program ${ex.name} dari library ${ex.library}.`,
+                                iconColor: 'emerald',
+                                components: ['custom_lib'],
+                                libraryName: ex.library,
+                                category: 'Library Example',
+                                isLibraryExample: true,
+                                isCustom: true,
+                                isGitHubLib: true,
+                                ino: ex.code,
+                                xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || installedParsedApi) || '') : '',
+                                parsedApi: ex.parsedApi || installedParsedApi,
+                                py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+                              }));
+                              setCustomLibProjects((prev: any[]) => {
+                                const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== (res.libName || repoName).toLowerCase());
+                                return [...newCards, ...existing];
+                              });
+                            }
                             if (authUser?.id) {
                               await saveUserCustomLibrary(authUser.id, {
                                 name: res.libName || repoName,
@@ -11006,6 +11042,28 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: customGithubUrl.trim(), userId: authUser?.id });
                         if (res && res.success) {
                           const installedName = res.libName || 'Custom_Library';
+                          if (Array.isArray(res.examples) && res.examples.length > 0) {
+                            const newCards = res.examples.map((ex: any) => ({
+                              name: ex.name,
+                              board: ex.board || 'Arduino Uno',
+                              description: ex.description || `Contoh program ${ex.name} dari library ${ex.library}.`,
+                              iconColor: 'emerald',
+                              components: ['custom_lib'],
+                              libraryName: ex.library,
+                              category: 'Library Example',
+                              isLibraryExample: true,
+                              isCustom: true,
+                              isGitHubLib: true,
+                              ino: ex.code,
+                              xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || res.parsedApi) || '') : '',
+                              parsedApi: ex.parsedApi || res.parsedApi,
+                              py: `# Contoh Library ${ex.library}\n# Silakan gunakan file firmware/main.ino untuk kode C++ Arduino.\n`
+                            }));
+                            setCustomLibProjects((prev: any[]) => {
+                              const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
+                              return [...newCards, ...existing];
+                            });
+                          }
                           setPackages((prev: any) => ({
                             ...prev,
                             arduino: [
@@ -11018,6 +11076,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 installed: true,
                                 isCustom: true,
                                 userId: authUser?.id,
+                                headers: res.headers || [],
                                 parsedApi: res.parsedApi
                               }
                             ]
