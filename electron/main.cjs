@@ -467,6 +467,10 @@ const getGlobalLibraryDirs = () => {
       if (fs.existsSync(d3) && !dirs.includes(d3)) dirs.push(d3);
     }
   } catch (_) {}
+  try {
+    const d4 = path.join('C:', 'KidsBlock Desktop', 'resources', 'tools', 'Arduino', 'libraries');
+    if (fs.existsSync(d4) && !dirs.includes(d4)) dirs.push(d4);
+  } catch (_) {}
   return dirs;
 };
 
@@ -1732,7 +1736,7 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
           } else if (rawLower.includes('pn532') || rawLower.includes('rfid')) {
             libToInstall = 'Adafruit PN532';
           } else if (rawLower.includes('mfrc522')) {
-            libToInstall = 'MFRC522';
+            libToInstall = 'RFID_MFRC522v2';
           } else if (rawLower.includes('ssd1306')) {
             libToInstall = 'Adafruit SSD1306';
           } else if (rawLower.includes('gfx')) {
@@ -2589,6 +2593,7 @@ ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
     const candidateDirs = [userLibDir, ...globalDirs];
 
     const cleanSafe = cleanName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
+    const cleanNorm = cleanName.toLowerCase().replace(/^(?:arduino|rfid)[_\-\s]+/i, '').replace(/[^a-z0-9]/g, '');
 
     for (const baseDir of candidateDirs) {
       if (!baseDir || !fs.existsSync(baseDir)) continue;
@@ -2598,7 +2603,30 @@ ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
           if (ent.isDirectory()) {
             const entName = ent.name;
             const entSafe = entName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').toLowerCase();
-            if (entName.toLowerCase() === cleanName.toLowerCase() || entSafe === cleanSafe) {
+            const entNorm = entName.toLowerCase().replace(/^(?:arduino|rfid)[_\-\s]+/i, '').replace(/[^a-z0-9]/g, '');
+            let isMatch = entName.toLowerCase() === cleanName.toLowerCase() || 
+                          entSafe === cleanSafe || 
+                          (cleanNorm.length >= 3 && entNorm === cleanNorm);
+
+            // Also check library.properties inside the folder
+            if (!isMatch) {
+              const propPath = path.join(baseDir, entName, 'library.properties');
+              if (fs.existsSync(propPath)) {
+                try {
+                  const propContent = fs.readFileSync(propPath, 'utf-8');
+                  const propMatch = propContent.match(/^name\s*=\s*(.+)$/m);
+                  if (propMatch) {
+                    const pName = propMatch[1].trim().toLowerCase();
+                    const pNorm = pName.replace(/^(?:arduino|rfid)[_\-\s]+/i, '').replace(/[^a-z0-9]/g, '');
+                    if (pName === cleanName.toLowerCase() || (cleanNorm.length >= 3 && pNorm === cleanNorm)) {
+                      isMatch = true;
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
+
+            if (isMatch) {
               const targetPath = path.join(baseDir, entName);
               try {
                 fs.rmSync(targetPath, { recursive: true, force: true });
@@ -2617,11 +2645,17 @@ ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
     const { execFile } = require('child_process');
     const cliPath = findArduinoCLI();
     if (cliPath && fs.existsSync(cliPath)) {
-      try {
-        await new Promise((resolve) => {
-          execFile(cliPath, ['lib', 'uninstall', cleanName], { timeout: 10000 }, () => resolve());
-        });
-      } catch (_) {}
+      const candidatesToUninstall = [cleanName];
+      if (!candidatesToUninstall.includes('RFID_MFRC522v2') && cleanNorm.includes('mfrc522')) {
+        candidatesToUninstall.push('RFID_MFRC522v2');
+      }
+      for (const cName of candidatesToUninstall) {
+        try {
+          await new Promise((resolve) => {
+            execFile(cliPath, ['lib', 'uninstall', cName], { timeout: 10000 }, () => resolve());
+          });
+        } catch (_) {}
+      }
     }
 
     purgeBuildDirs();

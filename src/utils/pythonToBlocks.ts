@@ -981,6 +981,20 @@ function parseStatement(line: string, variables: Record<string, string>): string
   }
 
   // 17. RFID / SD / Stepper / BME / GPS
+  match = line.match(/^(?:robot\.)?mfrc522_begin\(\s*["']?([^"',]+)["']?\s*\)$/);
+  if (match) {
+    return `
+      <block type="mfrc522_begin">
+        <field name="SS_PIN">${escapeXml(match[1])}</field>
+      </block>
+    `;
+  }
+  if (line === 'robot.mfrc522_print_uid()' || line === 'mfrc522_print_uid()') {
+    return `<block type="mfrc522_print_uid"></block>`;
+  }
+  if (line === 'robot.mfrc522_halt()' || line === 'mfrc522_halt()') {
+    return `<block type="mfrc522_halt"></block>`;
+  }
   match = line.match(/^(?:robot\.)?rfid_begin\(\s*["']?([^"',]+)["']?\s*,\s*["']?([^"',]+)["']?\s*\)$/);
   if (match) {
     return `
@@ -1319,6 +1333,12 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   }
   if (expr === 'robot.websocket_get_message()' || expr === 'ws.recv()') {
     return `<block type="esp32_websocket_get_message"></block>`;
+  }
+  if (expr === 'mfrc522.PICC_IsNewCardPresent()' || expr === 'robot.mfrc522_is_card()' || expr === 'robot.rfid_is_card()') {
+    return `<block type="mfrc522_is_card"></block>`;
+  }
+  if (expr === 'mfrc522.PICC_ReadCardSerial()' || expr === 'robot.mfrc522_read_serial()') {
+    return `<block type="mfrc522_read_serial"></block>`;
   }
 
   // 4. Top-level Logical OR / AND

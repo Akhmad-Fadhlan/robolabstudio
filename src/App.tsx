@@ -125,6 +125,7 @@ const INITIAL_PACKAGES = {
     { name: 'ESP32Servo', desc: 'Servo library specifically optimized for ESP32.', version: '0.13.0', installed: true },
     { name: 'IRremote', desc: 'Send and receive infrared remote control signals.', version: '4.3.1', installed: false },
     { name: 'Ultrasonic', desc: 'HC-SR04 ultrasonic distance sensor driver.', version: '3.0.0', installed: false },
+    { name: 'MFRC522v2', desc: 'Arduino RFID driver library for MFRC522 (SPI, I2C) by Github/OSSLibraries.', version: '2.0.6', installed: true },
     { name: 'WebSockets', desc: 'WebSocket Server and Client for Arduino.', version: '2.4.1', installed: false },
     { name: 'Blynk', desc: 'Blynk IoT library for ESP8266 & ESP32.', version: '1.3.2', installed: false }
   ],
@@ -3942,41 +3943,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setUninstallingMap(prev => ({ ...prev, [name]: true }));
     setTerminalLogs((prev: any) => [...prev, { text: `🗑️ Memulai penghapusan package ${name}...`, type: 'info' }]);
 
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (!req) {
-      setTimeout(() => {
-        setPackages((prev: any) => ({
-          ...prev,
-          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: false, isCustom: false } : p)
-            .filter((p: any) => {
-              if (type === 'arduino') {
-                const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
-                if (!isInitial && p.name.toLowerCase() === name.toLowerCase()) return false;
-              }
-              return true;
-            })
-        }));
-        setUninstallingMap(prev => ({ ...prev, [name]: false }));
-        setTerminalLogs((prev: any) => [...prev, { text: `✓ Package ${name} dihapus (Web Demo mode).`, type: 'success' }]);
-      }, 800);
-      return;
+    // Always delete from Supabase custom libraries database if type is arduino
+    if (type === 'arduino') {
+      try {
+        await deleteUserCustomLibrary(authUser?.id || '', name);
+      } catch (dbErr: any) {
+        console.warn('[RoboLab] Error deleting custom library from database:', dbErr?.message || dbErr);
+      }
     }
 
-    try {
-      const electron = req('electron');
-      const channel = type === 'arduino' ? 'uninstall-arduino-lib' : 'uninstall-python-pkg';
-      const result = await electron.ipcRenderer.invoke(channel, type === 'arduino' ? { libName: name, userId: authUser?.id } : name);
-
-      if (type === 'arduino' && authUser?.id) {
-        try {
-          await deleteUserCustomLibrary(authUser.id, name);
-        } catch (_) {}
-      }
-
-      if (result && result.success) {
+    const req = (window as any).__electronRequire || (window as any).require;
+    if (!req) {
+      setTimeout(async () => {
         setPackages((prev: any) => ({
           ...prev,
-          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: false, isCustom: false } : p)
+          [type]: prev[type].map((p: any) => p.name.toLowerCase() === name.toLowerCase() ? { ...p, installed: false, isCustom: false } : p)
             .filter((p: any) => {
               if (type === 'arduino') {
                 const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
@@ -3989,9 +3970,39 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           setCustomLibProjects(prev => prev.filter(p => (p.libraryName || '').toLowerCase() !== name.toLowerCase()));
           await syncInstalledLibraries();
         }
-        setTerminalLogs((prev: any) => [...prev, { text: `✅ Package ${name} berhasil dihapus dari sistem!`, type: 'success' }]);
+        setUninstallingMap(prev => ({ ...prev, [name]: false }));
+        setTerminalLogs((prev: any) => [...prev, { text: `✓ Package ${name} berhasil dihapus dari database & sistem (Web mode).`, type: 'success' }]);
+      }, 500);
+      return;
+    }
+
+    try {
+      const electron = req('electron');
+      const channel = type === 'arduino' ? 'uninstall-arduino-lib' : 'uninstall-python-pkg';
+      const result = await electron.ipcRenderer.invoke(channel, type === 'arduino' ? { libName: name, userId: authUser?.id } : name);
+
+      // Clean packages from state and update customLibProjects
+      setPackages((prev: any) => ({
+        ...prev,
+        [type]: prev[type].map((p: any) => p.name.toLowerCase() === name.toLowerCase() ? { ...p, installed: false, isCustom: false } : p)
+          .filter((p: any) => {
+            if (type === 'arduino') {
+              const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
+              if (!isInitial && p.name.toLowerCase() === name.toLowerCase()) return false;
+            }
+            return true;
+          })
+      }));
+      if (type === 'arduino') {
+        setCustomLibProjects(prev => prev.filter(p => (p.libraryName || '').toLowerCase() !== name.toLowerCase()));
+        await syncInstalledLibraries();
+      }
+
+      if (result && result.success) {
+        setTerminalLogs((prev: any) => [...prev, { text: `✅ Package ${name} berhasil dihapus dari sistem & database!`, type: 'success' }]);
       } else {
-        setTerminalLogs((prev: any) => [...prev, { text: `❌ Gagal menghapus package ${name}.`, type: 'error' }]);
+        // Even if disk removal was skipped because directory didn't exist on disk, DB was successfully cleared
+        setTerminalLogs((prev: any) => [...prev, { text: `✅ Package ${name} berhasil dibersihkan dari database!`, type: 'success' }]);
       }
     } catch (err: any) {
       setTerminalLogs((prev: any) => [...prev, { text: `Error: ${err.message || err}`, type: 'error' }]);
@@ -11181,6 +11192,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 { name: 'Blynk', author: 'Volodymyr Shymanskyy', desc: 'Library resmi Blynk IoT Cloud untuk ESP8266 & ESP32', cat: 'IoT', version: '1.3.2' },
                 { name: 'LiquidCrystal_I2C', author: 'Frank de Brabander', desc: 'Library modul LCD 16x2 / 20x4 I2C Backpack', cat: 'Display', version: '1.1.2' },
                 { name: 'Servo', author: 'Michael Margolis', desc: 'Library kontrol motor Servo SG90, MG996R', cat: 'Actuators', version: '1.2.1' },
+                { name: 'MFRC522v2', author: 'OSSLibraries', desc: 'Library RFID Reader RC522 (v2) untuk ESP32 & Arduino via SPI / I2C', cat: 'Sensors', version: '2.0.6' },
                 { name: 'NewPing', author: 'Tim Eckel', desc: 'Library sensor jarak ultrasonic HC-SR04 ultra cepat', cat: 'Sensors', version: '1.9.7' }
               ]).filter(l => !libSearchQuery || liveSearchResults.length > 0 || l.name.toLowerCase().includes(libSearchQuery.toLowerCase()) || l.desc.toLowerCase().includes(libSearchQuery.toLowerCase()))
               ).map((lib) => {

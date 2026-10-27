@@ -366,6 +366,8 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
   res = res.replace(/\bdht\.readTemperature\s*\(\s*\)/g, 'robot.dht_read_temp()');
   res = res.replace(/\bdht\.readHumidity\s*\(\s*\)/g, 'robot.dht_read_humi()');
+  res = res.replace(/\bmfrc522\.PICC_IsNewCardPresent\s*\(\s*\)/g, 'robot.mfrc522_is_card()');
+  res = res.replace(/\bmfrc522\.PICC_ReadCardSerial\s*\(\s*\)/g, 'robot.mfrc522_read_serial()');
   res = res.replace(/\bF\(\s*(["'].*?["'])\s*\)/g, '$1');
 
   // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
@@ -577,6 +579,22 @@ function convertCtoPython(
     }
 
     // Statements
+    if (trimmed.includes('mfrc522.PCD_Init()')) {
+      emitLine('robot.mfrc522_begin("10")');
+      continue;
+    }
+    if (trimmed.includes('MFRC522Debug::PrintUID(')) {
+      emitLine('robot.mfrc522_print_uid()');
+      continue;
+    }
+    if (trimmed.includes('mfrc522.PICC_HaltA()')) {
+      emitLine('robot.mfrc522_halt()');
+      continue;
+    }
+    if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial(') || trimmed.includes('mfrc522.PCD_StopCrypto1()')) {
+      continue;
+    }
+
     // 1. delay(ms)
     let m = trimmed.match(/^delay\(\s*(.+?)\s*\)$/);
     if (m) {

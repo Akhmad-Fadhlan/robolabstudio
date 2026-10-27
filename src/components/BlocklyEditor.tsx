@@ -1667,6 +1667,18 @@ const LIBRARY_SIGNATURES: Array<{
     ],
   },
   {
+    patterns: ['mfrc522', 'mfrc522v2', 'rfid_mfrc522v2', 'arduino_mfrc522v2'],
+    categoryName: 'MFRC522v2 RFID',
+    colour: '#06b6d4',
+    blocks: [
+      { type: 'mfrc522_begin', message: 'MFRC522v2 Mulai SS/SDA Pin %1', inputs: [{ name: 'SS_PIN', type: 'field_input', text: '10' }], isStatement: true },
+      { type: 'mfrc522_is_card', message: 'MFRC522 Kartu Terdeteksi? (PICC_IsNewCardPresent)', isValue: true },
+      { type: 'mfrc522_read_serial', message: 'MFRC522 Baca Kartu Serial (PICC_ReadCardSerial)', isValue: true },
+      { type: 'mfrc522_print_uid', message: 'MFRC522 Tampilkan UID ke Serial (PrintUID)', isStatement: true },
+      { type: 'mfrc522_halt', message: 'MFRC522 Hentikan Kartu (PICC_HaltA & StopCrypto1)', isStatement: true },
+    ],
+  },
+  {
     patterns: ['pn532', 'adafruit_pn532'],
     categoryName: 'PN532 NFC',
     colour: '#56ccf2',
@@ -1767,7 +1779,7 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   
   // 1. Hardcoded libraries
   if (lower.includes('rfid') || lower.includes('pn532') || lower.includes('mfrc522') || lower.includes('nfc')) {
-    return ['lib_rfid_begin', 'lib_rfid_i2c_begin', 'lib_rfid_print_uid', 'lib_rfid_read', 'lib_rfid_iscard'];
+    return ['mfrc522_begin', 'mfrc522_is_card', 'mfrc522_read_serial', 'mfrc522_print_uid', 'mfrc522_halt', 'lib_rfid_begin', 'lib_rfid_i2c_begin', 'lib_rfid_print_uid', 'lib_rfid_read', 'lib_rfid_iscard'];
   }
   if (lower.includes('dht')) {
     return ['dht_init', 'dht_read_temp', 'dht_read_humi'];
@@ -3113,13 +3125,28 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         generatedCode += `Adafruit_MPU6050 mpu;\nsensors_event_t a, g, temp;\n`;
       }
 
-      // RFID / PN532 globals (Fuzzy block type match for custom or built-in RFID blocks)
+      // RFID / PN532 / MFRC522 globals (Fuzzy block type match for custom or built-in RFID blocks)
+      const hasMFRC522 = workspace.getAllBlocks(false).some((b: any) => isBlockActive(b) && (b.type || '').toLowerCase().includes('mfrc522'));
       const rfidBlock = workspace.getAllBlocks(false).find((b: any) => {
         if (!isBlockActive(b)) return false;
         const t = (b.type || '').toLowerCase();
-        return t.includes('rfid') || t.includes('pn532') || t.includes('nfc');
+        return t.includes('rfid') || t.includes('pn532') || t.includes('nfc') || t.includes('mfrc522');
       });
-      if (rfidBlock) {
+      if (hasMFRC522) {
+        if (!generatedCode.includes('#include <MFRC522v2.h>')) {
+          generatedCode += '#include <MFRC522v2.h>\n#include <MFRC522DriverSPI.h>\n#include <MFRC522DriverPinSimple.h>\n#include <MFRC522Debug.h>\n\n';
+          const beginBlk = workspace.getAllBlocks(false).find((b: any) => isBlockActive(b) && b.type === 'mfrc522_begin');
+          let ssPin = '10';
+          if (beginBlk && beginBlk.getField('SS_PIN')) {
+            ssPin = beginBlk.getFieldValue('SS_PIN') || '10';
+          }
+          const targetBoard = (boardType || board || '').toLowerCase();
+          if (targetBoard.includes('esp32') && ssPin === '10') {
+            ssPin = '5';
+          }
+          generatedCode += `MFRC522DriverPinSimple ss_pin(${ssPin});\nMFRC522DriverSPI driver{ss_pin};\nMFRC522 mfrc522{driver};\n\n`;
+        }
+      } else if (rfidBlock) {
         const i2cBeginBlock = workspace.getBlocksByType('lib_rfid_i2c_begin').find((b: any) => isBlockActive(b));
         const isI2CBlock = !!i2cBeginBlock || (rfidBlock.getField('SDA') && rfidBlock.getField('SCL'));
         
@@ -4098,7 +4125,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     });
 
     // ── Dynamic Custom / GitHub Libraries Generator ────────────────────────
-    const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core'];
+    const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core', 'mfrc522', 'mfrc522v2', 'rfid_mfrc522v2', 'arduino_mfrc522v2'];
     const customLibs = (libs || []).filter((lib: any) => {
       const name = (typeof lib === 'string' ? lib : lib?.name) || '';
       const lower = name.toLowerCase().trim();
@@ -4703,7 +4730,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `robot.detect("${obj}")`;
     }
     const blockTypeLower = (block.type || '').toLowerCase();
-    if (blockTypeLower.includes('rfid') || blockTypeLower.includes('pn532') || blockTypeLower.includes('nfc')) {
+    if (blockTypeLower === 'mfrc522_is_card') {
+      if (lang === 'arduino') return `mfrc522.PICC_IsNewCardPresent()`;
+      return `robot.mfrc522_is_card()`;
+    }
+    if (blockTypeLower === 'mfrc522_read_serial') {
+      if (lang === 'arduino') return `mfrc522.PICC_ReadCardSerial()`;
+      return `robot.mfrc522_read_serial()`;
+    }
+    if (blockTypeLower.includes('rfid') || blockTypeLower.includes('pn532') || blockTypeLower.includes('nfc') || blockTypeLower.includes('mfrc522')) {
       if (blockTypeLower.includes('iscard') || blockTypeLower.includes('present')) {
         if (lang === 'arduino') return `(getRFIDUID() != "")`;
         return `robot.rfid_is_card()`;
@@ -5338,6 +5373,29 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}}\n`;
         } else {
           code += `${indent}robot.mpu_init()\n`;
+        }
+      } else if (currentBlock.type === 'mfrc522_begin') {
+        if (lang === 'arduino') {
+          code += `${indent}mfrc522.PCD_Init();\n`;
+          code += `${indent}MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);\n`;
+        } else {
+          const ss = currentBlock.getFieldValue('SS_PIN') || '10';
+          code += `${indent}robot.mfrc522_begin("${ss}")\n`;
+        }
+      } else if (currentBlock.type === 'mfrc522_print_uid') {
+        if (lang === 'arduino') {
+          code += `${indent}Serial.print(F("Card UID: "));\n`;
+          code += `${indent}MFRC522Debug::PrintUID(Serial, mfrc522.uid);\n`;
+          code += `${indent}Serial.println();\n`;
+        } else {
+          code += `${indent}robot.mfrc522_print_uid()\n`;
+        }
+      } else if (currentBlock.type === 'mfrc522_halt') {
+        if (lang === 'arduino') {
+          code += `${indent}mfrc522.PICC_HaltA();\n`;
+          code += `${indent}mfrc522.PCD_StopCrypto1();\n`;
+        } else {
+          code += `${indent}robot.mfrc522_halt()\n`;
         }
       } else if (
         currentBlock.type === 'lib_rfid_begin' || 

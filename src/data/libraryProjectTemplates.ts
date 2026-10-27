@@ -871,5 +871,133 @@ from machine import Pin, I2C
 i2c = I2C(0, scl=Pin(22), sda=Pin(21))
 devices = i2c.scan()
 print("I2C Devices:", [hex(d) for d in devices])`
+  },
+  {
+    name: "MFRC522v2 - RFID Card Reader & UID Detection",
+    board: "Arduino Uno",
+    description: "Contoh resmi Arduino_MFRC522v2 (OSSLibraries): Membaca data UID kartu / tag RFID menggunakan modul MFRC522 via SPI dan menampilkannya ke Serial Monitor.",
+    iconColor: "cyan",
+    components: ['rfid'],
+    libraryName: "MFRC522v2",
+    category: "Library Example",
+    isLibraryExample: true,
+    ino: `// Library Example: MFRC522v2 RFID Card Reader
+// Repositori: https://github.com/OSSLibraries/Arduino_MFRC522v2
+#include <MFRC522v2.h>
+#include <MFRC522DriverSPI.h>
+#include <MFRC522DriverPinSimple.h>
+#include <MFRC522Debug.h>
+
+// Inisialisasi pin SS / SDA (Pin 10 pada Arduino Uno, Pin 5 pada ESP32)
+MFRC522DriverPinSimple ss_pin(10);
+MFRC522DriverSPI driver{ss_pin};
+MFRC522 mfrc522{driver};
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial);
+  mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
+  MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
+  Serial.println(F("MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
+}
+
+void loop() {
+  // Cek apakah ada kartu RFID baru di dekat sensor
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  // Pilih dan baca salah satu kartu
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
+  Serial.print(F("Card UID: "));
+  MFRC522Debug::PrintUID(Serial, mfrc522.uid);
+  Serial.println();
+
+  // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+  delay(1000);
+}`,
+    xml: `<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="arduino_setup" id="setup" x="40" y="40">
+    <statement name="STACK">
+      <block type="mfrc522_begin">
+        <field name="SS_PIN">10</field>
+        <next>
+          <block type="arduino_serial_print">
+            <value name="TEXT">
+              <block type="text">
+                <field name="TEXT">MFRC522v2 Siap! Tempelkan kartu RFID...</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="arduino_loop" id="loop" x="40" y="200">
+    <statement name="STACK">
+      <block type="controls_if">
+        <value name="IF0">
+          <block type="mfrc522_is_card"></block>
+        </value>
+        <statement name="DO0">
+          <block type="controls_if">
+            <value name="IF0">
+              <block type="mfrc522_read_serial"></block>
+            </value>
+            <statement name="DO0">
+              <block type="arduino_serial_print_inline">
+                <value name="TEXT">
+                  <block type="text">
+                    <field name="TEXT">Card UID: </field>
+                  </block>
+                </value>
+                <next>
+                  <block type="mfrc522_print_uid">
+                    <next>
+                      <block type="mfrc522_halt">
+                        <next>
+                          <block type="arduino_delay">
+                            <field name="MS">1000</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>`,
+    py: `# Python / MicroPython MFRC522 RFID Reader
+import time
+import robolab as robot
+
+def setup():
+    robot.connect("COM3")
+    robot.mfrc522_begin("10")
+    print("MFRC522v2 Siap! Tempelkan kartu RFID...")
+
+def loop():
+    while True:
+        if robot.mfrc522_is_card():
+            if robot.mfrc522_read_serial():
+                print("Card UID:", robot.rfid_read())
+                robot.mfrc522_halt()
+                time.sleep(1)
+        time.sleep(0.1)
+
+if __name__ == '__main__':
+    setup()
+    loop()`
   }
 ];

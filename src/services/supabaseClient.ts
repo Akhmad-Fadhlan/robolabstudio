@@ -641,19 +641,69 @@ export async function saveUserCustomLibrary(
 }
 
 export async function deleteUserCustomLibrary(userId: string, libName: string): Promise<boolean> {
-  if (!userId || !libName) return false;
-  try {
-    const { error } = await supabase
-      .from('user_custom_libraries')
-      .delete()
-      .eq('user_id', userId)
-      .eq('name', libName);
+  if (!libName || typeof libName !== 'string') return false;
 
-    if (error) {
-      console.warn('[RoboLab] deleteUserCustomLibrary notice:', error.message);
-      return false;
+  try {
+    let effectiveUserId = userId;
+    if (!effectiveUserId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        effectiveUserId = sessionData?.session?.user?.id || (await supabase.auth.getUser()).data?.user?.id || '';
+      } catch (_) {}
     }
-    return true;
+
+    const cleanRaw = libName.trim().toLowerCase();
+    const cleanNorm = cleanRaw.replace(/^(?:arduino|rfid)[_\-\s]+/i, '').replace(/[^a-z0-9]/g, '');
+
+    // 1. Fetch user's custom library rows to find matching row IDs
+    let query = supabase.from('user_custom_libraries').select('id, name, source_url');
+    if (effectiveUserId) {
+      query = query.eq('user_id', effectiveUserId);
+    }
+    const { data: rows, error: fetchErr } = await query;
+
+    let deletedAny = false;
+    if (!fetchErr && Array.isArray(rows) && rows.length > 0) {
+      const idsToDelete = rows.filter(r => {
+        const rRaw = (r.name || '').trim().toLowerCase();
+        const rNorm = rRaw.replace(/^(?:arduino|rfid)[_\-\s]+/i, '').replace(/[^a-z0-9]/g, '');
+        const rUrl = (r.source_url || '').toLowerCase();
+        return (
+          rRaw === cleanRaw ||
+          rNorm === cleanNorm ||
+          (cleanNorm.length >= 3 && (rNorm.includes(cleanNorm) || cleanNorm.includes(rNorm))) ||
+          (cleanRaw.length >= 4 && (rRaw.includes(cleanRaw) || cleanRaw.includes(rRaw))) ||
+          (cleanNorm.length >= 3 && rUrl.includes(cleanNorm)) ||
+          rUrl.includes(cleanRaw)
+        );
+      }).map(r => r.id);
+
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from('user_custom_libraries')
+          .delete()
+          .in('id', idsToDelete);
+        if (!delErr) {
+          console.log(`[RoboLab] Successfully deleted custom library rows from DB:`, idsToDelete);
+          deletedAny = true;
+        } else {
+          console.warn('[RoboLab] deleteUserCustomLibrary in(id) notice:', delErr.message);
+        }
+      }
+    }
+
+    // 2. Direct fallback delete using ilike pattern matching
+    let fallbackQuery = supabase.from('user_custom_libraries').delete();
+    if (effectiveUserId) {
+      fallbackQuery = fallbackQuery.eq('user_id', effectiveUserId);
+    }
+    const orPatterns = [`name.ilike.%${cleanNorm || cleanRaw}%`, `name.ilike.%${cleanRaw}%`];
+    const { error: fbErr } = await fallbackQuery.or(orPatterns.join(','));
+    if (!fbErr) {
+      deletedAny = true;
+    }
+
+    return deletedAny;
   } catch (err: any) {
     console.warn('[RoboLab] deleteUserCustomLibrary exception:', err.message);
     return false;
