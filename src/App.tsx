@@ -3919,7 +3919,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const key = authUser?.id ? `robolab_packages_${authUser.id}` : 'robolab_packages';
       const saved = localStorage.getItem(key);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed?.arduino)) {
+          const existing = new Set(parsed.arduino.map((p: any) => (p.name || '').toLowerCase()));
+          INITIAL_PACKAGES.arduino.forEach((initPkg: any) => {
+            if (!existing.has((initPkg.name || '').toLowerCase())) {
+              parsed.arduino.push(initPkg);
+            }
+          });
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Failed to load saved packages:', e);
@@ -4877,9 +4886,23 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     { text: 'Device ESP32 connected to COM4 at 115200 baud.', type: 'success' }
   ]);
 
-  // sensorData removed for dashboard, but kept as dummy for Simulator prop requirements
-  const sensorData = { distance: 42, temp: 28.4, humidity: 65.0, battery: 94, accelX: 0, accelY: 0, accelZ: 0, gesture: 'none' };
-  const sensorDataRef = { current: sensorData };
+  // Dynamic sensor state for circuit components & telemetry
+  const [sensorData, setSensorData] = useState({ 
+    distance: 42, 
+    temp: 28.4, 
+    humidity: 65.0, 
+    battery: 94, 
+    accelX: 0, 
+    accelY: 0, 
+    accelZ: 0, 
+    gesture: 'none',
+    rfidCardPresent: false,
+    rfidUid: '53 7A 92 1F'
+  });
+  const sensorDataRef = useRef(sensorData);
+  useEffect(() => {
+    sensorDataRef.current = sensorData;
+  }, [sensorData]);
 
   // Layout Collapse state controls (Task 4)
   const [isBlocklyCollapsed, setIsBlocklyCollapsed] = useState(false);
@@ -5969,6 +5992,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           continue;
         }
 
+        // MFRC522 RFID specific helpers in serial / debug
+        if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial')) {
+          queue.push({ type: 'print', value: { expr: '"Firmware Version: 0x92 = v2.0"', newline: true } });
+          continue;
+        }
+        if (trimmed.includes('MFRC522Debug::PrintUID') || trimmed.includes('mfrc522_print_uid') || trimmed.includes('robot.mfrc522_print_uid')) {
+          queue.push({ type: 'mfrc522PrintUid' });
+          continue;
+        }
+
         // 3. Move
         const pythonMoveMatch = trimmed.match(/robot\.send\((['"])(.*?)\1\)/);
         const arduinoMoveMatch = trimmed.match(/Robot\.move\((['"])(.*?)\1/);
@@ -6411,6 +6444,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(match[0], String(val));
       }
 
+      // 6. MFRC522 / RFID Card Present
+      while (replaced.includes('PICC_IsNewCardPresent') || replaced.includes('mfrc522_is_card') || replaced.includes('rfid_iscard')) {
+        const match = replaced.match(/(?:mfrc522\.PICC_IsNewCardPresent|robot\.mfrc522_is_card|mfrc522_is_card|rfid_iscard)\(\s*\)/);
+        if (!match) break;
+        const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
+        replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
+      }
+
+      // 7. MFRC522 / RFID Read Card Serial
+      while (replaced.includes('PICC_ReadCardSerial') || replaced.includes('mfrc522_read_serial') || replaced.includes('rfid_read')) {
+        const match = replaced.match(/(?:mfrc522\.PICC_ReadCardSerial|robot\.mfrc522_read_serial|mfrc522_read_serial|robot\.rfid_read)\(\s*\)/);
+        if (!match) break;
+        const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
+        replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
+      }
+
       return replaced;
     };
 
@@ -6469,6 +6518,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             { text: evaluated, type: 'output' }
           ]);
         }
+        next();
+      } else if (item.type === 'mfrc522PrintUid') {
+        const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
+        setTerminalLogs(prev => {
+          if (prev.length === 0) return [{ text: uid, type: 'stdout' as const }];
+          const last = prev[prev.length - 1];
+          return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
+        });
+        setInteractiveTerminalLogs(prev => {
+          if (prev.length === 0) return [{ text: uid, type: 'output' as const }];
+          const last = prev[prev.length - 1];
+          return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
+        });
         next();
       } else if (item.type === 'move') {
         const cmd = item.value as string;
@@ -7483,7 +7545,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       pot: { x: 15, y: 630 },
       button: { x: 120, y: 530 },
       lcd: { x: 210, y: 530 },
-      dht11: { x: 120, y: 640 }
+      dht11: { x: 120, y: 640 },
+      rfid: { x: 160, y: 640 }
     });
 
     setTerminalLogs((prev: any) => [...prev, { text: `✓ Loaded template: ${name} (auto-sync aktif)`, type: 'success' }]);

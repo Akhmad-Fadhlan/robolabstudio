@@ -147,6 +147,8 @@ interface SimulatorProps {
     accelY?: number; 
     accelZ?: number; 
     gesture?: string;
+    rfidCardPresent?: boolean;
+    rfidUid?: string;
   };
   board: string;
   activePythonCode: string;
@@ -350,6 +352,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     button: 0,
     lcd: 0,
     dht11: 0,
+    rfid: 0,
   });
 
   const handleRotateComponent = (compType: string) => {
@@ -592,6 +595,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
     if (codeUpper.includes('MOTOR') || codeUpper.includes('MOTOR_DC') || codeUpper.includes('MOTORDC') || codeUpper.includes('DC_MOTOR')) {
       detected.push('motor');
     }
+    // Check RFID RC522
+    if (codeUpper.includes('MFRC522') || codeUpper.includes('RFID') || codeUpper.includes('RC522') || codeUpper.includes('PICC_')) {
+      detected.push('rfid');
+    }
 
     // MERGE detected with existing — never wipe what the user manually added
     setActiveComponents(prev => {
@@ -675,6 +682,21 @@ export const Simulator: React.FC<SimulatorProps> = ({
       autoWires.push({ from: pin, to: 'MOTOR_POS', color: '#ef4444', bendPoints: [] });
       autoWires.push({ from: gndPin, to: 'MOTOR_NEG', color: '#1e293b', bendPoints: [] });
     }
+    if (detected.includes('rfid')) {
+      const sdaPin = isArduino ? 'D10' : (isMicrobit ? 'P16' : (isEsp8266 ? 'D8' : 'G5'));
+      const sckPin = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
+      const mosiPin = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
+      const misoPin = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
+      const rstPin = isArduino ? 'D9' : (isMicrobit ? 'P8' : (isEsp8266 ? 'D4' : 'G22'));
+      const p3v3Pin = isArduino ? '3V3' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
+      autoWires.push({ from: sdaPin, to: 'RFID_SDA', color: '#06b6d4', bendPoints: [] });
+      autoWires.push({ from: sckPin, to: 'RFID_SCK', color: '#3b82f6', bendPoints: [] });
+      autoWires.push({ from: mosiPin, to: 'RFID_MOSI', color: '#10b981', bendPoints: [] });
+      autoWires.push({ from: misoPin, to: 'RFID_MISO', color: '#eab308', bendPoints: [] });
+      autoWires.push({ from: gndPin, to: 'RFID_GND', color: '#1e293b', bendPoints: [] });
+      autoWires.push({ from: rstPin, to: 'RFID_RST', color: '#8b5cf6', bendPoints: [] });
+      autoWires.push({ from: p3v3Pin, to: 'RFID_3V3', color: '#f43f5e', bendPoints: [] });
+    }
 
     // Merge autoWires with any existing manually-placed wires (preserve manual connections)
     setWires(prev => {
@@ -685,7 +707,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
         'POT_VCC', 'POT_SIG', 'POT_GND',
         'BTN_SIG', 'BTN_GND',
         'DHT11_VCC', 'DHT11_DATA', 'DHT11_GND',
-        'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL'
+        'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL',
+        'RFID_SDA', 'RFID_SCK', 'RFID_MOSI', 'RFID_MISO', 'RFID_IRQ', 'RFID_GND', 'RFID_RST', 'RFID_3V3'
       ];
 
       const autoTargetComponentPins = new Set<string>();
@@ -713,7 +736,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
     button: { x: 120, y: 530 },
     lcd: { x: 210, y: 530 },
     motor: { x: 330, y: 420 },
-    dht11: { x: 15, y: 640 }
+    dht11: { x: 15, y: 640 },
+    rfid: { x: 160, y: 640 }
   });
   // Merge localPositions (defaults) with positionsProp overrides so positions.xxx
   // is NEVER undefined — even when parent only passes a partial positions object.
@@ -777,6 +801,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const hasLcd = activeComponents.includes('lcd');
   const hasMotor = activeComponents.includes('motor') || activeComponents.includes('dc_motor') || activeComponents.includes('motordc');
   const hasDht11 = activeComponents.includes('dht11') || activeComponents.includes('dht');
+  const hasRfid = activeComponents.includes('rfid') || activeComponents.includes('mfrc522') || activeComponents.includes('rc522');
 
   const checkMotorWiring = (): boolean => {
     const posWire = wires.find(w => w.to === 'MOTOR_POS' || w.from === 'MOTOR_POS');
@@ -1058,6 +1083,28 @@ export const Simulator: React.FC<SimulatorProps> = ({
         { id: 'DHT11_DATA', name: 'DHT11 Data Pin', cx: data.cx, cy: data.cy, type: 'component' },
         { id: 'DHT11_NC', name: 'DHT11 NC (No Conn)', cx: nc.cx, cy: nc.cy, type: 'component' },
         { id: 'DHT11_GND', name: 'DHT11 GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' }
+      );
+    }
+
+    // RC522 RFID Reader Pins (8 pins, 2.54mm pitch)
+    if (hasRfid) {
+      const sda = getRotatedPinCoords('rfid', 16, 162, 55, 80);
+      const sck = getRotatedPinCoords('rfid', 27, 162, 55, 80);
+      const mosi = getRotatedPinCoords('rfid', 38, 162, 55, 80);
+      const miso = getRotatedPinCoords('rfid', 49, 162, 55, 80);
+      const irq = getRotatedPinCoords('rfid', 60, 162, 55, 80);
+      const gnd = getRotatedPinCoords('rfid', 71, 162, 55, 80);
+      const rst = getRotatedPinCoords('rfid', 82, 162, 55, 80);
+      const v33 = getRotatedPinCoords('rfid', 93, 162, 55, 80);
+      componentPins.push(
+        { id: 'RFID_SDA', name: 'RFID SDA / SS (Chip Select)', cx: sda.cx, cy: sda.cy, type: 'component' },
+        { id: 'RFID_SCK', name: 'RFID SCK (SPI Clock)', cx: sck.cx, cy: sck.cy, type: 'component' },
+        { id: 'RFID_MOSI', name: 'RFID MOSI (Master Out)', cx: mosi.cx, cy: mosi.cy, type: 'component' },
+        { id: 'RFID_MISO', name: 'RFID MISO (Master In)', cx: miso.cx, cy: miso.cy, type: 'component' },
+        { id: 'RFID_IRQ', name: 'RFID IRQ (Interrupt)', cx: irq.cx, cy: irq.cy, type: 'component' },
+        { id: 'RFID_GND', name: 'RFID GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' },
+        { id: 'RFID_RST', name: 'RFID RST (Reset Pin)', cx: rst.cx, cy: rst.cy, type: 'component' },
+        { id: 'RFID_3V3', name: 'RFID 3.3V (VCC Power)', cx: v33.cx, cy: v33.cy, type: 'component' }
       );
     }
 
@@ -1567,6 +1614,22 @@ export const Simulator: React.FC<SimulatorProps> = ({
       autoWires.push({ from: sdaPin, to: 'LCD_SDA', color: '#a78bfa', bendPoints: [] });
       autoWires.push({ from: sclPin, to: 'LCD_SCL', color: '#3b82f6', bendPoints: [] });
     }
+    // Only wire RC522 RFID if it's already added
+    if (hasRfid) {
+      const sdaPin = isArduino ? 'D10' : (isMicrobit ? 'P16' : (isEsp8266 ? 'D8' : 'G5'));
+      const sckPin = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
+      const mosiPin = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
+      const misoPin = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
+      const rstPin = isArduino ? 'D9' : (isMicrobit ? 'P8' : (isEsp8266 ? 'D4' : 'G22'));
+      const p3v3Pin = isArduino ? '3V3' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
+      autoWires.push({ from: sdaPin, to: 'RFID_SDA', color: '#06b6d4', bendPoints: [] });
+      autoWires.push({ from: sckPin, to: 'RFID_SCK', color: '#3b82f6', bendPoints: [] });
+      autoWires.push({ from: mosiPin, to: 'RFID_MOSI', color: '#10b981', bendPoints: [] });
+      autoWires.push({ from: misoPin, to: 'RFID_MISO', color: '#eab308', bendPoints: [] });
+      autoWires.push({ from: gndPin, to: 'RFID_GND', color: '#1e293b', bendPoints: [] });
+      autoWires.push({ from: rstPin, to: 'RFID_RST', color: '#8b5cf6', bendPoints: [] });
+      autoWires.push({ from: p3v3Pin, to: 'RFID_3V3', color: '#f43f5e', bendPoints: [] });
+    }
 
     // Only apply wires (don't change activeComponents — preserve user's workspace)
     if (autoWires.length > 0) {
@@ -1578,7 +1641,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
           'POT_VCC', 'POT_SIG', 'POT_GND',
           'BTN_SIG', 'BTN_GND',
           'DHT11_VCC', 'DHT11_DATA', 'DHT11_GND',
-          'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL'
+          'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL',
+          'RFID_SDA', 'RFID_SCK', 'RFID_MOSI', 'RFID_MISO', 'RFID_IRQ', 'RFID_GND', 'RFID_RST', 'RFID_3V3'
         ];
 
         const autoTargetComponentPins = new Set<string>();
@@ -1672,7 +1736,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const handleRemoveComponent = (compType: string) => {
-    const typesToRemove = compType === 'ultrasonic' ? ['ultrasonic', 'hcsr', 'hcsr04'] : (compType === 'dht11' ? ['dht11', 'dht'] : [compType]);
+    const typesToRemove = compType === 'ultrasonic' ? ['ultrasonic', 'hcsr', 'hcsr04'] : (compType === 'dht11' ? ['dht11', 'dht'] : (compType === 'rfid' ? ['rfid', 'mfrc522', 'rc522'] : [compType]));
     setActiveComponents(prev => prev.filter(c => !typesToRemove.includes(c)));
     
     const pinPrefixes = {
@@ -1685,7 +1749,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
       button: ['BTN_'],
       dht11: ['DHT11_'],
       dht: ['DHT11_'],
-      lcd: ['LCD_']
+      lcd: ['LCD_'],
+      rfid: ['RFID_'],
+      mfrc522: ['RFID_'],
+      rc522: ['RFID_']
     }[compType] || [compType.toUpperCase() + '_'];
 
     const compPinIds = pins
@@ -2696,6 +2763,117 @@ export const Simulator: React.FC<SimulatorProps> = ({
             </g>
           )}
 
+          {/* H. RC522 RFID READER — 3D Board & Interactive RFID Tag */}
+          {hasRfid && positions.rfid && (
+            <g
+              transform={`translate(${positions.rfid.x}, ${positions.rfid.y}) rotate(${rotations.rfid || 0}, 55, 80)`}
+              className="cursor-move select-none"
+              onMouseDown={(e) => startDrag('rfid', e)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                handleRotateComponent('rfid');
+              }}
+              filter="url(#shadow3d)"
+            >
+              {/* Rotate Button */}
+              <g className="cursor-pointer" onClick={() => handleRotateComponent('rfid')} onMouseDown={e => e.stopPropagation()}>
+                <circle cx="8" cy="8" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
+                <path d="M6 8a2 2 0 1 1 2 2M6 8l1.5-1M6 8l1.5 1" stroke="#fff" strokeWidth="0.9" fill="none"/>
+              </g>
+              {/* Delete button */}
+              <g className="cursor-pointer" onClick={() => handleRemoveComponent('rfid')} onMouseDown={e => e.stopPropagation()}>
+                <circle cx="102" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
+                <line x1="100" y1="6" x2="104" y2="10" stroke="#fff" strokeWidth="1.2"/>
+                <line x1="104" y1="6" x2="100" y2="10" stroke="#fff" strokeWidth="1.2"/>
+              </g>
+
+              {/* PCB Base: Classic blue FR-4 (110x150, rx=6) */}
+              <rect x="0" y="16" width="110" height="136" rx="6" fill="#1e3a8a" stroke="#172554" strokeWidth="1.5"/>
+              <rect x="2" y="18" width="106" height="132" rx="5" fill="none" stroke="#2563eb" strokeWidth="0.8" opacity="0.6"/>
+
+              {/* Top Antenna Area (Coil traces in silkscreen gold) */}
+              <rect x="8" y="24" width="94" height="64" rx="4" fill="#172554" stroke="#d97706" strokeWidth="1.2"/>
+              <rect x="12" y="28" width="86" height="56" rx="3" fill="none" stroke="#f59e0b" strokeWidth="0.8" opacity="0.8"/>
+              <rect x="16" y="32" width="78" height="48" rx="2" fill="none" stroke="#d97706" strokeWidth="0.6" opacity="0.7"/>
+              <rect x="20" y="36" width="70" height="40" rx="2" fill="none" stroke="#f59e0b" strokeWidth="0.5" opacity="0.6"/>
+
+              {/* Antenna Icon & Text */}
+              <text x="55" y="49" fontSize="7" fill="#fde68a" textAnchor="middle" fontWeight="bold" fontFamily="monospace">RFID-RC522</text>
+              <path d="M49 57a7 7 0 0 1 12 0 M46 54a11 11 0 0 1 18 0 M43 51a15 15 0 0 1 24 0" stroke="#fbbf24" strokeWidth="1" fill="none" strokeLinecap="round"/>
+              <circle cx="55" cy="59" r="1.5" fill="#f59e0b"/>
+
+              {/* Interactive Tap RFID Card Button / Tag directly on Antenna */}
+              <g
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newPresent = !sensorData.rfidCardPresent;
+                  if (onSensorDataChange) {
+                    onSensorDataChange({ rfidCardPresent: newPresent, rfidUid: sensorData.rfidUid || '53 7A 92 1F' });
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <rect
+                  x="14"
+                  y="67"
+                  width="82"
+                  height="17"
+                  rx="4"
+                  fill={sensorData.rfidCardPresent ? '#15803d' : '#0284c7'}
+                  stroke="#ffffff"
+                  strokeWidth="0.9"
+                />
+                <text x="55" y="78.5" fontSize="6.5" fill="#ffffff" textAnchor="middle" fontWeight="bold">
+                  {sensorData.rfidCardPresent ? '✓ KARTU MENEMPEL' : '🏷️ TEMPEL KARTU'}
+                </text>
+              </g>
+
+              {/* Middle Circuit: IC MFRC522 (QFN32 black chip with pins) */}
+              <rect x="42" y="93" width="26" height="26" rx="1.5" fill="#0f172a" stroke="#334155" strokeWidth="0.8"/>
+              <circle cx="45" cy="96" r="1" fill="#94a3b8"/>
+              <text x="55" y="108" fontSize="5.5" fill="#cbd5e1" textAnchor="middle" fontFamily="monospace" fontWeight="bold">RC522</text>
+              {/* SMD Crystal Oscillator (27.12 MHz) */}
+              <rect x="15" y="98" width="18" height="10" rx="2" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8"/>
+              <text x="24" y="105" fontSize="4.5" fill="#0f172a" textAnchor="middle" fontWeight="bold">27.12M</text>
+
+              {/* Power LED & Status Indicator LED */}
+              <rect x="80" y="96" width="6" height="8" rx="0.5" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
+              <circle cx="83" cy="100" r="2" fill="#ef4444"/>
+              <text x="83" y="110" fontSize="4.5" fill="#94a3b8" textAnchor="middle">PWR</text>
+
+              {/* Card Detected Status Glow */}
+              {sensorData.rfidCardPresent && (
+                <g>
+                  <circle cx="55" cy="56" r="28" fill="#22c55e" opacity="0.2"/>
+                  <text x="55" y="123" fontSize="5.5" fill="#86efac" textAnchor="middle" fontWeight="bold">UID: {sensorData.rfidUid || '53 7A 92 1F'}</text>
+                </g>
+              )}
+              {!sensorData.rfidCardPresent && (
+                <text x="55" y="124" fontSize="5.5" fill="#93c5fd" textAnchor="middle" fontWeight="bold">3.3V SPI READER</text>
+              )}
+
+              {/* Bottom 8-Pin Header (Pins: SDA, SCK, MOSI, MISO, IRQ, GND, RST, 3.3V) */}
+              <rect x="10" y="132" width="90" height="8" rx="1" fill="#09090b" stroke="#27272a" strokeWidth="0.5"/>
+              {/* Metal pin leads extending down to y=162 */}
+              {[16, 27, 38, 49, 60, 71, 82, 93].map((px, i) => (
+                <g key={i}>
+                  <rect x={px - 1.5} y="136" width="3" height="26" rx="0.5" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.4"/>
+                  <circle cx={px} cy="138" r="1.5" fill="#cbd5e1"/>
+                </g>
+              ))}
+              {/* Pin Labels */}
+              <text x="16" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SDA</text>
+              <text x="27" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SCK</text>
+              <text x="38" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MOSI</text>
+              <text x="49" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MISO</text>
+              <text x="60" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">IRQ</text>
+              <text x="71" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">GND</text>
+              <text x="82" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">RST</text>
+              <text x="93" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">3V3</text>
+            </g>
+          )}
+
           {/* ==================== INTERACTIVE PINS TERMINAL CIRCLES (SCALED UP FOR HIT-TEST ACCURACY) ==================== */}
           {pins.map(pin => {
             const isStarting = activePinStart?.id === pin.id;
@@ -2850,14 +3028,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
           const isUltrasonicPopup = activePopup === 'ultrasonic' || activePopup === 'hcsr' || activePopup === 'hcsr04';
           const isDhtPopup = activePopup === 'dht11' || activePopup === 'dht';
           const isPotPopup = activePopup === 'pot';
+          const isRfidPopup = activePopup === 'rfid' || activePopup === 'mfrc522' || activePopup === 'rc522';
           
-          if (!isUltrasonicPopup && !isDhtPopup && !isPotPopup) return null;
+          if (!isUltrasonicPopup && !isDhtPopup && !isPotPopup && !isRfidPopup) return null;
           
           return (
             <div className="absolute top-2 left-2 z-40 bg-slate-900/95 border border-slate-750 p-3 rounded-xl shadow-2xl w-44 text-white select-none animate-in fade-in zoom-in-95 duration-100">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider">
-                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : '🎛️ Potentiometer'}
+                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ RC522 RFID' : '🎛️ Potentiometer'}
                 </span>
                 <button 
                   onClick={() => setActivePopup(null)}
@@ -2945,6 +3124,47 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   />
                   <div className="text-[7px] text-slate-500 text-center font-mono">
                     Percentage: {potValue}%
+                  </div>
+                </div>
+              )}
+
+              {isRfidPopup && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
+                    <span>Status Kartu:</span>
+                    <span className={`font-mono font-bold ${sensorData.rfidCardPresent ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {sensorData.rfidCardPresent ? 'TERDETEKSI' : 'TIDAK ADA'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
+                    <span>Card UID:</span>
+                    <span className="font-mono text-cyan-400 font-bold">{sensorData.rfidUid || '53 7A 92 1F'}</span>
+                  </div>
+                  <div className="flex gap-1.5 pt-1">
+                    <button
+                      onClick={() => {
+                        if (onSensorDataChange) {
+                          onSensorDataChange({ rfidCardPresent: !sensorData.rfidCardPresent, rfidUid: sensorData.rfidUid || '53 7A 92 1F' });
+                        }
+                      }}
+                      className={`flex-1 py-1.5 text-[9px] font-bold rounded-lg transition shadow cursor-pointer ${sensorData.rfidCardPresent ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'}`}
+                    >
+                      {sensorData.rfidCardPresent ? '✕ Lepas Kartu' : '🏷️ Tempel Kartu'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const uids = ['53 7A 92 1F', 'A4 1B 89 2C', '80 9E 32 4F'];
+                        const currentIdx = uids.indexOf(sensorData.rfidUid || '53 7A 92 1F');
+                        const nextUid = uids[(currentIdx + 1) % uids.length];
+                        if (onSensorDataChange) {
+                          onSensorDataChange({ rfidUid: nextUid });
+                        }
+                      }}
+                      className="px-2 py-1.5 text-[9px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 cursor-pointer"
+                      title="Ganti Kartu / UID"
+                    >
+                      Ganti UID
+                    </button>
                   </div>
                 </div>
               )}
@@ -3083,6 +3303,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <option value="button" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔘 Tactile Push Button</option>
               <option value="lcd" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>📺 16x2 OLED LCD Screen</option>
               <option value="dht11" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🌡️ DHT11 Temp/Humid</option>
+              <option value="rfid" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🏷️ RC522 RFID Reader</option>
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>

@@ -1702,11 +1702,13 @@ const LIBRARY_SIGNATURES: Array<{
 ];
 
 // Register Blockly block definitions for a given library signature on demand.
-// Safe to call multiple times — duplicate types are skipped.
+// Safe to call multiple times — duplicate types are skipped or updated.
 function registerLibraryBlocks(sig: typeof LIBRARY_SIGNATURES[0]) {
   const newDefs: any[] = [];
   sig.blocks.forEach(bd => {
-    if (Blockly.Blocks[bd.type]) return; // already registered
+    // If already registered with fixed universal output, skip
+    if (Blockly.Blocks[bd.type] && (Blockly.Blocks[bd.type] as any)._robolabRegistered) return;
+    delete Blockly.Blocks[bd.type];
     const def: any = {
       type: bd.type,
       message0: bd.message,
@@ -1729,14 +1731,82 @@ function registerLibraryBlocks(sig: typeof LIBRARY_SIGNATURES[0]) {
       def.previousStatement = null;
       def.nextStatement = null;
     } else if (bd.isValue) {
-      def.output = 'Number';
+      // output: null allows connection to ANY input type (Boolean, Number, String, etc.)
+      def.output = null;
     }
     newDefs.push(def);
   });
   if (newDefs.length > 0) {
-    try { Blockly.defineBlocksWithJsonArray(newDefs); } catch (_) {}
+    try { 
+      Blockly.defineBlocksWithJsonArray(newDefs); 
+      sig.blocks.forEach(bd => {
+        if (Blockly.Blocks[bd.type]) {
+          (Blockly.Blocks[bd.type] as any)._robolabRegistered = true;
+        }
+      });
+    } catch (_) {}
   }
 }
+
+// Explicit definition for MFRC522v2 core blocks ensuring perfect shapes and universal connections
+Blockly.Blocks['mfrc522_begin'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522v2 Mulai SS/SDA Pin")
+      .appendField(new Blockly.FieldTextInput("10"), "SS_PIN");
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour("#06b6d4");
+    this.setTooltip("Inisialisasi sensor RFID MFRC522v2 via SPI (default SS Pin 10)");
+    (this as any)._robolabRegistered = true;
+  }
+};
+
+Blockly.Blocks['mfrc522_is_card'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522 Kartu Terdeteksi? (PICC_IsNewCardPresent)");
+    this.setOutput(true, null); // Universal: matches Boolean and Number
+    this.setColour("#06b6d4");
+    this.setTooltip("Mengembalikan true jika terdeteksi kartu atau tag RFID baru");
+    (this as any)._robolabRegistered = true;
+  }
+};
+
+Blockly.Blocks['mfrc522_read_serial'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522 Baca Kartu Serial (PICC_ReadCardSerial)");
+    this.setOutput(true, null); // Universal: matches Boolean and Number
+    this.setColour("#06b6d4");
+    this.setTooltip("Membaca nomor seri UID kartu yang terdeteksi");
+    (this as any)._robolabRegistered = true;
+  }
+};
+
+Blockly.Blocks['mfrc522_print_uid'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522 Tampilkan UID ke Serial (PrintUID)");
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour("#06b6d4");
+    this.setTooltip("Mencetak UID kartu dalam format HEX ke Serial Monitor");
+    (this as any)._robolabRegistered = true;
+  }
+};
+
+Blockly.Blocks['mfrc522_halt'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522 Hentikan Kartu (PICC_HaltA & StopCrypto1)");
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour("#06b6d4");
+    this.setTooltip("Hentikan komunikasi dengan kartu dan matikan enkripsi Crypto1");
+    (this as any)._robolabRegistered = true;
+  }
+};
 
 // Pre-register all built-in signature blocks at load time & disable native Blockly 8px left border bar
 try {
@@ -2059,6 +2129,11 @@ export const registerCustomLibBlocks = (prefix: string, libName: string) => {
 };
 
 export const ensureCustomBlocks = (xmlText?: string | null) => {
+  // Ensure library signatures are registered
+  try {
+    LIBRARY_SIGNATURES.forEach(sig => registerLibraryBlocks(sig));
+  } catch (_) {}
+
   // Register universal blocks
   if (!Blockly.Blocks['custom_library_init']) {
     Blockly.Blocks['custom_library_init'] = {
@@ -4110,12 +4185,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
       const ws = workspaceRef.current;
       const isUsedInWorkspace = !!(ws && ws.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
+      const isUsedInXml = !!(workspaceXml && sig.blocks.some(bd => workspaceXml.includes(bd.type)));
       const isInstalled = (libs || []).some((l: any) => {
         const name = ((typeof l === 'string' ? l : l?.name) || '').toLowerCase();
         return sig.patterns.some(p => name === p || name.includes(p));
       });
+      const isMfrc522 = sig.categoryName.toLowerCase().includes('mfrc522');
 
-      if (!isUsedInWorkspace && !isInstalled) return;
+      if (!isUsedInWorkspace && !isUsedInXml && !isInstalled && !isMfrc522) return;
 
       xml += `<category name="${sig.categoryName}" colour="${sig.colour}" css-row="cat-lib-${idx}">`;
       sig.blocks.forEach(bd => {
