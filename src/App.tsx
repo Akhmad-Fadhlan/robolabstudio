@@ -5741,6 +5741,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const originalLine = line; // keep original for # Servo detection
         let clean = line;
         if (clean.includes('//')) clean = clean.split('//')[0];
+        const trimmedBeforeHash = clean.trim();
+        // Check for #define before stripping #
+        const defineMatch = trimmedBeforeHash.match(/^#define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$/);
+        if (defineMatch) {
+          const varName = defineMatch[1].trim();
+          const expr = defineMatch[2].replace(/;$/, '').trim();
+          queue.push({ type: 'assign', value: { varName, expr } });
+          continue;
+        }
         // For Python comments, only strip if not in a string context (simple heuristic: strip if # is not preceded by even number of quotes)
         // But we need to preserve the line for # Servo detection, so we work with originalLine where needed
         const hashIdx = clean.indexOf('#');
@@ -6393,17 +6402,120 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       return queue;
     };
 
-    const queue = parseLines(lines, 0, lines.length - 1);
-    console.log("ROBOLAB SIMULATOR: Parsed queue:", queue);
-    
-    // UI Debug log to see the parsed queue directly in the terminal tab
-    setTerminalLogs([
-      { text: `[DEBUG] Parsed Queue: ${JSON.stringify(queue)}`, type: 'stdout' }
-    ]);
+    // Split sketch into global, setup, and loop if Arduino sketch
+    const hasArduinoStructure = /void\s+setup\s*\(/.test(code) || /void\s+loop\s*\(/.test(code);
+    let globalLines: string[] = [];
+    let setupLines: string[] = [];
+    let loopLines: string[] = [];
 
-    if (queue.length === 0) {
-      console.warn("ROBOLAB SIMULATOR: Queue is empty!");
-      return;
+    if (hasArduinoStructure) {
+      let currentFunc = ''; // 'setup', 'loop', 'other', or ''
+      let funcBraceCount = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const rawLine = lines[i];
+        let clean = rawLine;
+        if (clean.includes('//')) clean = clean.split('//')[0];
+        const trimmed = clean.trim();
+
+        if (!currentFunc) {
+          const setupMatch = trimmed.match(/void\s+setup\s*\([^)]*\)\s*\{?/);
+          const loopMatch = trimmed.match(/void\s+loop\s*\([^)]*\)\s*\{?/);
+          const otherFuncMatch = trimmed.match(/^(?:void|int|bool|String|float|double|uint8_t|uint16_t|uint32_t|byte)\s+([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{?/);
+
+          if (setupMatch) {
+            currentFunc = 'setup';
+            funcBraceCount = 0;
+            const openIdx = trimmed.indexOf('{');
+            if (openIdx >= 0) {
+              funcBraceCount = 1;
+              for (let c = openIdx + 1; c < trimmed.length; c++) {
+                if (trimmed[c] === '{') funcBraceCount++;
+                else if (trimmed[c] === '}') funcBraceCount--;
+              }
+              if (funcBraceCount <= 0) currentFunc = '';
+            }
+          } else if (loopMatch) {
+            currentFunc = 'loop';
+            funcBraceCount = 0;
+            const openIdx = trimmed.indexOf('{');
+            if (openIdx >= 0) {
+              funcBraceCount = 1;
+              for (let c = openIdx + 1; c < trimmed.length; c++) {
+                if (trimmed[c] === '{') funcBraceCount++;
+                else if (trimmed[c] === '}') funcBraceCount--;
+              }
+              if (funcBraceCount <= 0) currentFunc = '';
+            }
+          } else if (otherFuncMatch) {
+            currentFunc = 'other';
+            funcBraceCount = 0;
+            const openIdx = trimmed.indexOf('{');
+            if (openIdx >= 0) {
+              funcBraceCount = 1;
+              for (let c = openIdx + 1; c < trimmed.length; c++) {
+                if (trimmed[c] === '{') funcBraceCount++;
+                else if (trimmed[c] === '}') funcBraceCount--;
+              }
+              if (funcBraceCount <= 0) currentFunc = '';
+            }
+          } else {
+            globalLines.push(rawLine);
+          }
+        } else {
+          if (funcBraceCount === 0) {
+            const openIdx = trimmed.indexOf('{');
+            if (openIdx >= 0) {
+              funcBraceCount = 1;
+              for (let c = openIdx + 1; c < trimmed.length; c++) {
+                if (trimmed[c] === '{') funcBraceCount++;
+                else if (trimmed[c] === '}') funcBraceCount--;
+              }
+              if (funcBraceCount <= 0) currentFunc = '';
+            }
+          } else {
+            let ended = false;
+            for (let c = 0; c < trimmed.length; c++) {
+              if (trimmed[c] === '{') funcBraceCount++;
+              else if (trimmed[c] === '}') {
+                funcBraceCount--;
+                if (funcBraceCount <= 0) {
+                  ended = true;
+                  break;
+                }
+              }
+            }
+            if (ended) {
+              currentFunc = '';
+              funcBraceCount = 0;
+            } else {
+              if (currentFunc === 'setup') {
+                setupLines.push(rawLine);
+              } else if (currentFunc === 'loop') {
+                loopLines.push(rawLine);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const globalQueue = hasArduinoStructure ? parseLines(globalLines, 0, globalLines.length - 1) : [];
+    const setupQueue = hasArduinoStructure ? parseLines(setupLines, 0, setupLines.length - 1) : [];
+    const loopQueue = hasArduinoStructure ? parseLines(loopLines, 0, loopLines.length - 1) : [];
+    const queue = hasArduinoStructure ? [] : parseLines(lines, 0, lines.length - 1);
+    console.log("ROBOLAB SIMULATOR: Parsed queues:", { hasArduinoStructure, globalQueue, setupQueue, loopQueue, queue });
+
+    if (hasArduinoStructure) {
+      if (globalQueue.length === 0 && setupQueue.length === 0 && loopQueue.length === 0) {
+        console.warn("ROBOLAB SIMULATOR: Arduino queues are empty!");
+        return;
+      }
+    } else {
+      if (queue.length === 0) {
+        console.warn("ROBOLAB SIMULATOR: Queue is empty!");
+        return;
+      }
     }
 
     // Reset pinStates so no pins start HIGH prematurely
@@ -6504,6 +6616,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
         const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
         replaced = replaced.replace(match[0], isPresent ? `"${uid}"` : '""');
+      }
+
+      // 9. MFRC522 uid.size
+      while (replaced.includes('mfrc522.uid.size')) {
+        const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
+        replaced = replaced.replace(/mfrc522\.uid\.size/g, isPresent ? '4' : '0');
       }
 
       return replaced;
@@ -6890,19 +7008,45 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     };
 
-    const runIteration = () => {
-      if (!isRunningRef.current) return;
-      executeBlock(queue, 0, () => {
-        if (code.includes('while True') || code.includes('void loop') || code.includes('while(true)')) {
-          const t = setTimeout(runIteration, 20);
-          simulationTimeouts.current.push(t);
-        } else {
-          setRobotCommand('STOP');
-        }
-      });
-    };
+    if (hasArduinoStructure) {
+      const runLoopIteration = () => {
+        if (!isRunningRef.current) return;
+        executeBlock(loopQueue, 0, () => {
+          if (!isRunningRef.current) return;
+          if (loopQueue.length > 0) {
+            const t = setTimeout(runLoopIteration, 20);
+            simulationTimeouts.current.push(t);
+          } else {
+            setRobotCommand('STOP');
+          }
+        });
+      };
 
-    runIteration();
+      // 1. Run global statements (defines, global variables)
+      executeBlock(globalQueue, 0, () => {
+        if (!isRunningRef.current) return;
+        // 2. Run setup() ONCE
+        executeBlock(setupQueue, 0, () => {
+          if (!isRunningRef.current) return;
+          // 3. Run loop() repeatedly
+          runLoopIteration();
+        });
+      });
+    } else {
+      const runIteration = () => {
+        if (!isRunningRef.current) return;
+        executeBlock(queue, 0, () => {
+          if (code.includes('while True') || code.includes('void loop') || code.includes('while(true)')) {
+            const t = setTimeout(runIteration, 20);
+            simulationTimeouts.current.push(t);
+          } else {
+            setRobotCommand('STOP');
+          }
+        });
+      };
+
+      runIteration();
+    }
   };
 
   const handleBlynkVirtualWrite = (vpin: string, val: number) => {

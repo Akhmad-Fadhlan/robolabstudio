@@ -3249,8 +3249,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           if (!ssPin || (ssPin === '10' && isEsp)) {
             ssPin = isEsp ? '5' : '10';
           }
+          const rstPin = isEsp ? '22' : '9';
+          generatedCode += `#define RST_PIN ${rstPin} // Pin Reset MFRC522 (ESP32: GPIO 22, Uno: Pin 9)\n\n`;
           generatedCode += `MFRC522DriverPinSimple ss_pin(${ssPin});\nMFRC522DriverSPI driver{ss_pin};\nMFRC522 mfrc522{driver};\n\n`;
-          if (!generatedCode.includes('String getMFRC522UID()')) {
+          const hasGetUidBlock = workspace.getAllBlocks(false).some((b: any) =>
+            isBlockActive(b) && (b.type === 'mfrc522_get_uid' || (b.type || '').toLowerCase().includes('get_uid'))
+          );
+          if (hasGetUidBlock && !generatedCode.includes('String getMFRC522UID()')) {
             generatedCode += `String getMFRC522UID() {\n` +
               `  if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {\n` +
               `    String uidStr = "";\n` +
@@ -5541,8 +5546,21 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       } else if (currentBlock.type === 'mfrc522_begin') {
         if (lang === 'arduino') {
-          code += `${indent}SPI.begin();\n`;
+          const currentBoardStr = (boardRef.current || board || '').toLowerCase();
+          const isEsp = currentBoardStr.includes('esp32');
+          code += `${indent}pinMode(RST_PIN, OUTPUT);\n`;
+          code += `${indent}digitalWrite(RST_PIN, LOW);\n`;
+          code += `${indent}delay(10);\n`;
+          code += `${indent}digitalWrite(RST_PIN, HIGH);\n`;
+          code += `${indent}delay(50);\n`;
+          if (isEsp) {
+            code += `${indent}SPI.begin(18, 19, 23, 5);\n`;
+          } else {
+            code += `${indent}SPI.begin();\n`;
+          }
           code += `${indent}mfrc522.PCD_Init();\n`;
+          code += `${indent}mfrc522.PCD_AntennaOn();\n`;
+          code += `${indent}mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);\n`;
           code += `${indent}MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);\n`;
         } else {
           const ss = currentBlock.getFieldValue('SS_PIN') || '10';

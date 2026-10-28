@@ -889,7 +889,9 @@ print("I2C Devices:", [hex(d) for d in devices])`
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522Debug.h>
 
-// Inisialisasi pin SS / SDA (Pin 10 pada Arduino Uno, Pin 5 pada ESP32)
+#define RST_PIN 9 // Pin Reset MFRC522 (Arduino Uno: Pin 9)
+
+// Inisialisasi pin SS / SDA (Pin 10 pada Arduino Uno)
 MFRC522DriverPinSimple ss_pin(10);
 MFRC522DriverSPI driver{ss_pin};
 MFRC522 mfrc522{driver};
@@ -897,8 +899,15 @@ MFRC522 mfrc522{driver};
 void setup() {
   Serial.begin(115200);
   delay(100);
+  pinMode(RST_PIN, OUTPUT);
+  digitalWrite(RST_PIN, LOW);
+  delay(10);
+  digitalWrite(RST_PIN, HIGH);
+  delay(50);
   SPI.begin();
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
+  mfrc522.PCD_AntennaOn();
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
   MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
   Serial.println(F("MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
 }
@@ -1024,6 +1033,8 @@ if __name__ == '__main__':
 #include <MFRC522DriverPinSimple.h>
 #include <MFRC522Debug.h>
 
+#define RST_PIN 22 // Pin Reset MFRC522 (ESP32: GPIO 22)
+
 // Inisialisasi pin SS / SDA (Pin GPIO 5 pada ESP32 DevKit)
 MFRC522DriverPinSimple ss_pin(5);
 MFRC522DriverSPI driver{ss_pin};
@@ -1032,8 +1043,15 @@ MFRC522 mfrc522{driver};
 void setup() {
   Serial.begin(115200);
   delay(100);
-  SPI.begin();
+  pinMode(RST_PIN, OUTPUT);
+  digitalWrite(RST_PIN, LOW);
+  delay(10);
+  digitalWrite(RST_PIN, HIGH);
+  delay(50);
+  SPI.begin(18, 19, 23, 5); // VSPI pins: SCK=18, MISO=19, MOSI=23, SS=5
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
+  mfrc522.PCD_AntennaOn();
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
   MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
   Serial.println(F("ESP32 MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
 }
