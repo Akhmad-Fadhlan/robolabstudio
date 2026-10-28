@@ -3224,6 +3224,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       });
       if (hasMFRC522) {
         if (!generatedCode.includes('MFRC522 mfrc522')) {
+          if (!generatedCode.includes('#include <SPI.h>')) {
+            generatedCode += '#include <SPI.h>\n';
+          }
           if (!generatedCode.includes('#include <MFRC522v2.h>')) {
             generatedCode += '#include <MFRC522v2.h>\n';
           }
@@ -3248,7 +3251,31 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
           generatedCode += `MFRC522DriverPinSimple ss_pin(${ssPin});\nMFRC522DriverSPI driver{ss_pin};\nMFRC522 mfrc522{driver};\n\n`;
           if (!generatedCode.includes('String getMFRC522UID()')) {
-            generatedCode += `String getMFRC522UID() {\n  String uidStr = "";\n  for (byte i = 0; i < mfrc522.uid.size; i++) {\n    if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";\n    uidStr += String(mfrc522.uid.uidByte[i], HEX);\n    if (i < mfrc522.uid.size - 1) uidStr += " ";\n  }\n  uidStr.toUpperCase();\n  return uidStr;\n}\n\n`;
+            generatedCode += `String getMFRC522UID() {\n` +
+              `  if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {\n` +
+              `    String uidStr = "";\n` +
+              `    for (byte i = 0; i < mfrc522.uid.size; i++) {\n` +
+              `      if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";\n` +
+              `      uidStr += String(mfrc522.uid.uidByte[i], HEX);\n` +
+              `      if (i < mfrc522.uid.size - 1) uidStr += " ";\n` +
+              `    }\n` +
+              `    uidStr.toUpperCase();\n` +
+              `    mfrc522.PICC_HaltA();\n` +
+              `    mfrc522.PCD_StopCrypto1();\n` +
+              `    return uidStr;\n` +
+              `  }\n` +
+              `  if (mfrc522.uid.size > 0) {\n` +
+              `    String uidStr = "";\n` +
+              `    for (byte i = 0; i < mfrc522.uid.size; i++) {\n` +
+              `      if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";\n` +
+              `      uidStr += String(mfrc522.uid.uidByte[i], HEX);\n` +
+              `      if (i < mfrc522.uid.size - 1) uidStr += " ";\n` +
+              `    }\n` +
+              `    uidStr.toUpperCase();\n` +
+              `    return uidStr;\n` +
+              `  }\n` +
+              `  return "";\n` +
+              `}\n\n`;
           }
         }
       } else if (rfidBlock) {
@@ -5513,6 +5540,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       } else if (currentBlock.type === 'mfrc522_begin') {
         if (lang === 'arduino') {
+          code += `${indent}SPI.begin();\n`;
           code += `${indent}mfrc522.PCD_Init();\n`;
           code += `${indent}MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);\n`;
         } else {

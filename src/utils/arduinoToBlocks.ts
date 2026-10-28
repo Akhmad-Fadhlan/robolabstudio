@@ -607,7 +607,7 @@ function convertCtoPython(
       emitLine('robot.mfrc522_halt()');
       continue;
     }
-    if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial(') || trimmed.includes('mfrc522.PCD_StopCrypto1()')) {
+    if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial(') || trimmed.includes('mfrc522.PCD_StopCrypto1()') || trimmed.includes('SPI.begin()')) {
       continue;
     }
 
