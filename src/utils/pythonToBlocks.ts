@@ -778,9 +778,13 @@ function parseStatement(line: string, variables: Record<string, string>): string
   }
   match = line.match(/^(?:robot\.)?blynk_begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)$/);
   if (match) {
+    const rawAuth = match[1].trim();
+    const authXml = (rawAuth === 'BLYNK_AUTH_TOKEN' || rawAuth === '"BLYNK_AUTH_TOKEN"')
+      ? `<shadow type="text"><field name="TEXT">BLYNK_AUTH_TOKEN</field></shadow>`
+      : parseExpression(rawAuth, variables);
     return `
       <block type="blynk_begin">
-        <value name="AUTH">${parseExpression(match[1], variables)}</value>
+        <value name="AUTH">${authXml}</value>
         <value name="SSID">${parseExpression(match[2], variables)}</value>
         <value name="PASS">${parseExpression(match[3], variables)}</value>
       </block>
@@ -1325,7 +1329,7 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   if (expr === 'dht.readHumidity()' || expr === 'robot.dht_read_humi()') {
     return `<block type="dht_read_humi"></block>`;
   }
-  if (expr === 'param.asInt()' || expr === 'param_val') {
+  if (expr === 'param.asInt()' || expr === 'param_val' || expr === 'pinValue' || expr === 'robot.blynk_param_as_int()' || expr === 'blynk_param_as_int()') {
     return `<block type="blynk_param_as_int"></block>`;
   }
   if (expr === '_ws_has_message' || expr === 'robot.websocket_has_message()') {

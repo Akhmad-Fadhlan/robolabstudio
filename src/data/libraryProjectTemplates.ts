@@ -1149,32 +1149,25 @@ if __name__ == '__main__':
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
 
-// Definisi Pin LED bawaan / output (GPIO 2 pada ESP32 DevKit)
-const int LED_PIN = 2;
-
-// Handler callback saat widget di aplikasi Blynk (Virtual Pin V0) ditekan
+// Blynk Callback Functions
 BLYNK_WRITE(V0) {
-  int pinValue = param.asInt();
-  if (pinValue == 1) {
-    digitalWrite(LED_PIN, HIGH);
-    Serial.println(F("Blynk: LED MENYALA (ON)"));
+  int param_val = param.asInt();
+  if (param_val == 1) {
+    digitalWrite(2, HIGH);
     Blynk.virtualWrite(V1, "Status: ON");
   } else {
-    digitalWrite(LED_PIN, LOW);
-    Serial.println(F("Blynk: LED PADAM (OFF)"));
+    digitalWrite(2, LOW);
     Blynk.virtualWrite(V1, "Status: OFF");
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  // Configure I/O pins
+  pinMode(2, OUTPUT);
 
-  // Hubungkan ke WiFi dan Blynk Cloud
-  // Ganti "RoboLab-WiFi" dan "12345678" sesuai access point WiFi Anda
+  digitalWrite(2, LOW);
   Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678");
-  Serial.println(F("ESP32 Terhubung ke Blynk Cloud!"));
 }
 
 void loop() {
@@ -1196,6 +1189,7 @@ void loop() {
     <field name="VPIN">V0</field>
     <statement name="STACK">
       <block type="controls_if">
+        <mutation else="1"/>
         <value name="IF0">
           <block type="robolab_logic_compare">
             <field name="OP">EQ</field>
@@ -1221,39 +1215,24 @@ void loop() {
             </next>
           </block>
         </statement>
-        <next>
-          <block type="controls_if">
-            <value name="IF0">
-              <block type="robolab_logic_compare">
-                <field name="OP">EQ</field>
-                <value name="A">
-                  <block type="blynk_param_as_int"></block>
-                </value>
-                <value name="B">
-                  <shadow type="math_number"><field name="NUM">0</field></shadow>
+        <statement name="ELSE">
+          <block type="pin_digital_write">
+            <field name="PIN">2</field>
+            <field name="STATE">LOW</field>
+            <next>
+              <block type="blynk_virtual_write">
+                <field name="VPIN">V1</field>
+                <value name="VALUE">
+                  <block type="text"><field name="TEXT">Status: OFF</field></block>
                 </value>
               </block>
-            </value>
-            <statement name="DO0">
-              <block type="pin_digital_write">
-                <field name="PIN">2</field>
-                <field name="STATE">LOW</field>
-                <next>
-                  <block type="blynk_virtual_write">
-                    <field name="VPIN">V1</field>
-                    <value name="VALUE">
-                      <block type="text"><field name="TEXT">Status: OFF</field></block>
-                    </value>
-                  </block>
-                </next>
-              </block>
-            </statement>
+            </next>
           </block>
-        </next>
+        </statement>
       </block>
     </statement>
   </block>
-  <block type="arduino_setup" x="40" y="480">
+  <block type="arduino_setup" x="40" y="440">
     <statement name="STACK">
       <block type="pin_digital_write">
         <field name="PIN">2</field>
@@ -1261,7 +1240,7 @@ void loop() {
         <next>
           <block type="blynk_begin">
             <value name="AUTH">
-              <shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow>
+              <shadow type="text"><field name="TEXT">BLYNK_AUTH_TOKEN</field></shadow>
             </value>
             <value name="SSID">
               <shadow type="text"><field name="TEXT">RoboLab-WiFi</field></shadow>
@@ -1274,7 +1253,7 @@ void loop() {
       </block>
     </statement>
   </block>
-  <block type="arduino_loop" x="40" y="660">
+  <block type="arduino_loop" x="40" y="600">
     <statement name="STACK">
       <block type="blynk_run"></block>
     </statement>

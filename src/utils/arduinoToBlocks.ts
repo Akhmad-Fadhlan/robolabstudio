@@ -369,6 +369,9 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/\bmfrc522\.PICC_IsNewCardPresent\s*\(\s*\)/g, 'robot.mfrc522_is_card()');
   res = res.replace(/\bmfrc522\.PICC_ReadCardSerial\s*\(\s*\)/g, 'robot.mfrc522_read_serial()');
   res = res.replace(/\bgetMFRC522UID\s*\(\s*\)/g, 'robot.mfrc522_get_uid()');
+  res = res.replace(/\bparam\.asInt\s*\(\s*\)/g, 'robot.blynk_param_as_int()');
+  res = res.replace(/\bparam_val\b/g, 'robot.blynk_param_as_int()');
+  res = res.replace(/\bpinValue\b/g, 'robot.blynk_param_as_int()');
   res = res.replace(/\bF\(\s*(["'].*?["'])\s*\)/g, '$1');
 
   // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
@@ -694,9 +697,13 @@ function convertCtoPython(
       emitLine(`robot.bluetooth_write(${convertCppExpr(m[1], pinConstants)})`);
       continue;
     }
+    if (trimmed.includes('param.asInt()') && (trimmed.startsWith('int param_val') || trimmed.startsWith('int pinValue'))) {
+      continue;
+    }
     m = trimmed.match(/^Blynk\.begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)$/);
     if (m) {
-      const auth = pinConstants[m[1].trim()] || m[1].trim();
+      const rawAuth = m[1].trim();
+      const auth = (rawAuth === 'BLYNK_AUTH_TOKEN' && ctx.blynkConfig.auth) ? ctx.blynkConfig.auth : (pinConstants[rawAuth] || rawAuth);
       const ssid = pinConstants[m[2].trim()] || m[2].trim();
       const pass = pinConstants[m[3].trim()] || m[3].trim();
       emitLine(`robot.blynk_begin(${auth}, ${ssid}, ${pass})`);

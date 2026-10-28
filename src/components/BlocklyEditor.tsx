@@ -5167,7 +5167,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `robot.hall_read()`;
     }
     if (block.type === 'blynk_param_as_int') {
-      if (lang === 'arduino') return `param.asInt()`;
       return `param_val`;
     }
     
@@ -5210,6 +5209,30 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const generateBlockCode = (block: Blockly.Block, indent: string, lang: 'arduino' | 'python'): string => {
     let code = '';
     let currentBlock: Blockly.Block | null = block;
+
+    const unwrapOuterParens = (str: string): string => {
+      let s = str.trim();
+      while (s.startsWith('(') && s.endsWith(')')) {
+        let depth = 0;
+        let canStrip = true;
+        for (let i = 0; i < s.length - 1; i++) {
+          if (s[i] === '(') depth++;
+          else if (s[i] === ')') {
+            depth--;
+            if (depth === 0) {
+              canStrip = false;
+              break;
+            }
+          }
+        }
+        if (canStrip) {
+          s = s.slice(1, -1).trim();
+        } else {
+          break;
+        }
+      }
+      return s;
+    };
 
     while (currentBlock) {
       if (currentBlock.disabled || (typeof (currentBlock as any).isEnabled === 'function' && !(currentBlock as any).isEnabled())) {
@@ -5333,7 +5356,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const condVal0 = condBlock0 ? getBlockValue(condBlock0, lang) : (lang === 'arduino' ? 'true' : 'True');
         
         if (lang === 'arduino') {
-          code += `${indent}if (${condVal0}) {\n`;
+          code += `${indent}if (${unwrapOuterParens(condVal0)}) {\n`;
           const doBlock0 = currentBlock.getInputTargetBlock('DO0');
           if (doBlock0) {
             code += generateBlockCode(doBlock0, indent + '  ', 'arduino');
@@ -5343,7 +5366,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           while (currentBlock.getInput(`IF${i}`)) {
             const condBlockI = currentBlock.getInputTargetBlock(`IF${i}`);
             const condValI = condBlockI ? getBlockValue(condBlockI, lang) : 'true';
-            code += `${indent}} else if (${condValI}) {\n`;
+            code += `${indent}} else if (${unwrapOuterParens(condValI)}) {\n`;
             const doBlockI = currentBlock.getInputTargetBlock(`DO${i}`);
             if (doBlockI) {
               code += generateBlockCode(doBlockI, indent + '  ', 'arduino');
@@ -5358,7 +5381,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
           code += `${indent}}\n`;
         } else {
-          code += `${indent}if ${condVal0}:\n`;
+          code += `${indent}if ${unwrapOuterParens(condVal0)}:\n`;
           const doBlock0 = currentBlock.getInputTargetBlock('DO0');
           if (doBlock0) {
             code += generateBlockCode(doBlock0, indent + '    ', 'python');
@@ -5370,7 +5393,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           while (currentBlock.getInput(`IF${i}`)) {
             const condBlockI = currentBlock.getInputTargetBlock(`IF${i}`);
             const condValI = condBlockI ? getBlockValue(condBlockI, lang) : 'True';
-            code += `${indent}elif ${condValI}:\n`;
+            code += `${indent}elif ${unwrapOuterParens(condValI)}:\n`;
             const doBlockI = currentBlock.getInputTargetBlock(`DO${i}`);
             if (doBlockI) {
               code += generateBlockCode(doBlockI, indent + '    ', 'python');
@@ -5443,9 +5466,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const authBlock = currentBlock.getInputTargetBlock('AUTH');
         const ssidBlock = currentBlock.getInputTargetBlock('SSID');
         const passBlock = currentBlock.getInputTargetBlock('PASS');
+        const hasBlynkConfig = workspace.getBlocksByType('blynk_config').some((b: any) => isBlockActive(b));
         let auth = authBlock ? getBlockValue(authBlock, lang) : 'BLYNK_AUTH_TOKEN';
-        if (auth === '""' || auth === '"YourAuthToken"') {
-          auth = 'BLYNK_AUTH_TOKEN';
+        if (hasBlynkConfig || auth === '""' || auth === '"YourAuthToken"' || auth === '"BLYNK_AUTH_TOKEN"' || auth === 'BLYNK_AUTH_TOKEN') {
+          if (lang === 'arduino') {
+            auth = 'BLYNK_AUTH_TOKEN';
+          }
         }
         const ssid = ssidBlock ? getBlockValue(ssidBlock, lang) : '"MyWiFi"';
         const pass = passBlock ? getBlockValue(passBlock, lang) : '"password123"';
