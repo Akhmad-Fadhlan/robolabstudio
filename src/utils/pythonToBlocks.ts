@@ -1340,6 +1340,9 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   if (expr === 'mfrc522.PICC_ReadCardSerial()' || expr === 'robot.mfrc522_read_serial()') {
     return `<block type="mfrc522_read_serial"></block>`;
   }
+  if (expr === 'getMFRC522UID()' || expr === 'robot.mfrc522_get_uid()' || expr === 'mfrc522_get_uid()') {
+    return `<block type="mfrc522_get_uid"></block>`;
+  }
 
   // 4. Top-level Logical OR / AND
   const logicSplit = splitByTopLevelOp(expr, [' or ', ' || ', ' and ', ' && ']);

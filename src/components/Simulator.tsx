@@ -1468,7 +1468,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const stopDrag = () => {
-    if (draggedElement && !hasMovedDuringDrag.current && isRunning) {
+    if (draggedElement && !hasMovedDuringDrag.current) {
       // Toggle/set active popup for component on click
       setActivePopup(draggedElement);
     }
@@ -3138,7 +3138,17 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   </div>
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                     <span>Card UID:</span>
-                    <span className="font-mono text-cyan-400 font-bold">{sensorData.rfidUid || '53 7A 92 1F'}</span>
+                    <input
+                      type="text"
+                      value={sensorData.rfidUid || '53 7A 92 1F'}
+                      onChange={(e) => {
+                        if (onSensorDataChange) {
+                          onSensorDataChange({ rfidUid: e.target.value.toUpperCase() });
+                        }
+                      }}
+                      className="w-24 px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded font-mono text-[9px] text-cyan-400 font-bold text-center focus:outline-none focus:border-cyan-500"
+                      placeholder="UID HEX"
+                    />
                   </div>
                   <div className="flex gap-1.5 pt-1">
                     <button
@@ -3153,7 +3163,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                     </button>
                     <button
                       onClick={() => {
-                        const uids = ['53 7A 92 1F', 'A4 1B 89 2C', '80 9E 32 4F'];
+                        const uids = ['53 7A 92 1F', 'B4 1C 48 2A', 'A1 F3 0D 8E', '7C 2E 91 3B'];
                         const currentIdx = uids.indexOf(sensorData.rfidUid || '53 7A 92 1F');
                         const nextUid = uids[(currentIdx + 1) % uids.length];
                         if (onSensorDataChange) {
@@ -3163,7 +3173,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                       className="px-2 py-1.5 text-[9px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 cursor-pointer"
                       title="Ganti Kartu / UID"
                     >
-                      Ganti UID
+                      🔄 Ganti
                     </button>
                   </div>
                 </div>

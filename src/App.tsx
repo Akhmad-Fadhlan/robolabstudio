@@ -1378,6 +1378,15 @@ const evalPrintArgs = (argStr: string, vars: { [key: string]: any }, sensorData?
     // Filter out keyword arguments like end="", sep=" " from output
     return !(/^(end|sep|file|flush)\s*=/.test(arg));
   }).map(arg => {
+    let cleanArg = arg.trim();
+    // Strip Arduino F() flash string macro: F("text") -> "text"
+    if (cleanArg.startsWith('F("') && cleanArg.endsWith('")')) {
+      cleanArg = cleanArg.slice(2, -1);
+    } else if (cleanArg.startsWith("F('") && cleanArg.endsWith("')")) {
+      cleanArg = cleanArg.slice(2, -1);
+    }
+    arg = cleanArg;
+
     // Check if starts and ends with quotes
     if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
       return arg.substring(1, arg.length - 1);
@@ -5813,9 +5822,31 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
         // Check C++ / Python If statements
         const pythonIfMatch = trimmed.match(/^if\s+(.+?)\s*:/);
-        const cppIfMatch = trimmed.match(/^if\s*\(\s*(.+?)\s*\)\s*\{?/);
-        if (pythonIfMatch || cppIfMatch) {
-          const condition = pythonIfMatch ? pythonIfMatch[1].trim() : cppIfMatch![1].trim();
+        let isCppIf = false;
+        let cppCondition = '';
+        if (/^(?:if|\}\s*else\s+if|else\s+if)\s*\(/.test(trimmed)) {
+          const openParenIdx = trimmed.indexOf('(');
+          if (openParenIdx !== -1) {
+            let depth = 0;
+            let closeParenIdx = -1;
+            for (let cIdx = openParenIdx; cIdx < trimmed.length; cIdx++) {
+              if (trimmed[cIdx] === '(') depth++;
+              else if (trimmed[cIdx] === ')') {
+                depth--;
+                if (depth === 0) {
+                  closeParenIdx = cIdx;
+                  break;
+                }
+              }
+            }
+            if (closeParenIdx !== -1) {
+              isCppIf = true;
+              cppCondition = trimmed.substring(openParenIdx + 1, closeParenIdx).trim();
+            }
+          }
+        }
+        if (pythonIfMatch || isCppIf) {
+          const condition = pythonIfMatch ? pythonIfMatch[1].trim() : cppCondition;
           
           // Parse if body lines
           const ifBodyLines: string[] = [];
@@ -5954,6 +5985,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
 
         // Regular statement parsing...
+        // 0. Return statement (e.g. return; or return 0;)
+        if (/^return\b/.test(trimmed)) {
+          queue.push({ type: 'return' });
+          continue;
+        }
+
         // 1. Assignments
         const assignMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/) ||
                             trimmed.match(/^(?:const\s+)?(?:int|float|double|char\*|String)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*);$/);
@@ -6460,10 +6497,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
       }
 
+      // 8. MFRC522 / RFID Read Card UID (String value)
+      while (replaced.includes('getMFRC522UID') || replaced.includes('getRFIDUID') || replaced.includes('mfrc522_get_uid') || replaced.includes('rfid_get_uid')) {
+        const match = replaced.match(/(?:getMFRC522UID|getRFIDUID|robot\.mfrc522_get_uid|mfrc522_get_uid|robot\.rfid_get_uid)\(\s*\)/);
+        if (!match) break;
+        const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
+        const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
+        replaced = replaced.replace(match[0], isPresent ? `"${uid}"` : '""');
+      }
+
       return replaced;
     };
 
-    const executeBlock = (blockQueue: any[], blockIndex: number, onComplete: () => void) => {
+    let hasOpenLine = false;
+
+    const executeBlock = (blockQueue: any[], blockIndex: number, onComplete: () => void, onReturn?: () => void) => {
       if (!isRunningRef.current) return;
 
       if (blockIndex >= blockQueue.length) {
@@ -6473,7 +6521,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
       const item = blockQueue[blockIndex];
       console.log("ROBOLAB SIMULATOR: Executing block item:", item);
-      const next = () => executeBlock(blockQueue, blockIndex + 1, onComplete);
+      const next = () => executeBlock(blockQueue, blockIndex + 1, onComplete, onReturn);
+
+      if (item.type === 'return') {
+        if (onReturn) {
+          onReturn();
+        } else {
+          onComplete();
+        }
+        return;
+      }
 
       if (item.type === 'assign') {
         const { varName, expr } = item.value as { varName: string, expr: string };
@@ -6486,9 +6543,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const condVal = evalExpr(resolvedCond, executionVars);
         const condBool = condVal === 'true' || condVal === true || (typeof condVal === 'number' && condVal !== 0);
         if (condBool) {
-          executeBlock(item.value.ifBody, 0, next);
+          executeBlock(item.value.ifBody, 0, next, onReturn || onComplete);
         } else if (item.value.elseBody) {
-          executeBlock(item.value.elseBody, 0, next);
+          executeBlock(item.value.elseBody, 0, next, onReturn || onComplete);
         } else {
           next();
         }
@@ -6497,40 +6554,77 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const resolvedExpr = resolveSensorReads(expr);
         const evaluated = evalPrintArgs(resolvedExpr, executionVars, sensorDataRef.current, (executionVars as any).__wifiSim);
         if (newline === false) {
-          // end="" style — append to last log line instead of new line
-          setTerminalLogs(prev => {
-            if (prev.length === 0) return [{ text: evaluated, type: 'stdout' as const }];
-            const last = prev[prev.length - 1];
-            return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
-          });
-          setInteractiveTerminalLogs(prev => {
-            if (prev.length === 0) return [{ text: evaluated, type: 'output' as const }];
-            const last = prev[prev.length - 1];
-            return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
-          });
+          if (hasOpenLine) {
+            setTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'stdout' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+            setInteractiveTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'output' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+          } else {
+            hasOpenLine = true;
+            setTerminalLogs(prev => [
+              ...prev, 
+              { text: evaluated, type: 'stdout' }
+            ]);
+            setInteractiveTerminalLogs(prev => [
+              ...prev,
+              { text: evaluated, type: 'output' }
+            ]);
+          }
         } else {
-          setTerminalLogs(prev => [
-            ...prev, 
-            { text: evaluated, type: 'stdout' }
-          ]);
-          setInteractiveTerminalLogs(prev => [
-            ...prev,
-            { text: evaluated, type: 'output' }
-          ]);
+          if (hasOpenLine) {
+            setTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'stdout' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+            setInteractiveTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'output' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+            hasOpenLine = false;
+          } else {
+            setTerminalLogs(prev => [
+              ...prev, 
+              { text: evaluated, type: 'stdout' }
+            ]);
+            setInteractiveTerminalLogs(prev => [
+              ...prev,
+              { text: evaluated, type: 'output' }
+            ]);
+          }
         }
         next();
       } else if (item.type === 'mfrc522PrintUid') {
         const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
-        setTerminalLogs(prev => {
-          if (prev.length === 0) return [{ text: uid, type: 'stdout' as const }];
-          const last = prev[prev.length - 1];
-          return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
-        });
-        setInteractiveTerminalLogs(prev => {
-          if (prev.length === 0) return [{ text: uid, type: 'output' as const }];
-          const last = prev[prev.length - 1];
-          return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
-        });
+        if (hasOpenLine) {
+          setTerminalLogs(prev => {
+            if (prev.length === 0) return [{ text: uid, type: 'stdout' as const }];
+            const last = prev[prev.length - 1];
+            return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
+          });
+          setInteractiveTerminalLogs(prev => {
+            if (prev.length === 0) return [{ text: uid, type: 'output' as const }];
+            const last = prev[prev.length - 1];
+            return [...prev.slice(0, -1), { ...last, text: last.text + uid }];
+          });
+        } else {
+          hasOpenLine = true;
+          setTerminalLogs(prev => [
+            ...prev, 
+            { text: uid, type: 'stdout' }
+          ]);
+          setInteractiveTerminalLogs(prev => [
+            ...prev,
+            { text: uid, type: 'output' }
+          ]);
+        }
         next();
       } else if (item.type === 'move') {
         const cmd = item.value as string;

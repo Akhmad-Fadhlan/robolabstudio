@@ -903,24 +903,20 @@ void setup() {
 
 void loop() {
   // Cek apakah ada kartu RFID baru di dekat sensor
-  if (!mfrc522.PICC_IsNewCardPresent()) {
-    return;
+  if (mfrc522.PICC_IsNewCardPresent()) {
+    // Pilih dan baca salah satu kartu
+    if (mfrc522.PICC_ReadCardSerial()) {
+      // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
+      Serial.print(F("Card UID: "));
+      MFRC522Debug::PrintUID(Serial, mfrc522.uid);
+      Serial.println();
+
+      // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
+      mfrc522.PICC_HaltA();
+      mfrc522.PCD_StopCrypto1();
+      delay(1000);
+    }
   }
-
-  // Pilih dan baca salah satu kartu
-  if (!mfrc522.PICC_ReadCardSerial()) {
-    return;
-  }
-
-  // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
-  Serial.print(F("Card UID: "));
-  MFRC522Debug::PrintUID(Serial, mfrc522.uid);
-  Serial.println();
-
-  // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
-  mfrc522.PICC_HaltA();
-  mfrc522.PCD_StopCrypto1();
-  delay(1000);
 }`,
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">
   <block type="arduino_setup" id="setup" x="40" y="40">
@@ -1040,24 +1036,20 @@ void setup() {
 
 void loop() {
   // Cek apakah ada kartu RFID baru di dekat sensor
-  if (!mfrc522.PICC_IsNewCardPresent()) {
-    return;
+  if (mfrc522.PICC_IsNewCardPresent()) {
+    // Pilih dan baca salah satu kartu
+    if (mfrc522.PICC_ReadCardSerial()) {
+      // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
+      Serial.print(F("Card UID: "));
+      MFRC522Debug::PrintUID(Serial, mfrc522.uid);
+      Serial.println();
+
+      // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
+      mfrc522.PICC_HaltA();
+      mfrc522.PCD_StopCrypto1();
+      delay(1000);
+    }
   }
-
-  // Pilih dan baca salah satu kartu
-  if (!mfrc522.PICC_ReadCardSerial()) {
-    return;
-  }
-
-  // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
-  Serial.print(F("Card UID: "));
-  MFRC522Debug::PrintUID(Serial, mfrc522.uid);
-  Serial.println();
-
-  // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
-  mfrc522.PICC_HaltA();
-  mfrc522.PCD_StopCrypto1();
-  delay(1000);
 }`,
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">
   <block type="arduino_setup" id="setup" x="40" y="40">

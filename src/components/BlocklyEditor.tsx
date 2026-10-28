@@ -1674,6 +1674,7 @@ const LIBRARY_SIGNATURES: Array<{
       { type: 'mfrc522_begin', message: 'MFRC522v2 Mulai SS/SDA Pin %1', inputs: [{ name: 'SS_PIN', type: 'field_input', text: '10' }], isStatement: true },
       { type: 'mfrc522_is_card', message: 'MFRC522 Kartu Terdeteksi? (PICC_IsNewCardPresent)', isValue: true },
       { type: 'mfrc522_read_serial', message: 'MFRC522 Baca Kartu Serial (PICC_ReadCardSerial)', isValue: true },
+      { type: 'mfrc522_get_uid', message: 'MFRC522 Baca Data UID Kartu (String)', isValue: true },
       { type: 'mfrc522_print_uid', message: 'MFRC522 Tampilkan UID ke Serial (PrintUID)', isStatement: true },
       { type: 'mfrc522_halt', message: 'MFRC522 Hentikan Kartu (PICC_HaltA & StopCrypto1)', isStatement: true },
     ],
@@ -1784,6 +1785,17 @@ Blockly.Blocks['mfrc522_read_serial'] = {
   }
 };
 
+Blockly.Blocks['mfrc522_get_uid'] = {
+  init: function (this: any) {
+    this.appendDummyInput()
+      .appendField("MFRC522 Baca Data UID Kartu (String)");
+    this.setOutput(true, null); // Universal: matches String and variables
+    this.setColour("#06b6d4");
+    this.setTooltip("Mengambil nomor UID kartu RFID dalam format teks String heksadesimal (contoh: 53 7A 92 1F)");
+    (this as any)._robolabRegistered = true;
+  }
+};
+
 Blockly.Blocks['mfrc522_print_uid'] = {
   init: function (this: any) {
     this.appendDummyInput()
@@ -1849,7 +1861,7 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   
   // 1. Hardcoded libraries
   if (lower.includes('rfid') || lower.includes('pn532') || lower.includes('mfrc522') || lower.includes('nfc')) {
-    return ['mfrc522_begin', 'mfrc522_is_card', 'mfrc522_read_serial', 'mfrc522_print_uid', 'mfrc522_halt', 'lib_rfid_begin', 'lib_rfid_i2c_begin', 'lib_rfid_print_uid', 'lib_rfid_read', 'lib_rfid_iscard'];
+    return ['mfrc522_begin', 'mfrc522_is_card', 'mfrc522_read_serial', 'mfrc522_get_uid', 'mfrc522_print_uid', 'mfrc522_halt', 'lib_rfid_begin', 'lib_rfid_i2c_begin', 'lib_rfid_print_uid', 'lib_rfid_read', 'lib_rfid_iscard'];
   }
   if (lower.includes('dht')) {
     return ['dht_init', 'dht_read_temp', 'dht_read_humi'];
@@ -3235,6 +3247,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             ssPin = isEsp ? '5' : '10';
           }
           generatedCode += `MFRC522DriverPinSimple ss_pin(${ssPin});\nMFRC522DriverSPI driver{ss_pin};\nMFRC522 mfrc522{driver};\n\n`;
+          if (!generatedCode.includes('String getMFRC522UID()')) {
+            generatedCode += `String getMFRC522UID() {\n  String uidStr = "";\n  for (byte i = 0; i < mfrc522.uid.size; i++) {\n    if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";\n    uidStr += String(mfrc522.uid.uidByte[i], HEX);\n    if (i < mfrc522.uid.size - 1) uidStr += " ";\n  }\n  uidStr.toUpperCase();\n  return uidStr;\n}\n\n`;
+          }
         }
       } else if (rfidBlock) {
         const i2cBeginBlock = workspace.getBlocksByType('lib_rfid_i2c_begin').find((b: any) => isBlockActive(b));
@@ -4829,6 +4844,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     if (blockTypeLower === 'mfrc522_read_serial') {
       if (lang === 'arduino') return `mfrc522.PICC_ReadCardSerial()`;
       return `robot.mfrc522_read_serial()`;
+    }
+    if (blockTypeLower === 'mfrc522_get_uid') {
+      if (lang === 'arduino') return `getMFRC522UID()`;
+      return `robot.mfrc522_get_uid()`;
     }
     if (blockTypeLower.includes('rfid') || blockTypeLower.includes('pn532') || blockTypeLower.includes('nfc') || blockTypeLower.includes('mfrc522')) {
       if (blockTypeLower.includes('iscard') || blockTypeLower.includes('present')) {

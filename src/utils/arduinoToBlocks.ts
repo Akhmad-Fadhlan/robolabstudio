@@ -368,6 +368,7 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/\bdht\.readHumidity\s*\(\s*\)/g, 'robot.dht_read_humi()');
   res = res.replace(/\bmfrc522\.PICC_IsNewCardPresent\s*\(\s*\)/g, 'robot.mfrc522_is_card()');
   res = res.replace(/\bmfrc522\.PICC_ReadCardSerial\s*\(\s*\)/g, 'robot.mfrc522_read_serial()');
+  res = res.replace(/\bgetMFRC522UID\s*\(\s*\)/g, 'robot.mfrc522_get_uid()');
   res = res.replace(/\bF\(\s*(["'].*?["'])\s*\)/g, '$1');
 
   // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
