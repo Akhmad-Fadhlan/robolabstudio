@@ -5497,6 +5497,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           pass = '""';
         }
         if (lang === 'arduino') {
+          code += `${indent}WiFi.mode(WIFI_STA);\n`;
           code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass}, "blynk.cloud", 8080);\n`;
         } else {
           code += `${indent}robot.blynk_begin(${auth}, ${ssid}, ${pass})\n`;
