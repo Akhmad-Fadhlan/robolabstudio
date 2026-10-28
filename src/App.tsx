@@ -6624,6 +6624,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(/mfrc522\.uid\.size/g, isPresent ? '4' : '0');
       }
 
+      // 10. MFRC522 PCD_ReadRegister
+      while (replaced.includes('PCD_ReadRegister')) {
+        const match = replaced.match(/mfrc522\.PCD_ReadRegister\(.*?\)/);
+        if (!match) break;
+        replaced = replaced.replace(match[0], '146'); // 146 = 0x92 (v2.0)
+      }
+
       return replaced;
     };
 

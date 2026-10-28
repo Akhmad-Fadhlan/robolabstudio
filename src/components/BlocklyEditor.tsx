@@ -5548,20 +5548,28 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           const currentBoardStr = (boardRef.current || board || '').toLowerCase();
           const isEsp = currentBoardStr.includes('esp32');
+          code += `${indent}delay(500); // Tunggu Serial Monitor stabil\n`;
           code += `${indent}pinMode(RST_PIN, OUTPUT);\n`;
           code += `${indent}digitalWrite(RST_PIN, LOW);\n`;
           code += `${indent}delay(10);\n`;
           code += `${indent}digitalWrite(RST_PIN, HIGH);\n`;
           code += `${indent}delay(50);\n`;
           if (isEsp) {
-            code += `${indent}SPI.begin(18, 19, 23, 5);\n`;
+            code += `${indent}SPI.begin(18, 19, 23); // SCK=18, MISO=19, MOSI=23\n`;
           } else {
             code += `${indent}SPI.begin();\n`;
           }
           code += `${indent}mfrc522.PCD_Init();\n`;
           code += `${indent}mfrc522.PCD_AntennaOn();\n`;
           code += `${indent}mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);\n`;
-          code += `${indent}MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);\n`;
+          code += `${indent}byte mfrcVer = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);\n`;
+          code += `${indent}Serial.print(F("MFRC522 Chip Version: 0x"));\n`;
+          code += `${indent}Serial.println(mfrcVer, HEX);\n`;
+          code += `${indent}if (mfrcVer == 0x00 || mfrcVer == 0xFF) {\n`;
+          code += `${indent}  Serial.println(F("❌ PERINGATAN: Modul RC522 tidak merespons (0x00/0xFF)! Cek kabel SPI & pin RST/SDA."));\n`;
+          code += `${indent}} else {\n`;
+          code += `${indent}  Serial.println(F("✅ Modul RC522 Berhasil Terdeteksi!"));\n`;
+          code += `${indent}}\n`;
         } else {
           const ss = currentBlock.getFieldValue('SS_PIN') || '10';
           code += `${indent}robot.mfrc522_begin("${ss}")\n`;

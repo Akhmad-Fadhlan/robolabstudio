@@ -898,7 +898,7 @@ MFRC522 mfrc522{driver};
 
 void setup() {
   Serial.begin(115200);
-  delay(100);
+  delay(500); // Tunggu Serial Monitor stabil
   pinMode(RST_PIN, OUTPUT);
   digitalWrite(RST_PIN, LOW);
   delay(10);
@@ -908,7 +908,14 @@ void setup() {
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
   mfrc522.PCD_AntennaOn();
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
-  MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
+  byte mfrcVer = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
+  Serial.print(F("MFRC522 Chip Version: 0x"));
+  Serial.println(mfrcVer, HEX);
+  if (mfrcVer == 0x00 || mfrcVer == 0xFF) {
+    Serial.println(F("❌ PERINGATAN: Modul RC522 tidak merespons (0x00/0xFF)! Cek kabel SPI & pin RST/SDA."));
+  } else {
+    Serial.println(F("✅ Modul RC522 Berhasil Terdeteksi!"));
+  }
   Serial.println(F("MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
 }
 
@@ -1042,17 +1049,24 @@ MFRC522 mfrc522{driver};
 
 void setup() {
   Serial.begin(115200);
-  delay(100);
+  delay(500); // Tunggu Serial Monitor stabil
   pinMode(RST_PIN, OUTPUT);
   digitalWrite(RST_PIN, LOW);
   delay(10);
   digitalWrite(RST_PIN, HIGH);
   delay(50);
-  SPI.begin(18, 19, 23, 5); // VSPI pins: SCK=18, MISO=19, MOSI=23, SS=5
+  SPI.begin(18, 19, 23); // VSPI pins: SCK=18, MISO=19, MOSI=23
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
   mfrc522.PCD_AntennaOn();
   mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
-  MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
+  byte mfrcVer = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
+  Serial.print(F("MFRC522 Chip Version: 0x"));
+  Serial.println(mfrcVer, HEX);
+  if (mfrcVer == 0x00 || mfrcVer == 0xFF) {
+    Serial.println(F("❌ PERINGATAN: Modul RC522 tidak merespons (0x00/0xFF)! Cek kabel SPI & pin RST/SDA."));
+  } else {
+    Serial.println(F("✅ Modul RC522 Berhasil Terdeteksi!"));
+  }
   Serial.println(F("ESP32 MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
 }
 
