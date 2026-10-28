@@ -722,6 +722,9 @@ function convertCtoPython(
       emitLine(`robot.blynk_begin(${auth}, ${ssid}, ${pass})`);
       continue;
     }
+    if (trimmed.startsWith('Blynk.config(') || trimmed.startsWith('Blynk.connect(') || trimmed === 'Blynk.connect()') {
+      continue;
+    }
     if (trimmed === 'Blynk.run()') {
       emitLine('robot.blynk_run()');
       continue;

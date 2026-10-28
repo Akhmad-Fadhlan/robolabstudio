@@ -6239,6 +6239,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           continue;
         }
 
+        const blynkConfigCallMatch = trimmed.match(/Blynk\.config\(\s*(.*?)\s*\)/);
+        if (blynkConfigCallMatch) {
+          const authArg = blynkConfigCallMatch[1].split(',')[0].trim().replace(/^['"]|['"]$/g, '');
+          queue.push({
+            type: 'blynk_begin',
+            value: { auth: authArg || 'AuthToken', ssid: 'i', pass: '' }
+          });
+          continue;
+        }
+        if (trimmed.match(/Blynk\.connect\(\s*.*?\)/)) {
+          continue;
+        }
+
         const blynkRunMatch = trimmed.match(/Blynk\.run\(\s*\)/) ||
                               trimmed.match(/robot\.blynk_run\(\s*\)/);
         if (blynkRunMatch) {
