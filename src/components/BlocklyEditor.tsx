@@ -5548,12 +5548,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           const currentBoardStr = (boardRef.current || board || '').toLowerCase();
           const isEsp = currentBoardStr.includes('esp32');
+          let ssPin = (currentBlock.getField('SS_PIN') ? currentBlock.getFieldValue('SS_PIN') : '').trim();
+          if (!ssPin || (ssPin === '10' && isEsp)) {
+            ssPin = isEsp ? '5' : '10';
+          }
           code += `${indent}delay(500); // Tunggu Serial Monitor stabil\n`;
           code += `${indent}pinMode(RST_PIN, OUTPUT);\n`;
           code += `${indent}digitalWrite(RST_PIN, LOW);\n`;
-          code += `${indent}delay(10);\n`;
+          code += `${indent}delay(20);\n`;
           code += `${indent}digitalWrite(RST_PIN, HIGH);\n`;
           code += `${indent}delay(50);\n`;
+          code += `${indent}pinMode(${ssPin}, OUTPUT);\n`;
+          code += `${indent}digitalWrite(${ssPin}, HIGH);\n`;
           if (isEsp) {
             code += `${indent}SPI.begin(18, 19, 23); // SCK=18, MISO=19, MOSI=23\n`;
           } else {

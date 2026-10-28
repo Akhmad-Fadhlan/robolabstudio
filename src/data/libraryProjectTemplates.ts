@@ -1052,9 +1052,11 @@ void setup() {
   delay(500); // Tunggu Serial Monitor stabil
   pinMode(RST_PIN, OUTPUT);
   digitalWrite(RST_PIN, LOW);
-  delay(10);
+  delay(20);
   digitalWrite(RST_PIN, HIGH);
   delay(50);
+  pinMode(5, OUTPUT);
+  digitalWrite(5, HIGH);
   SPI.begin(18, 19, 23); // VSPI pins: SCK=18, MISO=19, MOSI=23
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
   mfrc522.PCD_AntennaOn();
