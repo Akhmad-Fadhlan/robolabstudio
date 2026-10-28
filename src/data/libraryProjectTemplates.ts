@@ -895,8 +895,10 @@ print("I2C Devices:", [hex(d) for d in devices])`
 
 #define SDA_PIN A4
 #define SCL_PIN A5
+#define PN532_IRQ   (2)
+#define PN532_RESET (3)
 
-Adafruit_PN532 nfc(-1, -1);
+Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 bool cardPresent = false;
 
 String _lastUID = "";
@@ -947,6 +949,7 @@ void setup() {
   Serial.print(F("Chip : PN5"));
   Serial.println((versiondata >> 24) & 0xFF, HEX);
   nfc.SAMConfig();
+  nfc.setPassiveActivationRetries(0x02);
   Serial.println(F("NFC MODULE IS READY"));
   Serial.println(F("Tempelkan kartu RFID / NFC ke reader..."));
 }
@@ -1026,8 +1029,10 @@ if __name__ == '__main__':
 
 #define SDA_PIN 21
 #define SCL_PIN 22
+#define PN532_IRQ   (4)
+#define PN532_RESET (5)
 
-Adafruit_PN532 nfc(-1, -1);
+Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 bool cardPresent = false;
 
 String _lastUID = "";
@@ -1082,6 +1087,7 @@ void setup() {
   Serial.print(F("Chip : PN5"));
   Serial.println((versiondata >> 24) & 0xFF, HEX);
   nfc.SAMConfig();
+  nfc.setPassiveActivationRetries(0x02);
   Serial.println(F("NFC MODULE IS READY"));
   Serial.println(F("Tempelkan kartu RFID / NFC ke reader..."));
 }
@@ -1150,6 +1156,10 @@ if __name__ == '__main__':
     ino: `// Proyek: ESP32 Blynk IoT Smart LED & Telemetry Control
 // Board: ESP32 DevKit V1
 // Library: Blynk by Volodymyr Shymanskyy
+// Petunjuk:
+// 1. Ganti BLYNK_TEMPLATE_ID, BLYNK_TEMPLATE_NAME, & BLYNK_AUTH_TOKEN dari Dashboard Blynk Cloud.
+// 2. Ganti "RoboLab-WiFi" & "12345678" dengan nama dan sandi WiFi/Hotspot Anda (harus 2.4 GHz).
+// 3. Port 8080 digunakan agar koneksi stabil dan tidak diblokir oleh provider internet (ISP).
 #define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
 #define BLYNK_TEMPLATE_NAME "ESP32 Smart LED"
 #define BLYNK_AUTH_TOKEN "p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT"
@@ -1176,7 +1186,7 @@ void setup() {
   pinMode(2, OUTPUT);
 
   digitalWrite(2, LOW);
-  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678");
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 8080);
 }
 
 void loop() {

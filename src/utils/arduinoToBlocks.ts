@@ -252,6 +252,15 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
     }
 
     // const / variable declarations
+    const charArrayMatch = line.match(/^(?:const\s+)?char\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*\]\s*=\s*(.+?)\s*;?$/);
+    if (charArrayMatch) {
+      const name = charArrayMatch[1].trim();
+      const val = charArrayMatch[2].trim();
+      variables[name] = val;
+      pinConstants[name] = val;
+      continue;
+    }
+
     const constMatch = line.match(/^const\s+(?:int|long|float|double|byte|uint8_t|char\s*\*|String)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+?)\s*;?$/);
     if (constMatch) {
       const name = constMatch[1].trim();
@@ -704,7 +713,7 @@ function convertCtoPython(
     if (trimmed.includes('param.asInt()') && (trimmed.startsWith('int param_val') || trimmed.startsWith('int pinValue'))) {
       continue;
     }
-    m = trimmed.match(/^Blynk\.begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)$/);
+    m = trimmed.match(/^Blynk\.begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)(?:\s*,\s*(.+?)\s*,\s*(.+?))?\s*\)$/);
     if (m) {
       const rawAuth = m[1].trim();
       const auth = (rawAuth === 'BLYNK_AUTH_TOKEN' && ctx.blynkConfig.auth) ? ctx.blynkConfig.auth : (pinConstants[rawAuth] || rawAuth);

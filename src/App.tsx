@@ -3055,7 +3055,7 @@ if __name__ == '__main__':
     description: "Kontrol Relay / Pin Output via HTTP GET request dari server API secara optimal.",
     iconColor: "cyan",
     components: ['led'],
-    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="arduino_setup" x="40" y="40"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="esp32_wifi_connect"><value name="SSID"><shadow type="text"><field name="TEXT">i</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">12345678</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="200"><statement name="STACK"><block type="arduino_serial_print"><field name="NEWLINE">TRUE</field><value name="TEXT"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><value name="B"><shadow type="text"><field name="TEXT">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><value name="B"><shadow type="text"><field name="TEXT">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field></block></next></block></statement><next><block type="arduino_delay"><field name="MS">2000</field></block></next></block></next></block></next></block></statement></block></xml>',
+    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="arduino_setup" x="40" y="40"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="esp32_wifi_connect"><value name="SSID"><shadow type="text"><field name="TEXT">NamaWiFiAnda</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">PasswordWiFi</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="200"><statement name="STACK"><block type="arduino_serial_print"><field name="NEWLINE">TRUE</field><value name="TEXT"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><value name="B"><shadow type="text"><field name="TEXT">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="esp32_http_get"><value name="URL"><shadow type="text"><field name="TEXT">http://pymasterclass.codestechno.com/api1.php</field></shadow></value></block></value><value name="B"><shadow type="text"><field name="TEXT">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field></block></next></block></statement><next><block type="arduino_delay"><field name="MS">2000</field></block></next></block></next></block></next></block></statement></block></xml>',
     ino: `// Proyek: ESP8266 HTTP Relay Control
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
@@ -3070,7 +3070,7 @@ void setup() {
   digitalWrite(4, HIGH);
   digitalWrite(5, HIGH);
 
-  WiFi.begin("i", "12345678");
+  WiFi.begin("NamaWiFiAnda", "PasswordWiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -3124,7 +3124,7 @@ if __name__ == '__main__':
     description: "Kontrol Relay / Pin Output secara realtime menggunakan Blynk IoT Cloud (Virtual Pin V0 - V3).",
     iconColor: "green",
     components: ['led'],
-    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="blynk_config" x="40" y="40"><value name="TEMPLATE_ID"><shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow></value><value name="TEMPLATE_NAME"><shadow type="text"><field name="TEXT">ESP8266 Relay</field></shadow></value><value name="AUTH_TOKEN"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value></block><block type="blynk_on_write" x="40" y="160"><field name="VPIN">V0</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="480"><field name="VPIN">V1</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="800"><field name="VPIN">V2</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="1120"><field name="VPIN">V3</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="arduino_setup" x="40" y="1440"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field><next><block type="blynk_begin"><value name="AUTH"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value><value name="SSID"><shadow type="text"><field name="TEXT">i</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">12345678</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="1620"><statement name="STACK"><block type="blynk_run"></block></statement></block></xml>',
+    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="blynk_config" x="40" y="40"><value name="TEMPLATE_ID"><shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow></value><value name="TEMPLATE_NAME"><shadow type="text"><field name="TEXT">ESP8266 Relay</field></shadow></value><value name="AUTH_TOKEN"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value></block><block type="blynk_on_write" x="40" y="160"><field name="VPIN">V0</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="480"><field name="VPIN">V1</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="800"><field name="VPIN">V2</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="1120"><field name="VPIN">V3</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="arduino_setup" x="40" y="1440"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field><next><block type="blynk_begin"><value name="AUTH"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value><value name="SSID"><shadow type="text"><field name="TEXT">NamaWiFiAnda</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">PasswordWiFi</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="1620"><statement name="STACK"><block type="blynk_run"></block></statement></block></xml>',
     ino: `// RoboLab Studio - Generated Arduino Code
 // Blocks in workspace: blynk_on_write, arduino_setup, arduino_loop, blynk_on_write, blynk_on_write, blynk_on_write, controls_if, pin_digital_write, blynk_run, controls_if, controls_if, controls_if, robolab_logic_compare, pin_digital_write, controls_if, pin_digital_write, pin_digital_write, controls_if, robolab_logic_compare, robolab_logic_compare, pin_digital_write, controls_if, robolab_logic_compare, pin_digital_write, controls_if, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_begin, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_param_as_int, math_number, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, text, text, text, blynk_config, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, text, text, text, pin_digital_write, pin_digital_write, pin_digital_write
 #define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
@@ -3202,7 +3202,8 @@ void setup() {
 
   digitalWrite(4, LOW);
   digitalWrite(5, LOW);
-  Blynk.begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "i", "12345678");
+  // Gunakan port 8080 agar koneksi tidak diblokir oleh provider internet (ISP)
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 8080);
 }
 
 void loop() {
@@ -3213,7 +3214,7 @@ import time
 import robolab as robot
 
 def loop():
-    robot.blynk_begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "i", "12345678")
+    robot.blynk_begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "RoboLab-WiFi", "12345678")
     while True:
         robot.blynk_run()
         time.sleep(0.1)
@@ -4501,16 +4502,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     }
 
-    // 2. Extract SSID if variable name (like 'ssid') was passed
-    if (!ssid || ssid === 'ssid' || ssid === 'WiFi' || ssid === 'SSID' || ssid === 'MyWiFi') {
+    // 2. Extract SSID if variable name (like 'ssid') was passed or bogus value
+    if (!ssid || ssid === 'ssid' || ssid === 'WiFi' || ssid === 'SSID' || ssid === 'MyWiFi' || ssid === 'i' || ssid.length <= 1) {
       const ssidMatch = 
         codeText.match(/char\s+ssid\s*\[\s*\]\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/(?:const\s+char\*|String)\s+ssid\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/#define\s+WIFI_SSID\s+["']([^"']+)["']/) ||
         codeText.match(/SSID\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/ssid\s*=\s*["']([^"']+)["']/);
-      if (ssidMatch && ssidMatch[1]) {
+      if (ssidMatch && ssidMatch[1] && ssidMatch[1] !== 'i' && ssidMatch[1].length > 1) {
         ssid = ssidMatch[1].trim();
+      } else {
+        ssid = 'RoboLab-WiFi';
       }
     }
 
@@ -4570,148 +4573,73 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (req) {
       try {
         const net = req('net');
-        const tls = req('tls');
-        const blynkTargets = [
-          { host: 'sgp1.blynk.cloud', port: 80, isTls: false },
-          { host: 'sgp1.blynk.cloud', port: 8080, isTls: false },
-          { host: 'sgp1.blynk.cloud', port: 443, isTls: true },
-          { host: 'blynk.cloud', port: 80, isTls: false },
-          { host: 'blynk.cloud', port: 8080, isTls: false },
-          { host: 'blynk.cloud', port: 443, isTls: true }
-        ];
+        // Connect to primary Blynk IoT Cloud server on port 8080
+        const primaryTarget = { host: 'blynk.cloud', port: 8080 };
+        const onConnect = () => {
+          setTerminalLogs(prev => [
+            ...prev,
+            { text: `[BLYNK HARDWARE TCP] 🔌 Socket Connected to ${primaryTarget.host}:${primaryTarget.port}! Sending Hardware Login...`, type: 'stdout' }
+          ]);
+          const loginFrame = createBlynkTcpFrame(2, 1, cleanAuth);
+          try { socket.write(loginFrame); } catch (e) {}
+        };
 
-        blynkTargets.forEach(target => {
-          const onConnect = () => {
-            setTerminalLogs(prev => [
-              ...prev,
-              { text: `[BLYNK HARDWARE ${target.isTls ? 'TLS' : 'TCP'}] 🔌 Socket Connected to ${target.host}:${target.port}! Sending Hardware Login...`, type: 'stdout' }
-            ]);
-            const loginFrame = createBlynkTcpFrame(2, 1, cleanAuth);
-            try { socket.write(loginFrame); } catch (e) {}
-          };
+        const socket = net.createConnection({ host: primaryTarget.host, port: primaryTarget.port }, onConnect);
+        blynkTcpClientRef.current = socket;
 
-          const socket = target.isTls
-            ? tls.connect({ host: target.host, port: target.port, rejectUnauthorized: false }, onConnect)
-            : net.createConnection({ host: target.host, port: target.port }, onConnect);
+        let pId = 2;
+        const pingInterval = setInterval(() => {
+          try {
+            const pingFrame = createBlynkTcpFrame(17, pId++, '');
+            socket.write(pingFrame);
+          } catch (e) {}
+        }, 5000);
+        blynkPingIntervalRef.current = pingInterval;
 
-          let pId = 2;
-          const pingInterval = setInterval(() => {
-            try {
-              const pingFrame = createBlynkTcpFrame(17, pId++, '');
-              socket.write(pingFrame);
-            } catch (e) {}
-          }, 5000);
+        socket.on('data', (buf: Buffer) => {
+          try {
+            const rawStr = buf.toString('utf-8');
+            const hexStr = buf.toString('hex');
+            
+            if (buf.length >= 5 && (buf.readUInt8(0) === 0 || buf.readUInt16BE(3) === 200)) {
+              setTerminalLogs(prev => [
+                ...prev,
+                { text: `[BLYNK HARDWARE TCP] ✅ Hardware Connected & Online 🟢 on ${primaryTarget.host}:${primaryTarget.port} Blynk Console!`, type: 'stdout' }
+              ]);
+              setBlynkStatus('online');
+            }
 
-          socket.on('data', (buf: Buffer) => {
-            try {
-              const rawStr = buf.toString('utf-8');
-              const hexStr = buf.toString('hex');
-              
-              if (buf.length >= 5 && (buf.readUInt8(0) === 0 || buf.readUInt16BE(3) === 200)) {
-                setTerminalLogs(prev => [
-                  ...prev,
-                  { text: `[BLYNK HARDWARE ${target.isTls ? 'TLS' : 'TCP'}] ✅ Hardware Connected & Online 🟢 on ${target.host}:${target.port} Blynk Console!`, type: 'stdout' }
-                ]);
-                setBlynkStatus('online');
+            if (rawStr.includes('vw') || hexStr.includes('7677')) {
+              const matches = rawStr.match(/vw\x00(\d+)\x00([^\x00]+)/g) ||
+                              rawStr.match(/vw[,\s]+(\d+)[,\s]+([^\s,]+)/g);
+              if (matches) {
+                matches.forEach((m: string) => {
+                  const parts = m.split(/[\x00,\s]+/);
+                  if (parts.length >= 3) {
+                    const vpin = `V${parts[1]}`;
+                    const val = Number(parts[2]);
+                    setTerminalLogs(prev => [
+                      ...prev,
+                      { text: `[BLYNK REAL-TIME 📱] Mobile App trigger via Hardware TCP (${primaryTarget.host}:${primaryTarget.port}): ${vpin} = ${val}`, type: 'stdout' }
+                    ]);
+                    handleBlynkVirtualWrite(vpin, val);
+                  }
+                });
               }
+            }
+          } catch (err) {}
+        });
 
-              if (rawStr.includes('vw') || hexStr.includes('7677')) {
-                const matches = rawStr.match(/vw\x00(\d+)\x00([^\x00]+)/g) ||
-                                rawStr.match(/vw[,\s]+(\d+)[,\s]+([^\s,]+)/g);
-                if (matches) {
-                  matches.forEach((m: string) => {
-                    const parts = m.split(/[\x00,\s]+/);
-                    if (parts.length >= 3) {
-                      const vpin = `V${parts[1]}`;
-                      const val = Number(parts[2]);
-                      setTerminalLogs(prev => [
-                        ...prev,
-                        { text: `[BLYNK REAL-TIME 📱] Mobile App trigger via Hardware ${target.isTls ? 'TLS' : 'TCP'} (${target.host}:${target.port}): ${vpin} = ${val}`, type: 'stdout' }
-                      ]);
-                      handleBlynkVirtualWrite(vpin, val);
-                    }
-                  });
-                }
-              }
-            } catch (err) {}
-          });
-
-          socket.on('error', (_err: any) => {
-            clearInterval(pingInterval);
-          });
+        socket.on('error', (_err: any) => {
+          clearInterval(pingInterval);
         });
       } catch (err) {
-        console.warn("Blynk TCP/TLS init error:", err);
+        console.warn("Blynk TCP init error:", err);
       }
     }
 
-    // Close any previous WebSocket
-    if (blynkWsRef.current) {
-      try { blynkWsRef.current.close(); } catch (e) {}
-      blynkWsRef.current = null;
-    }
-
-    // Initialize Real WebSocket Connection to blynk.cloud
-    // This WebSocket handshake causes blynk.cloud to set Device Status to ONLINE 🟢 on Blynk App!
-    try {
-      const wsUrl = `wss://blynk.cloud/external/api/ws?token=${cleanAuth}`;
-      const ws = new WebSocket(wsUrl);
-      blynkWsRef.current = ws;
-
-      ws.onopen = () => {
-        setTerminalLogs(prev => [
-          ...prev,
-          { text: `[BLYNK CLOUD] ✅ WebSocket Connected to REAL Blynk Cloud! Device Status on Blynk Console: ONLINE 🟢`, type: 'stdout' }
-        ]);
-        setBlynkStatus('online');
-
-        // Query initial V0 pin state from blynk.cloud to prevent LED glowing prematurely
-        fetch(`https://blynk.cloud/external/api/get?token=${cleanAuth}&v0`)
-          .then(res => res.text())
-          .then(valText => {
-            const rawVal = valText.trim();
-            const initialVal = rawVal === '1' ? 1 : 0;
-            lastRealBlynkValuesRef.current['V0'] = initialVal;
-            handleBlynkVirtualWrite('V0', initialVal);
-          })
-          .catch(() => {});
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msgData = String(event.data || '');
-          let vpin = '';
-          let val = 0;
-          
-          if (msgData.includes('vw')) {
-            const match = msgData.match(/["']?vw["']?\s*,\s*["']?(\d+)["']?\s*,\s*["']?([^"'\],]+)["']?/i) ||
-                          msgData.match(/vw\s+(\d+)\s+(.+)/i);
-            if (match) {
-              vpin = `V${match[1]}`;
-              val = Number(match[2]);
-            }
-          }
-
-          if (vpin) {
-            setTerminalLogs(prev => [
-              ...prev,
-              { text: `[BLYNK REAL-TIME 📱] Real Phone App trigger from blynk.cloud: ${vpin} = ${val}`, type: 'stdout' }
-            ]);
-            handleBlynkVirtualWrite(vpin, val);
-          }
-        } catch (err) {}
-      };
-
-      ws.onerror = (err) => {
-        console.warn("Blynk WS error:", err);
-      };
-
-      ws.onclose = () => {
-        setBlynkStatus('offline');
-      };
-    } catch (wsErr) {
-      console.warn("Blynk WS init error:", wsErr);
-    }
+    // Always maintain Simulator Blynk Status as online in virtual mode
+    setBlynkStatus('online');
 
     if (blynkPollingTimerRef.current) {
       clearInterval(blynkPollingTimerRef.current);
@@ -6002,7 +5930,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
         // 1. Assignments
         const assignMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/) ||
-                            trimmed.match(/^(?:const\s+)?(?:int|float|double|char\*|String)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*);$/);
+                            trimmed.match(/^(?:const\s+)?(?:int|float|double|char\*|String|bool|boolean|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|unsigned\s+int|unsigned\s+long|long|auto|byte)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*);$/);
         if (assignMatch) {
           const varName = assignMatch[1].trim();
           const expr = assignMatch[2].replace(/;$/, '').trim();
@@ -6593,15 +6521,36 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(match[0], String(val));
       }
 
-      // 6. MFRC522 / RFID Card Present
-      while (replaced.includes('PICC_IsNewCardPresent') || replaced.includes('mfrc522_is_card') || replaced.includes('rfid_iscard')) {
-        const match = replaced.match(/(?:mfrc522\.PICC_IsNewCardPresent|robot\.mfrc522_is_card|mfrc522_is_card|rfid_iscard)\(\s*\)/);
+      // 6. PN532 Firmware Version & SAMConfig
+      while (replaced.includes('getFirmwareVersion')) {
+        const match = replaced.match(/(?:nfc\.getFirmwareVersion|getFirmwareVersion)\(\s*\)/);
+        if (!match) break;
+        replaced = replaced.replace(match[0], '838927879'); // 0x32010607: (versiondata >> 24) & 0xFF == 0x32 ('2') -> Chip PN532
+      }
+      while (replaced.includes('SAMConfig') || replaced.includes('setPassiveActivationRetries')) {
+        const match = replaced.match(/(?:nfc\.SAMConfig|SAMConfig|nfc\.setPassiveActivationRetries|setPassiveActivationRetries)\([^)]*\)/);
+        if (!match) break;
+        replaced = replaced.replace(match[0], 'true');
+      }
+
+      // 7. MFRC522 / PN532 / RFID Card Present
+      while (replaced.includes('PICC_IsNewCardPresent') || replaced.includes('mfrc522_is_card') || replaced.includes('rfid_iscard') || replaced.includes('rfid_is_card') || replaced.includes('readPassiveTargetID')) {
+        const match = replaced.match(/(?:mfrc522\.PICC_IsNewCardPresent|robot\.mfrc522_is_card|mfrc522_is_card|robot\.rfid_is_card|rfid_is_card|rfid_iscard)\(\s*\)/) ||
+                      replaced.match(/(?:nfc\.readPassiveTargetID|readPassiveTargetID)\([^)]*\)/);
         if (!match) break;
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
+        if (isPresent) {
+          const uidStr = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
+          const bytes = uidStr.split(/\s+/).map((h: string) => parseInt(h, 16) || 0);
+          bytes.forEach((b: number, idx: number) => {
+            executionVars[`uid[${idx}]`] = b;
+          });
+          executionVars['uidLength'] = bytes.length;
+        }
         replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
       }
 
-      // 7. MFRC522 / RFID Read Card Serial
+      // 8. MFRC522 / RFID Read Card Serial
       while (replaced.includes('PICC_ReadCardSerial') || replaced.includes('mfrc522_read_serial') || replaced.includes('rfid_read_serial')) {
         const match = replaced.match(/(?:mfrc522\.PICC_ReadCardSerial|robot\.mfrc522_read_serial|mfrc522_read_serial|robot\.rfid_read_serial)\(\s*\)/);
         if (!match) break;
@@ -6609,22 +6558,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
       }
 
-      // 8. MFRC522 / RFID Read Card UID (String value)
-      while (replaced.includes('getMFRC522UID') || replaced.includes('getRFIDUID') || replaced.includes('mfrc522_get_uid') || replaced.includes('rfid_get_uid') || replaced.includes('rfid_read')) {
-        const match = replaced.match(/(?:getMFRC522UID|getRFIDUID|robot\.mfrc522_get_uid|mfrc522_get_uid|robot\.rfid_get_uid|robot\.rfid_read)\(\s*\)/);
+      // 9. MFRC522 / PN532 / RFID Read Card UID (String value)
+      while (replaced.includes('getMFRC522UID') || replaced.includes('getRFIDUID') || replaced.includes('mfrc522_get_uid') || replaced.includes('rfid_get_uid') || replaced.includes('rfid_read') || replaced.includes('robot.rfid_read')) {
+        const match = replaced.match(/(?:getMFRC522UID|getRFIDUID|robot\.mfrc522_get_uid|mfrc522_get_uid|robot\.rfid_get_uid|robot\.rfid_read|rfid_read)\(\s*\)/);
         if (!match) break;
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
         const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
         replaced = replaced.replace(match[0], isPresent ? `"${uid}"` : '""');
       }
 
-      // 9. MFRC522 uid.size
+      // 10. MFRC522 uid.size
       while (replaced.includes('mfrc522.uid.size')) {
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
         replaced = replaced.replace(/mfrc522\.uid\.size/g, isPresent ? '4' : '0');
       }
 
-      // 10. MFRC522 PCD_ReadRegister
+      // 11. MFRC522 PCD_ReadRegister
       while (replaced.includes('PCD_ReadRegister')) {
         const match = replaced.match(/mfrc522\.PCD_ReadRegister\(.*?\)/);
         if (!match) break;

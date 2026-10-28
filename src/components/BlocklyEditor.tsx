@@ -3280,8 +3280,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               sclPin = isEsp32Board ? '22' : (isUnoBoard ? 'A5' : 'D1');
             }
 
-            generatedCode += `#define SDA_PIN ${sdaPin}\n#define SCL_PIN ${sclPin}\n\n`;
-            generatedCode += `Adafruit_PN532 nfc(-1, -1);\nbool cardPresent = false;\n\n`;
+            const defaultIrq = isEsp32Board ? '4' : (isUnoBoard ? '2' : 'D3');
+            const defaultRst = isEsp32Board ? '5' : (isUnoBoard ? '3' : 'D4');
+            generatedCode += `#define SDA_PIN ${sdaPin}\n#define SCL_PIN ${sclPin}\n#define PN532_IRQ   (${defaultIrq})\n#define PN532_RESET (${defaultRst})\n\n`;
+            generatedCode += `Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);\nbool cardPresent = false;\n\n`;
           } else {
             let irqPin = '2';
             let rstPin = '3';
@@ -5486,10 +5488,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             auth = 'BLYNK_AUTH_TOKEN';
           }
         }
-        const ssid = ssidBlock ? getBlockValue(ssidBlock, lang) : '"MyWiFi"';
-        const pass = passBlock ? getBlockValue(passBlock, lang) : '"password123"';
+        let ssid = ssidBlock ? getBlockValue(ssidBlock, lang) : '"NamaWiFiAnda"';
+        // Safeguard: replace bogus/leftover single-char SSID values (e.g. "i") with a proper placeholder
+        if (!ssid || ssid === '""' || (ssid.startsWith('"') && ssid.endsWith('"') && ssid.length <= 3)) {
+          ssid = '"NamaWiFiAnda"';
+        }
+        let pass = passBlock ? getBlockValue(passBlock, lang) : '"PasswordWiFi"';
         if (lang === 'arduino') {
-          code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass});\n`;
+          code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass}, "blynk.cloud", 8080);\n`;
         } else {
           code += `${indent}robot.blynk_begin(${auth}, ${ssid}, ${pass})\n`;
         }
@@ -5623,12 +5629,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               code += `${indent}Serial.print("Chip : PN5");\n`;
               code += `${indent}Serial.println((versiondata >> 24) & 0xFF, HEX);\n`;
               code += `${indent}nfc.SAMConfig();\n`;
+              code += `${indent}nfc.setPassiveActivationRetries(0x02);\n`;
               code += `${indent}Serial.println("NFC MODULE IS READY");\n`;
             } else {
               code += `${indent}nfc.begin();\n`;
               code += `${indent}uint32_t versiondata = nfc.getFirmwareVersion();\n`;
               code += `${indent}if (versiondata) {\n`;
               code += `${indent}  nfc.SAMConfig();\n`;
+              code += `${indent}  nfc.setPassiveActivationRetries(0x02);\n`;
               code += `${indent}}\n`;
             }
           } else {

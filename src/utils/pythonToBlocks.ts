@@ -776,7 +776,7 @@ function parseStatement(line: string, variables: Record<string, string>): string
       </block>
     `;
   }
-  match = line.match(/^(?:robot\.)?blynk_begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)$/);
+  match = line.match(/^(?:robot\.)?blynk_begin\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)(?:\s*,\s*(.+?)\s*,\s*(.+?))?\s*\)$/);
   if (match) {
     const rawAuth = match[1].trim();
     const authXml = (rawAuth === 'BLYNK_AUTH_TOKEN' || rawAuth === '"BLYNK_AUTH_TOKEN"')
