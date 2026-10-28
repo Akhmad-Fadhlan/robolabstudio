@@ -5493,7 +5493,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const authBlock = currentBlock.getInputTargetBlock('AUTH');
         const ssidBlock = currentBlock.getInputTargetBlock('SSID');
         const passBlock = currentBlock.getInputTargetBlock('PASS');
-        const hasBlynkConfig = workspace.getBlocksByType('blynk_config').some((b: any) => isBlockActive(b));
+        const ws = currentBlock.workspace || workspaceRef.current;
+        const hasBlynkConfig = ws ? ws.getBlocksByType('blynk_config').some((b: any) => isBlockActive(b)) : false;
         let auth = authBlock ? getBlockValue(authBlock, lang) : 'BLYNK_AUTH_TOKEN';
         if (hasBlynkConfig || auth === '""' || auth === '"YourAuthToken"' || auth === '"BLYNK_AUTH_TOKEN"' || auth === 'BLYNK_AUTH_TOKEN') {
           if (lang === 'arduino') {

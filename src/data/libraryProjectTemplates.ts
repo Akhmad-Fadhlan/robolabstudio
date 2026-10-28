@@ -883,6 +883,7 @@ print("I2C Devices:", [hex(d) for d in devices])`
     isLibraryExample: true,
     ino: `// Library Example: MFRC522v2 RFID Card Reader
 // Repositori: https://github.com/OSSLibraries/Arduino_MFRC522v2
+#include <SPI.h>
 #include <MFRC522v2.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522DriverPinSimple.h>
@@ -895,7 +896,8 @@ MFRC522 mfrc522{driver};
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
+  delay(100);
+  SPI.begin();
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
   MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
   Serial.println(F("MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
@@ -987,7 +989,7 @@ def loop():
     while True:
         if robot.mfrc522_is_card():
             if robot.mfrc522_read_serial():
-                print("Card UID:", robot.rfid_read())
+                print("Card UID:", robot.mfrc522_get_uid())
                 robot.mfrc522_halt()
                 time.sleep(1)
         time.sleep(0.1)
@@ -1016,6 +1018,7 @@ if __name__ == '__main__':
 //   RST      -> GPIO 22
 //   GND      -> GND
 //   3.3V     -> 3.3V (PERHATIAN: Jangan hubungkan ke 5V!)
+#include <SPI.h>
 #include <MFRC522v2.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522DriverPinSimple.h>
@@ -1028,7 +1031,8 @@ MFRC522 mfrc522{driver};
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
+  delay(100);
+  SPI.begin();
   mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
   MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
   Serial.println(F("ESP32 MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
@@ -1120,7 +1124,7 @@ def loop():
     while True:
         if robot.mfrc522_is_card():
             if robot.mfrc522_read_serial():
-                print("Card UID:", robot.rfid_read())
+                print("Card UID:", robot.mfrc522_get_uid())
                 robot.mfrc522_halt()
                 time.sleep(1)
         time.sleep(0.1)

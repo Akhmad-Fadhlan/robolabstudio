@@ -6490,16 +6490,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
 
       // 7. MFRC522 / RFID Read Card Serial
-      while (replaced.includes('PICC_ReadCardSerial') || replaced.includes('mfrc522_read_serial') || replaced.includes('rfid_read')) {
-        const match = replaced.match(/(?:mfrc522\.PICC_ReadCardSerial|robot\.mfrc522_read_serial|mfrc522_read_serial|robot\.rfid_read)\(\s*\)/);
+      while (replaced.includes('PICC_ReadCardSerial') || replaced.includes('mfrc522_read_serial') || replaced.includes('rfid_read_serial')) {
+        const match = replaced.match(/(?:mfrc522\.PICC_ReadCardSerial|robot\.mfrc522_read_serial|mfrc522_read_serial|robot\.rfid_read_serial)\(\s*\)/);
         if (!match) break;
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
         replaced = replaced.replace(match[0], isPresent ? 'true' : 'false');
       }
 
       // 8. MFRC522 / RFID Read Card UID (String value)
-      while (replaced.includes('getMFRC522UID') || replaced.includes('getRFIDUID') || replaced.includes('mfrc522_get_uid') || replaced.includes('rfid_get_uid')) {
-        const match = replaced.match(/(?:getMFRC522UID|getRFIDUID|robot\.mfrc522_get_uid|mfrc522_get_uid|robot\.rfid_get_uid)\(\s*\)/);
+      while (replaced.includes('getMFRC522UID') || replaced.includes('getRFIDUID') || replaced.includes('mfrc522_get_uid') || replaced.includes('rfid_get_uid') || replaced.includes('rfid_read')) {
+        const match = replaced.match(/(?:getMFRC522UID|getRFIDUID|robot\.mfrc522_get_uid|mfrc522_get_uid|robot\.rfid_get_uid|robot\.rfid_read)\(\s*\)/);
         if (!match) break;
         const isPresent = !!(sensorDataRef.current as any)?.rfidCardPresent;
         const uid = (sensorDataRef.current as any)?.rfidUid || '53 7A 92 1F';
@@ -7258,7 +7258,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
     const codeStr = typeof customCode === 'string'
       ? customCode
-      : (simFiles[simActiveFile] || simFiles['firmware/main.ino'] || '');
+      : (simFiles[simActiveFile] || simFiles['firmware/main.ino'] || files[activeFile] || files['firmware/main.ino'] || '');
     startRunAll(codeStr);
   };
 
@@ -7604,6 +7604,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': initialPy
     }));
 
+    setSimFiles((prev: any) => ({
+      ...prev,
+      'firmware/main.ino': initialIno,
+      'python/main.py': initialPy
+    }));
+
+    if (proj.board) {
+      setSimBoard(proj.board as "ESP32 DevKit V1" | "BBC micro:bit" | "Arduino Uno");
+    }
+
     // Auto-generate blockly XML jika template dari library belum memiliki XML
     let targetXml = proj.xml;
     if ((!targetXml || targetXml.trim() === '') && initialIno) {
@@ -7620,12 +7630,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': targetXml
     });
 
+    setSimWorkspaceXmls({
+      'firmware/main.ino': targetXml,
+      'python/main.py': targetXml
+    });
+
     // Aktifkan auto-sync HANYA jika targetXml memiliki block statements (hindari empty overwrite)
     const hasBlocksInXml = !!(targetXml && (targetXml.includes('<statement name="STACK">') || targetXml.includes('custom_library_')));
     setSyncStatuses({
       'firmware/main.ino': hasBlocksInXml,
       'python/main.py': hasBlocksInXml
     });
+
+    setSimSyncStatuses({
+      'firmware/main.ino': hasBlocksInXml,
+      'python/main.py': hasBlocksInXml
+    });
+
+    setSensorData(prev => ({ ...prev, rfidCardPresent: false }));
 
     // Reset simulator to show only the components this project uses
     setSimulatorActiveComponents(proj.components || []);
@@ -8711,6 +8733,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                     [otherFile]: otherCode
                                   } : {})
                                 }));
+                                setSimFiles((prev: any) => ({
+                                  ...prev,
+                                  [activeFile]: newCode,
+                                  ...(otherCode !== undefined ? {
+                                    [otherFile]: otherCode
+                                  } : {})
+                                }));
                               }}
                               onSyncToCode={(arduinoCode, pythonCode) => {
                                 const pyFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'python/main.py' : activeFile.replace(/\.(ino|hex)$/i, '.py');
@@ -8721,6 +8750,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   [pyFile]: true
                                 }));
                                 setFiles(prev => ({
+                                  ...prev,
+                                  [inoFile]: arduinoCode,
+                                  [pyFile]: pythonCode
+                                }));
+                                setSimFiles(prev => ({
                                   ...prev,
                                   [inoFile]: arduinoCode,
                                   [pyFile]: pythonCode
@@ -10533,7 +10567,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               wifiPassword={wifiPassword}
               themeMode={themeMode}
               onWifiPasswordChange={setWifiPassword}
-              onSensorDataChange={() => {}}
+              onSensorDataChange={(newData) => setSensorData(prev => ({ ...prev, ...newData }))}
             />
           </div>
         </div>
