@@ -591,6 +591,7 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
         if (rawLower.includes('dht')) libToInstall = 'DHT sensor library';
         else if (rawLower.includes('ssd1306')) libToInstall = 'Adafruit SSD1306';
         else if (rawLower.includes('gfx')) libToInstall = 'Adafruit GFX Library';
+        else if (rawLower.includes('pn532') || rawLower.includes('rfid')) libToInstall = 'Adafruit PN532';
         else if (rawLower.includes('mfrc522')) libToInstall = 'MFRC522';
         else if (rawHeader === 'Servo') libToInstall = isEsp32 ? 'ESP32Servo' : 'Servo';
         else if (rawHeader === 'ESP32Servo') libToInstall = 'ESP32Servo';

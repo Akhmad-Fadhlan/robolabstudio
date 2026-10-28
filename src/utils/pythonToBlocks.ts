@@ -985,31 +985,22 @@ function parseStatement(line: string, variables: Record<string, string>): string
   }
 
   // 17. RFID / SD / Stepper / BME / GPS
-  match = line.match(/^(?:robot\.)?mfrc522_begin\(\s*["']?([^"',]+)["']?\s*\)$/);
+  match = line.match(/^(?:robot\.)?(?:rfid_begin|mfrc522_begin)\(\s*["']?([^"',]+)["']?(?:\s*,\s*["']?([^"',]+)["']?)?\s*\)$/);
   if (match) {
-    return `
-      <block type="mfrc522_begin">
-        <field name="SS_PIN">${escapeXml(match[1])}</field>
-      </block>
-    `;
-  }
-  if (line === 'robot.mfrc522_print_uid()' || line === 'mfrc522_print_uid()') {
-    return `<block type="mfrc522_print_uid"></block>`;
-  }
-  if (line === 'robot.mfrc522_halt()' || line === 'mfrc522_halt()') {
-    return `<block type="mfrc522_halt"></block>`;
-  }
-  match = line.match(/^(?:robot\.)?rfid_begin\(\s*["']?([^"',]+)["']?\s*,\s*["']?([^"',]+)["']?\s*\)$/);
-  if (match) {
+    const sda = match[2] ? match[1] : (match[1] === '5' ? '21' : (match[1] === '10' ? 'A4' : match[1]));
+    const scl = match[2] ? match[2] : (match[1] === '5' ? '22' : (match[1] === '10' ? 'A5' : '22'));
     return `
       <block type="lib_rfid_i2c_begin">
-        <field name="SDA">${escapeXml(match[1])}</field>
-        <field name="SCL">${escapeXml(match[2])}</field>
+        <field name="SDA">${escapeXml(sda)}</field>
+        <field name="SCL">${escapeXml(scl)}</field>
       </block>
     `;
   }
-  if (line === 'robot.rfid_print_uid()' || line === 'rfid_print_uid()') {
+  if (line === 'robot.rfid_print_uid()' || line === 'rfid_print_uid()' || line === 'robot.mfrc522_print_uid()' || line === 'mfrc522_print_uid()') {
     return `<block type="lib_rfid_print_uid"></block>`;
+  }
+  if (line === 'robot.mfrc522_halt()' || line === 'mfrc522_halt()') {
+    return ``;
   }
   match = line.match(/^(?:robot\.)?sd_begin\(\s*([^)]+)\s*\)$/);
   if (match) {
@@ -1339,13 +1330,10 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     return `<block type="esp32_websocket_get_message"></block>`;
   }
   if (expr === 'mfrc522.PICC_IsNewCardPresent()' || expr === 'robot.mfrc522_is_card()' || expr === 'robot.rfid_is_card()') {
-    return `<block type="mfrc522_is_card"></block>`;
+    return `<block type="lib_rfid_iscard"></block>`;
   }
-  if (expr === 'mfrc522.PICC_ReadCardSerial()' || expr === 'robot.mfrc522_read_serial()') {
-    return `<block type="mfrc522_read_serial"></block>`;
-  }
-  if (expr === 'getMFRC522UID()' || expr === 'robot.mfrc522_get_uid()' || expr === 'mfrc522_get_uid()') {
-    return `<block type="mfrc522_get_uid"></block>`;
+  if (expr === 'mfrc522.PICC_ReadCardSerial()' || expr === 'robot.mfrc522_read_serial()' || expr === 'getMFRC522UID()' || expr === 'robot.mfrc522_get_uid()' || expr === 'mfrc522_get_uid()' || expr === 'robot.rfid_read()' || expr === 'getRFIDUID()') {
+    return `<block type="lib_rfid_read"></block>`;
   }
 
   // 4. Top-level Logical OR / AND

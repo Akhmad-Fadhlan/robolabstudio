@@ -125,7 +125,7 @@ const INITIAL_PACKAGES = {
     { name: 'ESP32Servo', desc: 'Servo library specifically optimized for ESP32.', version: '0.13.0', installed: true },
     { name: 'IRremote', desc: 'Send and receive infrared remote control signals.', version: '4.3.1', installed: false },
     { name: 'Ultrasonic', desc: 'HC-SR04 ultrasonic distance sensor driver.', version: '3.0.0', installed: false },
-    { name: 'MFRC522v2', desc: 'Arduino RFID driver library for MFRC522 (SPI, I2C) by Github/OSSLibraries.', version: '2.0.6', installed: true },
+    { name: 'Adafruit PN532', desc: 'Library RFID & NFC Reader PN532 via I2C / SPI by Adafruit.', version: '1.3.3', installed: true },
     { name: 'WebSockets', desc: 'WebSocket Server and Client for Arduino.', version: '2.4.1', installed: false },
     { name: 'Blynk', desc: 'Blynk IoT library for ESP8266 & ESP32.', version: '1.3.2', installed: false }
   ],
@@ -6038,12 +6038,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           continue;
         }
 
-        // MFRC522 RFID specific helpers in serial / debug
+        // RFID / PN532 specific helpers in serial / debug
         if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial')) {
           queue.push({ type: 'print', value: { expr: '"Firmware Version: 0x92 = v2.0"', newline: true } });
           continue;
         }
-        if (trimmed.includes('MFRC522Debug::PrintUID') || trimmed.includes('mfrc522_print_uid') || trimmed.includes('robot.mfrc522_print_uid')) {
+        if (trimmed.includes('MFRC522Debug::PrintUID') || trimmed.includes('mfrc522_print_uid') || trimmed.includes('robot.mfrc522_print_uid') || trimmed.includes('robot.rfid_print_uid()') || trimmed.includes('rfid_print_uid()')) {
           queue.push({ type: 'mfrc522PrintUid' });
           continue;
         }
@@ -11534,7 +11534,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 { name: 'Blynk', author: 'Volodymyr Shymanskyy', desc: 'Library resmi Blynk IoT Cloud untuk ESP8266 & ESP32', cat: 'IoT', version: '1.3.2' },
                 { name: 'LiquidCrystal_I2C', author: 'Frank de Brabander', desc: 'Library modul LCD 16x2 / 20x4 I2C Backpack', cat: 'Display', version: '1.1.2' },
                 { name: 'Servo', author: 'Michael Margolis', desc: 'Library kontrol motor Servo SG90, MG996R', cat: 'Actuators', version: '1.2.1' },
-                { name: 'MFRC522v2', author: 'OSSLibraries', desc: 'Library RFID Reader RC522 (v2) untuk ESP32 & Arduino via SPI / I2C', cat: 'Sensors', version: '2.0.6' },
+                { name: 'Adafruit PN532', author: 'Adafruit', desc: 'Library RFID & NFC Reader PN532 untuk ESP32 & Arduino via I2C / SPI', cat: 'Sensors', version: '1.3.3' },
                 { name: 'NewPing', author: 'Tim Eckel', desc: 'Library sensor jarak ultrasonic HC-SR04 ultra cepat', cat: 'Sensors', version: '1.9.7' }
               ]).filter(l => !libSearchQuery || liveSearchResults.length > 0 || l.name.toLowerCase().includes(libSearchQuery.toLowerCase()) || l.desc.toLowerCase().includes(libSearchQuery.toLowerCase()))
               ).map((lib) => {

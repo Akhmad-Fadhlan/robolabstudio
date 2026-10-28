@@ -366,9 +366,10 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
   res = res.replace(/\bdht\.readTemperature\s*\(\s*\)/g, 'robot.dht_read_temp()');
   res = res.replace(/\bdht\.readHumidity\s*\(\s*\)/g, 'robot.dht_read_humi()');
-  res = res.replace(/\bmfrc522\.PICC_IsNewCardPresent\s*\(\s*\)/g, 'robot.mfrc522_is_card()');
-  res = res.replace(/\bmfrc522\.PICC_ReadCardSerial\s*\(\s*\)/g, 'robot.mfrc522_read_serial()');
-  res = res.replace(/\bgetMFRC522UID\s*\(\s*\)/g, 'robot.mfrc522_get_uid()');
+  res = res.replace(/\bgetRFIDUID\s*\(\s*\)/g, 'robot.rfid_read()');
+  res = res.replace(/\bmfrc522\.PICC_IsNewCardPresent\s*\(\s*\)/g, 'robot.rfid_is_card()');
+  res = res.replace(/\bmfrc522\.PICC_ReadCardSerial\s*\(\s*\)/g, 'robot.rfid_is_card()');
+  res = res.replace(/\bgetMFRC522UID\s*\(\s*\)/g, 'robot.rfid_read()');
   res = res.replace(/\bparam\.asInt\s*\(\s*\)/g, 'robot.blynk_param_as_int()');
   res = res.replace(/\bparam_val\b/g, 'robot.blynk_param_as_int()');
   res = res.replace(/\bpinValue\b/g, 'robot.blynk_param_as_int()');
@@ -387,6 +388,8 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
 
 function convertCppCondition(cond: string, pinConstants: Record<string, string>, instanceToClass: Record<string, string> = {}): string {
   let res = convertCppExpr(cond, pinConstants, instanceToClass);
+  res = res.replace(/(?:robot\.rfid_read\(\)|cardUID|getRFIDUID\(\))\s*!=\s*["']["']/g, 'robot.rfid_is_card()');
+  res = res.replace(/(?:robot\.rfid_read\(\)|cardUID|getRFIDUID\(\))\s*==\s*["']["']/g, 'not robot.rfid_is_card()');
   res = res.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
   res = res.replace(/(?:^|(?<=[\s(]))!(?!=)\s*/g, 'not ');
   res = res.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
@@ -595,16 +598,17 @@ function convertCtoPython(
     if (trimmed.includes('MFRC522DriverPinSimple') || trimmed.includes('MFRC522DriverSPI') || (trimmed.startsWith('MFRC522 ') && trimmed.includes('{driver}'))) {
       continue;
     }
-    if (trimmed.includes('mfrc522.PCD_Init()')) {
-      emitLine(`robot.mfrc522_begin("${detectedSsPin || '10'}")`);
+    if (trimmed.includes('nfc.begin()') || trimmed.includes('nfc.SAMConfig()') || trimmed.includes('mfrc522.PCD_Init()')) {
+      const sda = pinConstants['SDA_PIN'] || '21';
+      const scl = pinConstants['SCL_PIN'] || '22';
+      emitLine(`robot.rfid_begin("${sda}", "${scl}")`);
       continue;
     }
-    if (trimmed.includes('MFRC522Debug::PrintUID(')) {
-      emitLine('robot.mfrc522_print_uid()');
+    if (trimmed.includes('MFRC522Debug::PrintUID(') || (trimmed.includes('Serial.print') && trimmed.includes('cardUID'))) {
+      emitLine('robot.rfid_print_uid()');
       continue;
     }
     if (trimmed.includes('mfrc522.PICC_HaltA()')) {
-      emitLine('robot.mfrc522_halt()');
       continue;
     }
     if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial(') || trimmed.includes('mfrc522.PCD_StopCrypto1()') || trimmed.includes('SPI.begin()')) {

@@ -3036,7 +3036,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             <div className="absolute top-2 left-2 z-40 bg-slate-900/95 border border-slate-750 p-3 rounded-xl shadow-2xl w-44 text-white select-none animate-in fade-in zoom-in-95 duration-100">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider">
-                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ RC522 RFID' : '🎛️ Potentiometer'}
+                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ PN532 / RFID' : '🎛️ Potentiometer'}
                 </span>
                 <button 
                   onClick={() => setActivePopup(null)}

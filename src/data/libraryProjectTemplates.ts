@@ -873,141 +873,130 @@ devices = i2c.scan()
 print("I2C Devices:", [hex(d) for d in devices])`
   },
   {
-    name: "MFRC522v2 - RFID Card Reader & UID Detection",
+    name: "Adafruit PN532 - RFID & NFC Card Reader (I2C)",
     board: "Arduino Uno",
-    description: "Contoh resmi Arduino_MFRC522v2 (OSSLibraries): Membaca data UID kartu / tag RFID menggunakan modul MFRC522 via SPI dan menampilkannya ke Serial Monitor.",
+    description: "Contoh resmi Adafruit PN532: Membaca UID kartu / tag RFID & NFC via I2C (SDA Pin A4, SCL Pin A5) dan menampilkannya ke Serial Monitor.",
     iconColor: "cyan",
     components: ['rfid'],
-    libraryName: "MFRC522v2",
+    libraryName: "Adafruit PN532",
     category: "Library Example",
     isLibraryExample: true,
-    ino: `// Library Example: MFRC522v2 RFID Card Reader
-// Repositori: https://github.com/OSSLibraries/Arduino_MFRC522v2
-#include <SPI.h>
-#include <MFRC522v2.h>
-#include <MFRC522DriverSPI.h>
-#include <MFRC522DriverPinSimple.h>
-#include <MFRC522Debug.h>
+    ino: `// Library Example: Adafruit PN532 NFC / RFID Card Reader (I2C)
+// Board: Arduino Uno
+// Modul: PN532 NFC / RFID Reader & Writer
+// DIP Switch PN532: Mode I2C (SEL0 = ON / 1, SEL1 = OFF / 0)
+// Wiring:
+//   VCC -> 5V (atau 3.3V)
+//   GND -> GND
+//   SDA -> Pin A4
+//   SCL -> Pin A5
+#include <Wire.h>
+#include <Adafruit_PN532.h>
 
-#define RST_PIN 9 // Pin Reset MFRC522 (Arduino Uno: Pin 9)
+#define SDA_PIN A4
+#define SCL_PIN A5
 
-// Inisialisasi pin SS / SDA (Pin 10 pada Arduino Uno)
-MFRC522DriverPinSimple ss_pin(10);
-MFRC522DriverSPI driver{ss_pin};
-MFRC522 mfrc522{driver};
+Adafruit_PN532 nfc(-1, -1);
+bool cardPresent = false;
+
+String _lastUID = "";
+unsigned long _lastUIDTime = 0;
+
+String getRFIDUID() {
+  if (millis() - _lastUIDTime < 250 && _lastUID != "") {
+    return _lastUID;
+  }
+  uint8_t success;
+  uint8_t uid[7];
+  uint8_t uidLength;
+  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50);
+  if (success) {
+    String uidStr = "";
+    for (uint8_t i = 0; i < uidLength; i++) {
+      if (uid[i] < 0x10) uidStr += "0";
+      uidStr += String(uid[i], HEX);
+      if (i < uidLength - 1) uidStr += " ";
+    }
+    uidStr.toUpperCase();
+    _lastUID = uidStr;
+    _lastUIDTime = millis();
+    return uidStr;
+  }
+  _lastUID = "";
+  return "";
+}
 
 void setup() {
   Serial.begin(115200);
-  delay(500); // Tunggu Serial Monitor stabil
-  pinMode(RST_PIN, OUTPUT);
-  digitalWrite(RST_PIN, LOW);
-  delay(10);
-  digitalWrite(RST_PIN, HIGH);
-  delay(50);
-  SPI.begin();
-  mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
-  mfrc522.PCD_AntennaOn();
-  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
-  byte mfrcVer = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
-  Serial.print(F("MFRC522 Chip Version: 0x"));
-  Serial.println(mfrcVer, HEX);
-  if (mfrcVer == 0x00 || mfrcVer == 0xFF) {
-    Serial.println(F("❌ PERINGATAN: Modul RC522 tidak merespons (0x00/0xFF)! Cek kabel SPI & pin RST/SDA."));
-  } else {
-    Serial.println(F("✅ Modul RC522 Berhasil Terdeteksi!"));
+  delay(500);
+
+  Wire.begin();
+  Wire.setClock(100000);
+  delay(100);
+
+  Serial.println(F("Initializing PN532..."));
+  nfc.begin();
+
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    Serial.println(F("ERROR : PN532 NOT DETECTED (Periksa DIP Switch = I2C & Wiring SDA/SCL)"));
+    while (1) { delay(500); }
   }
-  Serial.println(F("MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
+
+  Serial.println(F("PN532 Successfully Detected"));
+  Serial.print(F("Chip : PN5"));
+  Serial.println((versiondata >> 24) & 0xFF, HEX);
+  nfc.SAMConfig();
+  Serial.println(F("NFC MODULE IS READY"));
+  Serial.println(F("Tempelkan kartu RFID / NFC ke reader..."));
 }
 
 void loop() {
-  // Cek apakah ada kartu RFID baru di dekat sensor
-  if (mfrc522.PICC_IsNewCardPresent()) {
-    // Pilih dan baca salah satu kartu
-    if (mfrc522.PICC_ReadCardSerial()) {
-      // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
-      Serial.print(F("Card UID: "));
-      MFRC522Debug::PrintUID(Serial, mfrc522.uid);
-      Serial.println();
-
-      // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
-      mfrc522.PICC_HaltA();
-      mfrc522.PCD_StopCrypto1();
-      delay(1000);
+  String cardUID = getRFIDUID();
+  if (cardUID != "") {
+    if (!cardPresent) {
+      cardPresent = true;
+      Serial.println(F("=========================================="));
+      Serial.println(F("CARD DETECTED"));
+      Serial.print(F("UID : "));
+      Serial.println(cardUID);
+      Serial.println(F("=========================================="));
+    }
+  } else {
+    if (cardPresent) {
+      Serial.println(F("Card Removed. Waiting for next card..."));
+      cardPresent = false;
     }
   }
+  delay(100);
 }`,
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">
   <block type="arduino_setup" id="setup" x="40" y="40">
     <statement name="STACK">
-      <block type="mfrc522_begin">
-        <field name="SS_PIN">10</field>
-        <next>
-          <block type="arduino_serial_print">
-            <value name="TEXT">
-              <block type="text">
-                <field name="TEXT">MFRC522v2 Siap! Tempelkan kartu RFID...</field>
-              </block>
-            </value>
-          </block>
-        </next>
+      <block type="lib_rfid_i2c_begin">
+        <field name="SDA">A4</field>
+        <field name="SCL">A5</field>
       </block>
     </statement>
   </block>
   <block type="arduino_loop" id="loop" x="40" y="200">
     <statement name="STACK">
-      <block type="controls_if">
-        <value name="IF0">
-          <block type="mfrc522_is_card"></block>
-        </value>
-        <statement name="DO0">
-          <block type="controls_if">
-            <value name="IF0">
-              <block type="mfrc522_read_serial"></block>
-            </value>
-            <statement name="DO0">
-              <block type="arduino_serial_print_inline">
-                <value name="TEXT">
-                  <block type="text">
-                    <field name="TEXT">Card UID: </field>
-                  </block>
-                </value>
-                <next>
-                  <block type="mfrc522_print_uid">
-                    <next>
-                      <block type="mfrc522_halt">
-                        <next>
-                          <block type="arduino_delay">
-                            <field name="MS">1000</field>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </statement>
-          </block>
-        </statement>
-      </block>
+      <block type="lib_rfid_print_uid"></block>
     </statement>
   </block>
 </xml>`,
-    py: `# Python / MicroPython MFRC522 RFID Reader
+    py: `# Python / MicroPython PN532 RFID Reader
 import time
 import robolab as robot
 
 def setup():
     robot.connect("COM3")
-    robot.mfrc522_begin("10")
-    print("MFRC522v2 Siap! Tempelkan kartu RFID...")
+    robot.rfid_begin("A4", "A5")
+    print("PN532 Siap! Tempelkan kartu RFID / NFC...")
 
 def loop():
     while True:
-        if robot.mfrc522_is_card():
-            if robot.mfrc522_read_serial():
-                print("Card UID:", robot.mfrc522_get_uid())
-                robot.mfrc522_halt()
-                time.sleep(1)
+        robot.rfid_print_uid()
         time.sleep(0.1)
 
 if __name__ == '__main__':
@@ -1015,152 +1004,134 @@ if __name__ == '__main__':
     loop()`
   },
   {
-    name: "ESP32 MFRC522v2 - RFID Card Reader & Access Control",
+    name: "ESP32 Adafruit PN532 - RFID & NFC Card Reader (I2C)",
     board: "ESP32 DevKit V1",
-    description: "Contoh resmi MFRC522v2 untuk ESP32: Membaca data UID kartu / tag RFID menggunakan modul MFRC522 via VSPI (Pin GPIO 5, 18, 23, 19) dan menampilkannya ke Serial Monitor.",
+    description: "Contoh resmi Adafruit PN532 untuk ESP32: Membaca UID kartu / tag RFID & NFC via I2C (GPIO 21 & 22) tanpa konflik pin SPI, dan menampilkannya ke Serial Monitor.",
     iconColor: "cyan",
     components: ['rfid'],
-    libraryName: "MFRC522v2",
+    libraryName: "Adafruit PN532",
     category: "Library Example",
     isLibraryExample: true,
-    ino: `// Library Example: ESP32 MFRC522v2 RFID Card Reader
-// Repositori: https://github.com/OSSLibraries/Arduino_MFRC522v2
+    ino: `// Library Example: ESP32 Adafruit PN532 NFC / RFID Card Reader (I2C)
 // Board: ESP32 DevKit V1
-// Pinout VSPI ESP32:
-//   SDA (SS) -> GPIO 5
-//   SCK      -> GPIO 18
-//   MOSI     -> GPIO 23
-//   MISO     -> GPIO 19
-//   RST      -> GPIO 22
-//   GND      -> GND
-//   3.3V     -> 3.3V (PERHATIAN: Jangan hubungkan ke 5V!)
-#include <SPI.h>
-#include <MFRC522v2.h>
-#include <MFRC522DriverSPI.h>
-#include <MFRC522DriverPinSimple.h>
-#include <MFRC522Debug.h>
+// Modul: PN532 NFC / RFID Reader & Writer
+// DIP Switch PN532: Mode I2C (SEL0 = ON / 1, SEL1 = OFF / 0)
+// Wiring ESP32:
+//   VCC -> 3.3V (atau 5V jika modul ada regulator onboard)
+//   GND -> GND
+//   SDA -> GPIO 21
+//   SCL -> GPIO 22
+#include <Wire.h>
+#include <Adafruit_PN532.h>
 
-#define RST_PIN 22 // Pin Reset MFRC522 (ESP32: GPIO 22)
+#define SDA_PIN 21
+#define SCL_PIN 22
 
-// Inisialisasi pin SS / SDA (Pin GPIO 5 pada ESP32 DevKit)
-MFRC522DriverPinSimple ss_pin(5);
-MFRC522DriverSPI driver{ss_pin};
-MFRC522 mfrc522{driver};
+Adafruit_PN532 nfc(-1, -1);
+bool cardPresent = false;
+
+String _lastUID = "";
+unsigned long _lastUIDTime = 0;
+
+String getRFIDUID() {
+  if (millis() - _lastUIDTime < 250 && _lastUID != "") {
+    return _lastUID;
+  }
+  uint8_t success;
+  uint8_t uid[7];
+  uint8_t uidLength;
+  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50);
+  if (success) {
+    String uidStr = "";
+    for (uint8_t i = 0; i < uidLength; i++) {
+      if (uid[i] < 0x10) uidStr += "0";
+      uidStr += String(uid[i], HEX);
+      if (i < uidLength - 1) uidStr += " ";
+    }
+    uidStr.toUpperCase();
+    _lastUID = uidStr;
+    _lastUIDTime = millis();
+    return uidStr;
+  }
+  _lastUID = "";
+  return "";
+}
 
 void setup() {
   Serial.begin(115200);
-  delay(500); // Tunggu Serial Monitor stabil
-  pinMode(RST_PIN, OUTPUT);
-  digitalWrite(RST_PIN, LOW);
-  delay(20);
-  digitalWrite(RST_PIN, HIGH);
-  delay(50);
-  pinMode(5, OUTPUT);
-  digitalWrite(5, HIGH);
-  SPI.begin(18, 19, 23); // VSPI pins: SCK=18, MISO=19, MOSI=23
-  mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
-  mfrc522.PCD_AntennaOn();
-  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
-  byte mfrcVer = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
-  Serial.print(F("MFRC522 Chip Version: 0x"));
-  Serial.println(mfrcVer, HEX);
-  if (mfrcVer == 0x00 || mfrcVer == 0xFF) {
-    Serial.println(F("❌ PERINGATAN: Modul RC522 tidak merespons (0x00/0xFF)! Cek kabel SPI & pin RST/SDA."));
-  } else {
-    Serial.println(F("✅ Modul RC522 Berhasil Terdeteksi!"));
+  delay(500);
+
+  #if defined(ESP32) || defined(ESP8266)
+  Wire.begin(SDA_PIN, SCL_PIN);
+  #else
+  Wire.begin();
+  #endif
+  Wire.setClock(100000);
+  delay(100);
+
+  Serial.println(F("Initializing PN532..."));
+  nfc.begin();
+
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    Serial.println(F("ERROR : PN532 NOT DETECTED (Periksa DIP Switch = I2C & Wiring SDA/SCL)"));
+    while (1) { delay(500); }
   }
-  Serial.println(F("ESP32 MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
+
+  Serial.println(F("PN532 Successfully Detected"));
+  Serial.print(F("Chip : PN5"));
+  Serial.println((versiondata >> 24) & 0xFF, HEX);
+  nfc.SAMConfig();
+  Serial.println(F("NFC MODULE IS READY"));
+  Serial.println(F("Tempelkan kartu RFID / NFC ke reader..."));
 }
 
 void loop() {
-  // Cek apakah ada kartu RFID baru di dekat sensor
-  if (mfrc522.PICC_IsNewCardPresent()) {
-    // Pilih dan baca salah satu kartu
-    if (mfrc522.PICC_ReadCardSerial()) {
-      // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
-      Serial.print(F("Card UID: "));
-      MFRC522Debug::PrintUID(Serial, mfrc522.uid);
-      Serial.println();
-
-      // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
-      mfrc522.PICC_HaltA();
-      mfrc522.PCD_StopCrypto1();
-      delay(1000);
+  String cardUID = getRFIDUID();
+  if (cardUID != "") {
+    if (!cardPresent) {
+      cardPresent = true;
+      Serial.println(F("=========================================="));
+      Serial.println(F("CARD DETECTED"));
+      Serial.print(F("UID : "));
+      Serial.println(cardUID);
+      Serial.println(F("=========================================="));
+    }
+  } else {
+    if (cardPresent) {
+      Serial.println(F("Card Removed. Waiting for next card..."));
+      cardPresent = false;
     }
   }
+  delay(100);
 }`,
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">
   <block type="arduino_setup" id="setup" x="40" y="40">
     <statement name="STACK">
-      <block type="mfrc522_begin">
-        <field name="SS_PIN">5</field>
-        <next>
-          <block type="arduino_serial_print">
-            <value name="TEXT">
-              <block type="text">
-                <field name="TEXT">ESP32 MFRC522v2 Siap! Tempelkan kartu RFID...</field>
-              </block>
-            </value>
-          </block>
-        </next>
+      <block type="lib_rfid_i2c_begin">
+        <field name="SDA">21</field>
+        <field name="SCL">22</field>
       </block>
     </statement>
   </block>
   <block type="arduino_loop" id="loop" x="40" y="200">
     <statement name="STACK">
-      <block type="controls_if">
-        <value name="IF0">
-          <block type="mfrc522_is_card"></block>
-        </value>
-        <statement name="DO0">
-          <block type="controls_if">
-            <value name="IF0">
-              <block type="mfrc522_read_serial"></block>
-            </value>
-            <statement name="DO0">
-              <block type="arduino_serial_print_inline">
-                <value name="TEXT">
-                  <block type="text">
-                    <field name="TEXT">Card UID: </field>
-                  </block>
-                </value>
-                <next>
-                  <block type="mfrc522_print_uid">
-                    <next>
-                      <block type="mfrc522_halt">
-                        <next>
-                          <block type="arduino_delay">
-                            <field name="MS">1000</field>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </statement>
-          </block>
-        </statement>
-      </block>
+      <block type="lib_rfid_print_uid"></block>
     </statement>
   </block>
 </xml>`,
-    py: `# Python / MicroPython ESP32 MFRC522 RFID Reader
+    py: `# Python / MicroPython ESP32 PN532 RFID Reader
 import time
 import robolab as robot
 
 def setup():
     robot.connect("COM4")
-    robot.mfrc522_begin("5")
-    print("ESP32 MFRC522v2 Siap! Tempelkan kartu RFID...")
+    robot.rfid_begin("21", "22")
+    print("ESP32 PN532 Siap! Tempelkan kartu RFID / NFC...")
 
 def loop():
     while True:
-        if robot.mfrc522_is_card():
-            if robot.mfrc522_read_serial():
-                print("Card UID:", robot.mfrc522_get_uid())
-                robot.mfrc522_halt()
-                time.sleep(1)
+        robot.rfid_print_uid()
         time.sleep(0.1)
 
 if __name__ == '__main__':
