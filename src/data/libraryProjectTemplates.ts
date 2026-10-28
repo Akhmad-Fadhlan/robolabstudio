@@ -999,5 +999,311 @@ def loop():
 if __name__ == '__main__':
     setup()
     loop()`
+  },
+  {
+    name: "ESP32 MFRC522v2 - RFID Card Reader & Access Control",
+    board: "ESP32 DevKit V1",
+    description: "Contoh resmi MFRC522v2 untuk ESP32: Membaca data UID kartu / tag RFID menggunakan modul MFRC522 via VSPI (Pin GPIO 5, 18, 23, 19) dan menampilkannya ke Serial Monitor.",
+    iconColor: "cyan",
+    components: ['rfid'],
+    libraryName: "MFRC522v2",
+    category: "Library Example",
+    isLibraryExample: true,
+    ino: `// Library Example: ESP32 MFRC522v2 RFID Card Reader
+// Repositori: https://github.com/OSSLibraries/Arduino_MFRC522v2
+// Board: ESP32 DevKit V1
+// Pinout VSPI ESP32:
+//   SDA (SS) -> GPIO 5
+//   SCK      -> GPIO 18
+//   MOSI     -> GPIO 23
+//   MISO     -> GPIO 19
+//   RST      -> GPIO 22
+//   GND      -> GND
+//   3.3V     -> 3.3V (PERHATIAN: Jangan hubungkan ke 5V!)
+#include <MFRC522v2.h>
+#include <MFRC522DriverSPI.h>
+#include <MFRC522DriverPinSimple.h>
+#include <MFRC522Debug.h>
+
+// Inisialisasi pin SS / SDA (Pin GPIO 5 pada ESP32 DevKit)
+MFRC522DriverPinSimple ss_pin(5);
+MFRC522DriverSPI driver{ss_pin};
+MFRC522 mfrc522{driver};
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial);
+  mfrc522.PCD_Init(); // Inisialisasi modul MFRC522
+  MFRC522Debug::PCD_DumpVersionToSerial(mfrc522, Serial);
+  Serial.println(F("ESP32 MFRC522v2 Siap! Tempelkan kartu atau tag RFID ke reader..."));
+}
+
+void loop() {
+  // Cek apakah ada kartu RFID baru di dekat sensor
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  // Pilih dan baca salah satu kartu
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  // Tampilkan UID ke Serial Monitor dengan MFRC522Debug
+  Serial.print(F("Card UID: "));
+  MFRC522Debug::PrintUID(Serial, mfrc522.uid);
+  Serial.println();
+
+  // Hentikan komunikasi dengan kartu (PICC) dan matikan enkripsi
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+  delay(1000);
+}`,
+    xml: `<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="arduino_setup" id="setup" x="40" y="40">
+    <statement name="STACK">
+      <block type="mfrc522_begin">
+        <field name="SS_PIN">5</field>
+        <next>
+          <block type="arduino_serial_print">
+            <value name="TEXT">
+              <block type="text">
+                <field name="TEXT">ESP32 MFRC522v2 Siap! Tempelkan kartu RFID...</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="arduino_loop" id="loop" x="40" y="200">
+    <statement name="STACK">
+      <block type="controls_if">
+        <value name="IF0">
+          <block type="mfrc522_is_card"></block>
+        </value>
+        <statement name="DO0">
+          <block type="controls_if">
+            <value name="IF0">
+              <block type="mfrc522_read_serial"></block>
+            </value>
+            <statement name="DO0">
+              <block type="arduino_serial_print_inline">
+                <value name="TEXT">
+                  <block type="text">
+                    <field name="TEXT">Card UID: </field>
+                  </block>
+                </value>
+                <next>
+                  <block type="mfrc522_print_uid">
+                    <next>
+                      <block type="mfrc522_halt">
+                        <next>
+                          <block type="arduino_delay">
+                            <field name="MS">1000</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>`,
+    py: `# Python / MicroPython ESP32 MFRC522 RFID Reader
+import time
+import robolab as robot
+
+def setup():
+    robot.connect("COM4")
+    robot.mfrc522_begin("5")
+    print("ESP32 MFRC522v2 Siap! Tempelkan kartu RFID...")
+
+def loop():
+    while True:
+        if robot.mfrc522_is_card():
+            if robot.mfrc522_read_serial():
+                print("Card UID:", robot.rfid_read())
+                robot.mfrc522_halt()
+                time.sleep(1)
+        time.sleep(0.1)
+
+if __name__ == '__main__':
+    setup()
+    loop()`
+  },
+  {
+    name: "ESP32 Blynk IoT - Smart LED & Telemetry Control",
+    board: "ESP32 DevKit V1",
+    description: "Kontrol LED dan aktuator ESP32 dari jarak jauh secara realtime menggunakan Blynk IoT Cloud (Virtual Pin V0 - V3) via WiFi.",
+    iconColor: "emerald",
+    components: ['led'],
+    libraryName: "Blynk",
+    category: "Library Example",
+    isLibraryExample: true,
+    ino: `// Proyek: ESP32 Blynk IoT Smart LED & Telemetry Control
+// Board: ESP32 DevKit V1
+// Library: Blynk by Volodymyr Shymanskyy
+#define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
+#define BLYNK_TEMPLATE_NAME "ESP32 Smart LED"
+#define BLYNK_AUTH_TOKEN "p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// Definisi Pin LED bawaan / output (GPIO 2 pada ESP32 DevKit)
+const int LED_PIN = 2;
+
+// Handler callback saat widget di aplikasi Blynk (Virtual Pin V0) ditekan
+BLYNK_WRITE(V0) {
+  int pinValue = param.asInt();
+  if (pinValue == 1) {
+    digitalWrite(LED_PIN, HIGH);
+    Serial.println(F("Blynk: LED MENYALA (ON)"));
+    Blynk.virtualWrite(V1, "Status: ON");
+  } else {
+    digitalWrite(LED_PIN, LOW);
+    Serial.println(F("Blynk: LED PADAM (OFF)"));
+    Blynk.virtualWrite(V1, "Status: OFF");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  // Hubungkan ke WiFi dan Blynk Cloud
+  // Ganti "RoboLab-WiFi" dan "12345678" sesuai access point WiFi Anda
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678");
+  Serial.println(F("ESP32 Terhubung ke Blynk Cloud!"));
+}
+
+void loop() {
+  Blynk.run();
+}`,
+    xml: `<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="blynk_config" x="40" y="40">
+    <value name="TEMPLATE_ID">
+      <shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow>
+    </value>
+    <value name="TEMPLATE_NAME">
+      <shadow type="text"><field name="TEXT">ESP32 Smart LED</field></shadow>
+    </value>
+    <value name="AUTH_TOKEN">
+      <shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow>
+    </value>
+  </block>
+  <block type="blynk_on_write" x="40" y="160">
+    <field name="VPIN">V0</field>
+    <statement name="STACK">
+      <block type="controls_if">
+        <value name="IF0">
+          <block type="robolab_logic_compare">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="blynk_param_as_int"></block>
+            </value>
+            <value name="B">
+              <shadow type="math_number"><field name="NUM">1</field></shadow>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="pin_digital_write">
+            <field name="PIN">2</field>
+            <field name="STATE">HIGH</field>
+            <next>
+              <block type="blynk_virtual_write">
+                <field name="VPIN">V1</field>
+                <value name="VALUE">
+                  <block type="text"><field name="TEXT">Status: ON</field></block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if">
+            <value name="IF0">
+              <block type="robolab_logic_compare">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="blynk_param_as_int"></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number"><field name="NUM">0</field></shadow>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="pin_digital_write">
+                <field name="PIN">2</field>
+                <field name="STATE">LOW</field>
+                <next>
+                  <block type="blynk_virtual_write">
+                    <field name="VPIN">V1</field>
+                    <value name="VALUE">
+                      <block type="text"><field name="TEXT">Status: OFF</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="arduino_setup" x="40" y="480">
+    <statement name="STACK">
+      <block type="pin_digital_write">
+        <field name="PIN">2</field>
+        <field name="STATE">LOW</field>
+        <next>
+          <block type="blynk_begin">
+            <value name="AUTH">
+              <shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow>
+            </value>
+            <value name="SSID">
+              <shadow type="text"><field name="TEXT">RoboLab-WiFi</field></shadow>
+            </value>
+            <value name="PASS">
+              <shadow type="text"><field name="TEXT">12345678</field></shadow>
+            </value>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="arduino_loop" x="40" y="660">
+    <statement name="STACK">
+      <block type="blynk_run"></block>
+    </statement>
+  </block>
+</xml>`,
+    py: `# Python / MicroPython ESP32 Blynk IoT Control
+import time
+import robolab as robot
+
+def setup():
+    robot.connect("COM4")
+    robot.blynk_begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "RoboLab-WiFi", "12345678")
+    print("ESP32 Blynk IoT Terhubung!")
+
+def loop():
+    while True:
+        robot.blynk_run()
+        time.sleep(0.1)
+
+if __name__ == '__main__':
+    setup()
+    loop()`
   }
 ];

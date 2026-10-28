@@ -3035,7 +3035,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           if (lowerLib.includes('dht')) {
             header = 'DHT';
-          } else if (lowerLib.includes('pn532') || lowerLib.includes('adafruit-pn532') || lowerLib.includes('rfid')) {
+          } else if (lowerLib.includes('mfrc522')) {
+            // MFRC522v2 is handled with dedicated SPI drivers and instance declaration below
+            return;
+          } else if (lowerLib.includes('pn532') || lowerLib.includes('adafruit-pn532') || (lowerLib.includes('rfid') && !lowerLib.includes('mfrc522'))) {
             header = 'Adafruit_PN532';
           } else if (lowerLib.includes('servo')) {
             header = activeBoard.toLowerCase().includes('esp32') ? 'ESP32Servo' : 'Servo';
@@ -3208,16 +3211,28 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         return t.includes('rfid') || t.includes('pn532') || t.includes('nfc') || t.includes('mfrc522');
       });
       if (hasMFRC522) {
-        if (!generatedCode.includes('#include <MFRC522v2.h>')) {
-          generatedCode += '#include <MFRC522v2.h>\n#include <MFRC522DriverSPI.h>\n#include <MFRC522DriverPinSimple.h>\n#include <MFRC522Debug.h>\n\n';
-          const beginBlk = workspace.getAllBlocks(false).find((b: any) => isBlockActive(b) && b.type === 'mfrc522_begin');
-          let ssPin = '10';
-          if (beginBlk && beginBlk.getField('SS_PIN')) {
-            ssPin = beginBlk.getFieldValue('SS_PIN') || '10';
+        if (!generatedCode.includes('MFRC522 mfrc522')) {
+          if (!generatedCode.includes('#include <MFRC522v2.h>')) {
+            generatedCode += '#include <MFRC522v2.h>\n';
           }
-          const targetBoard = (boardType || board || '').toLowerCase();
-          if (targetBoard.includes('esp32') && ssPin === '10') {
-            ssPin = '5';
+          if (!generatedCode.includes('#include <MFRC522DriverSPI.h>')) {
+            generatedCode += '#include <MFRC522DriverSPI.h>\n';
+          }
+          if (!generatedCode.includes('#include <MFRC522DriverPinSimple.h>')) {
+            generatedCode += '#include <MFRC522DriverPinSimple.h>\n';
+          }
+          if (!generatedCode.includes('#include <MFRC522Debug.h>')) {
+            generatedCode += '#include <MFRC522Debug.h>\n\n';
+          }
+          const beginBlk = workspace.getAllBlocks(false).find((b: any) => isBlockActive(b) && b.type === 'mfrc522_begin');
+          let ssPin = '';
+          if (beginBlk && beginBlk.getField('SS_PIN')) {
+            ssPin = (beginBlk.getFieldValue('SS_PIN') || '').trim();
+          }
+          const targetBoard = (activeBoard || boardType || board || '').toLowerCase();
+          const isEsp = targetBoard.includes('esp32');
+          if (!ssPin || (ssPin === '10' && isEsp)) {
+            ssPin = isEsp ? '5' : '10';
           }
           generatedCode += `MFRC522DriverPinSimple ss_pin(${ssPin});\nMFRC522DriverSPI driver{ss_pin};\nMFRC522 mfrc522{driver};\n\n`;
         }
@@ -5461,7 +5476,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       } else if (currentBlock.type === 'mfrc522_print_uid') {
         if (lang === 'arduino') {
-          code += `${indent}Serial.print(F("Card UID: "));\n`;
           code += `${indent}MFRC522Debug::PrintUID(Serial, mfrc522.uid);\n`;
           code += `${indent}Serial.println();\n`;
         } else {

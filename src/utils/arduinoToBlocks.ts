@@ -411,6 +411,15 @@ function convertCtoPython(
   let skipWifiConnectLoop = false;
   let wifiLoopBraceDepth = 0;
 
+  let detectedSsPin = '10';
+  for (const rawLine of cLines) {
+    const sm = rawLine.match(/MFRC522DriverPinSimple\s+ss_pin\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
+    if (sm) {
+      detectedSsPin = resolvePin(sm[1]);
+      break;
+    }
+  }
+
   for (let idx = 0; idx < cLines.length; idx++) {
     let trimmed = stripCppLineComment(cLines[idx]).trim();
     if (!trimmed) continue;
@@ -579,8 +588,11 @@ function convertCtoPython(
     }
 
     // Statements
+    if (trimmed.includes('MFRC522DriverPinSimple') || trimmed.includes('MFRC522DriverSPI') || (trimmed.startsWith('MFRC522 ') && trimmed.includes('{driver}'))) {
+      continue;
+    }
     if (trimmed.includes('mfrc522.PCD_Init()')) {
-      emitLine('robot.mfrc522_begin("10")');
+      emitLine(`robot.mfrc522_begin("${detectedSsPin || '10'}")`);
       continue;
     }
     if (trimmed.includes('MFRC522Debug::PrintUID(')) {
