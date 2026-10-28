@@ -5488,12 +5488,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             auth = 'BLYNK_AUTH_TOKEN';
           }
         }
-        let ssid = ssidBlock ? getBlockValue(ssidBlock, lang) : '"NamaWiFiAnda"';
-        // Safeguard: replace bogus/leftover single-char SSID values (e.g. "i") with a proper placeholder
-        if (!ssid || ssid === '""' || (ssid.startsWith('"') && ssid.endsWith('"') && ssid.length <= 3)) {
-          ssid = '"NamaWiFiAnda"';
+        let ssid = ssidBlock ? getBlockValue(ssidBlock, lang) : '""';
+        if (!ssid) {
+          ssid = '""';
         }
-        let pass = passBlock ? getBlockValue(passBlock, lang) : '"PasswordWiFi"';
+        let pass = passBlock ? getBlockValue(passBlock, lang) : '""';
+        if (!pass) {
+          pass = '""';
+        }
         if (lang === 'arduino') {
           code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass}, "blynk.cloud", 8080);\n`;
         } else {

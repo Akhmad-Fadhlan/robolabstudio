@@ -4502,18 +4502,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     }
 
-    // 2. Extract SSID if variable name (like 'ssid') was passed or bogus value
-    if (!ssid || ssid === 'ssid' || ssid === 'WiFi' || ssid === 'SSID' || ssid === 'MyWiFi' || ssid === 'i' || ssid.length <= 1) {
+    // 2. Extract SSID if variable name (like 'ssid') was passed
+    if (!ssid || ssid === 'ssid' || ssid === 'WiFi' || ssid === 'SSID' || ssid === 'MyWiFi') {
       const ssidMatch = 
         codeText.match(/char\s+ssid\s*\[\s*\]\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/(?:const\s+char\*|String)\s+ssid\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/#define\s+WIFI_SSID\s+["']([^"']+)["']/) ||
         codeText.match(/SSID\s*=\s*["']([^"']+)["']/) ||
         codeText.match(/ssid\s*=\s*["']([^"']+)["']/);
-      if (ssidMatch && ssidMatch[1] && ssidMatch[1] !== 'i' && ssidMatch[1].length > 1) {
+      if (ssidMatch && ssidMatch[1]) {
         ssid = ssidMatch[1].trim();
-      } else {
-        ssid = 'RoboLab-WiFi';
       }
     }
 
