@@ -726,9 +726,17 @@ function convertCtoPython(
       trimmed.startsWith('Blynk.config(') ||
       trimmed.startsWith('Blynk.connect(') ||
       trimmed === 'Blynk.connect()' ||
+      trimmed.startsWith('int _wifi_retry') ||
+      trimmed.startsWith('_wifi_retry++') ||
       trimmed.startsWith('int _gw_timeout') ||
       trimmed.startsWith('while (WiFi.gatewayIP()') ||
       trimmed.startsWith('_gw_timeout++') ||
+      trimmed.startsWith('if (WiFi.gatewayIP()') ||
+      trimmed.startsWith('IPAddress _ip = WiFi.localIP()') ||
+      trimmed.startsWith('IPAddress _gw(') ||
+      trimmed.startsWith('IPAddress _mask(') ||
+      trimmed.startsWith('IPAddress _dns(') ||
+      trimmed.startsWith('WiFi.config(_ip') ||
       trimmed.startsWith('IPAddress _blynkIP') ||
       trimmed.startsWith('if (!WiFi.hostByName(') ||
       trimmed.startsWith('_blynkIP = IPAddress(') ||
