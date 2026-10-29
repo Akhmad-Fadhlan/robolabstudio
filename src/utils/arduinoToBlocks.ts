@@ -736,7 +736,11 @@ function convertCtoPython(
       trimmed.startsWith('IPAddress _gw(') ||
       trimmed.startsWith('IPAddress _mask(') ||
       trimmed.startsWith('IPAddress _dns(') ||
+      trimmed.startsWith('WiFi.disconnect(') ||
       trimmed.startsWith('WiFi.config(_ip') ||
+      trimmed.startsWith('int _reconn_tries') ||
+      trimmed.startsWith('_reconn_tries++') ||
+      trimmed.startsWith('while (WiFi.status() != WL_CONNECTED && _reconn_tries') ||
       trimmed.startsWith('IPAddress _blynkIP') ||
       trimmed.startsWith('if (!WiFi.hostByName(') ||
       trimmed.startsWith('_blynkIP = IPAddress(') ||
