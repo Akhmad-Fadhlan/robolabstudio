@@ -722,7 +722,7 @@ function convertCtoPython(
       emitLine(`robot.blynk_begin(${auth}, ${ssid}, ${pass})`);
       continue;
     }
-    if (trimmed.startsWith('Blynk.config(') || trimmed.startsWith('Blynk.connect(') || trimmed === 'Blynk.connect()') {
+    if (trimmed.startsWith('Blynk.config(') || trimmed.startsWith('Blynk.connect(') || trimmed === 'Blynk.connect()' || trimmed === 'if (Blynk.connected()) {' || trimmed === 'Serial.println("Connected to Blynk!");' || trimmed === 'Serial.println("Connecting to Blynk...");') {
       continue;
     }
     if (trimmed === 'Blynk.run()') {

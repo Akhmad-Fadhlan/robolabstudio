@@ -5506,7 +5506,21 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
         if (lang === 'arduino') {
           code += `${indent}WiFi.mode(WIFI_STA);\n`;
-          code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass}, "blynk.cloud", 80);\n`;
+          code += `${indent}WiFi.begin(${ssid}, ${pass});\n`;
+          code += `${indent}while (WiFi.status() != WL_CONNECTED) {\n`;
+          code += `${indent}  delay(500);\n`;
+          code += `${indent}  Serial.print(".");\n`;
+          code += `${indent}}\n`;
+          code += `${indent}Serial.println("\\nConnected to WiFi!");\n`;
+          code += `${indent}Serial.print("IP: ");\n`;
+          code += `${indent}Serial.println(WiFi.localIP());\n`;
+          code += `${indent}delay(500);\n`;
+          code += `${indent}Serial.println("Connecting to Blynk...");\n`;
+          code += `${indent}Blynk.config(${auth}, "blynk.cloud", 80);\n`;
+          code += `${indent}Blynk.connect(10000);\n`;
+          code += `${indent}if (Blynk.connected()) {\n`;
+          code += `${indent}  Serial.println("Connected to Blynk!");\n`;
+          code += `${indent}}\n`;
         } else {
           code += `${indent}robot.blynk_begin(${auth}, ${ssid}, ${pass})\n`;
         }
