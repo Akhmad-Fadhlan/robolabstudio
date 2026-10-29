@@ -5516,17 +5516,30 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}Serial.println(WiFi.localIP());\n`;
           code += `${indent}delay(500);\n`;
           code += `${indent}Serial.println("Connecting to Blynk...");\n`;
-          code += `${indent}Blynk.config(${auth}, "blynk.cloud", 80);\n`;
-          code += `${indent}Blynk.connect(10000);\n`;
-          code += `${indent}if (Blynk.connected()) {\n`;
+          code += `${indent}IPAddress _blynkIP;\n`;
+          code += `${indent}if (!WiFi.hostByName("blynk.cloud", _blynkIP)) {\n`;
+          code += `${indent}  _blynkIP = IPAddress(128, 199, 144, 129);\n`;
+          code += `${indent}}\n`;
+          code += `${indent}Blynk.config(${auth}, _blynkIP, 80);\n`;
+          code += `${indent}if (Blynk.connect(7000)) {\n`;
           code += `${indent}  Serial.println("Connected to Blynk!");\n`;
+          code += `${indent}} else {\n`;
+          code += `${indent}  Serial.println("Blynk connection pending (retrying in loop)...");\n`;
           code += `${indent}}\n`;
         } else {
           code += `${indent}robot.blynk_begin(${auth}, ${ssid}, ${pass})\n`;
         }
       } else if (currentBlock.type === 'blynk_run') {
         if (lang === 'arduino') {
-          code += `${indent}Blynk.run();\n`;
+          code += `${indent}if (Blynk.connected()) {\n`;
+          code += `${indent}  Blynk.run();\n`;
+          code += `${indent}} else if (WiFi.status() == WL_CONNECTED) {\n`;
+          code += `${indent}  static unsigned long _lastBlynkRetry = 0;\n`;
+          code += `${indent}  if (millis() - _lastBlynkRetry > 5000) {\n`;
+          code += `${indent}    _lastBlynkRetry = millis();\n`;
+          code += `${indent}    Blynk.connect(2000);\n`;
+          code += `${indent}  }\n`;
+          code += `${indent}}\n`;
         } else {
           code += `${indent}robot.blynk_run()\n`;
         }

@@ -722,7 +722,22 @@ function convertCtoPython(
       emitLine(`robot.blynk_begin(${auth}, ${ssid}, ${pass})`);
       continue;
     }
-    if (trimmed.startsWith('Blynk.config(') || trimmed.startsWith('Blynk.connect(') || trimmed === 'Blynk.connect()' || trimmed === 'if (Blynk.connected()) {' || trimmed === 'Serial.println("Connected to Blynk!");' || trimmed === 'Serial.println("Connecting to Blynk...");') {
+    if (
+      trimmed.startsWith('Blynk.config(') ||
+      trimmed.startsWith('Blynk.connect(') ||
+      trimmed === 'Blynk.connect()' ||
+      trimmed.startsWith('IPAddress _blynkIP') ||
+      trimmed.startsWith('if (!WiFi.hostByName(') ||
+      trimmed.startsWith('_blynkIP = IPAddress(') ||
+      trimmed.startsWith('if (Blynk.connected())') ||
+      trimmed.startsWith('} else if (WiFi.status() == WL_CONNECTED)') ||
+      trimmed.startsWith('static unsigned long _lastBlynkRetry') ||
+      trimmed.startsWith('if (millis() - _lastBlynkRetry') ||
+      trimmed.startsWith('_lastBlynkRetry = millis()') ||
+      trimmed.includes('Connected to Blynk') ||
+      trimmed.includes('Connecting to Blynk') ||
+      trimmed.includes('Blynk connection pending')
+    ) {
       continue;
     }
     if (trimmed === 'Blynk.run()') {
