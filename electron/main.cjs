@@ -1681,10 +1681,10 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       const cpuCount = os.cpus().length || 4;
       const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
       const hasPrecompiledCore = fs.existsSync(path.join(buildDir, 'core', 'core.a'));
-      let jobCount = Math.min(4, Math.max(2, Math.floor(cpuCount / 2)));
-      if (freeMemMB < 1300) {
+      let jobCount = Math.min(6, Math.max(2, Math.floor(cpuCount / 2)));
+      if (freeMemMB < 450) {
         jobCount = 1;
-      } else if (isESP8266 || freeMemMB < 2400 || !hasPrecompiledCore) {
+      } else if (isESP8266 || freeMemMB < 800) {
         jobCount = Math.min(2, jobCount);
       }
 

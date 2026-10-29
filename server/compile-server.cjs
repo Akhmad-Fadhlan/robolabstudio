@@ -522,10 +522,10 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
     const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
     const hasPrecompiledCore = fs.existsSync(path.join(buildDir, 'core', 'core.a'));
     // Limit parallel cc1plus.exe jobs on ESP8266 or low-RAM Windows systems to prevent 32-bit cc1plus.exe OOM
-    let jobCount = Math.min(4, Math.max(2, Math.floor(cpuCount / 2)));
-    if (freeMemMB < 1300) {
+    let jobCount = Math.min(6, Math.max(2, Math.floor(cpuCount / 2)));
+    if (freeMemMB < 450) {
       jobCount = 1;
-    } else if (isEsp8266 || freeMemMB < 2400 || !hasPrecompiledCore) {
+    } else if (isEsp8266 || freeMemMB < 800) {
       jobCount = Math.min(2, jobCount);
     }
 
