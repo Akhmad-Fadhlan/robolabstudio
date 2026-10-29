@@ -268,7 +268,7 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
       const str = d.toString();
       stdoutText += str;
       if (logs) {
-        str.split(/\r?\n/).forEach((line) => {
+        str.split(/\r?\n|\r/).forEach((line) => {
           const trimmed = line.trim();
           if (!trimmed) return;
           // Filter overly noisy compiler command lines while keeping useful status lines
@@ -284,13 +284,13 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
       const str = d.toString();
       stderrText += str;
       if (logs) {
-        str.split(/\r?\n/).forEach((line) => {
+        str.split(/\r?\n|\r/).forEach((line) => {
           const trimmed = line.trim();
           if (!trimmed) return;
           // Suppress harmless arduino-cli deprecation notice
           if (trimmed.includes('--build-cache-path has been deprecated')) return;
           const isUploadProgress =
-            /\d+%|uploading|writing|reading|erasing|bytes|hard resetting|connecting|leaving|[║╠╚]|SEGMENT|RODATA|ICACHE|IRAM|IROM/i.test(
+            /\d+%|\d+\s*%|uploading|writing|reading|erasing|bytes|hard resetting|connecting|leaving|[║╠╚]|SEGMENT|RODATA|ICACHE|IRAM|IROM/i.test(
               trimmed
             );
           logs.push({ text: trimmed, type: isUploadProgress ? 'stdout' : 'error' });
@@ -485,8 +485,14 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
         saveHashCache();
         logs.push({
           text: '⚡ [Build Cache] Kode tidak berubah — menggunakan hasil kompilasi cache instan! (Sangat Cepat)',
-          type: 'success',
+          type: 'info',
         });
+        const cachedInfo = lastCompiledHashes[fqbn + '_info'];
+        if (cachedInfo) {
+          if (cachedInfo.sketchSize) logs.push({ text: cachedInfo.sketchSize, type: 'stdout' });
+          if (cachedInfo.globVarSize) logs.push({ text: cachedInfo.globVarSize, type: 'stdout' });
+        }
+        logs.push({ text: '✓ Kompilasi berhasil!', type: 'success' });
       }
     } catch {}
   }
@@ -650,6 +656,12 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
     }
     lastCompiledHashes[fqbn] = codeHash;
     lastCompiledHashes[board] = codeHash;
+    const sketchMatch = (res.stdout || '').match(/Sketch uses \d+ bytes[^\r\n]*/i);
+    const globMatch = (res.stdout || '').match(/Global variables use \d+ bytes[^\r\n]*/i);
+    lastCompiledHashes[fqbn + '_info'] = {
+      sketchSize: sketchMatch ? sketchMatch[0] : '',
+      globVarSize: globMatch ? globMatch[0] : '',
+    };
     saveHashCache();
     logs.push({ text: '✓ Kompilasi berhasil!', type: 'success' });
   }

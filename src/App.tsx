@@ -7216,13 +7216,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               : 'Firmware Flashed Successfully 🎉'
           );
           if (action === 'upload') {
-            setTerminalLogs(prev => [
-              ...prev,
-              {
-                text: '📡 Program sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.',
-                type: 'info',
-              },
-            ]);
+            const statusMsg = '📡 Program sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.';
+            setTerminalLogs(prev => [...prev, { text: statusMsg, type: 'info' }]);
+            setInteractiveTerminalLogs(prev => [...prev, { text: statusMsg, type: 'output' }]);
             setTimeout(async () => {
               const targetPortAddr = webRes.selectedPort || port;
               const started = await startWebSerialMonitor(
@@ -7292,15 +7288,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setBuildStatusText(action === 'verify' ? 'Compilation Successful' : action === 'upload' ? 'Upload Successful 🎉' : 'Firmware Flashed Successfully 🎉');
         // After successful upload, switch to Serial Monitor to see real hardware output
         if (action === 'upload') {
+          const statusMsg = '📡 Program berhasil diunggah dan sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.';
+          setTerminalLogs(prev => [...prev, { text: statusMsg, type: 'info' }]);
+          setInteractiveTerminalLogs(prev => [...prev, { text: statusMsg, type: 'output' }]);
           setTimeout(() => {
-            setTerminalTab('serial');
             try {
               const electron = req('electron');
               electron.ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
               setIsSerialConnected(true);
               setConnectedPort(port);
             } catch(e) {}
-          }, 500);
+          }, 800);
         }
       } else {
         setBuildStatusText(action === 'verify' ? 'Compilation Failed' : action === 'upload' ? 'Upload Failed' : 'Flash Firmware Failed');

@@ -1374,7 +1374,7 @@ export async function flashEspViaWebSerial(
         : rawBytes.length;
 
       onLog({
-        text: `📦 Menghapus flash & menulis partisi ${part.name || 'firmware'} (${rawBytes.length} bytes) pada offset 0x${offset.toString(16)}...`,
+        text: `🗑️ [esptool-web] Menghapus flash / firmware lama (${part.name || 'firmware'}, ${eraseSize} bytes) pada offset 0x${offset.toString(16).padStart(8, '0')}...`,
         type: 'info',
       });
 
@@ -1397,6 +1397,11 @@ export async function flashEspViaWebSerial(
           }`
         );
       }
+
+      onLog({
+        text: `✓ Sektor flash berhasil dihapus! Menulis ${numBlocks} blok data (${rawBytes.length} bytes)...`,
+        type: 'info',
+      });
 
       for (let seq = 0; seq < numBlocks; seq++) {
         const slice = rawBytes.slice(seq * blockSize, (seq + 1) * blockSize);
@@ -1434,6 +1439,11 @@ export async function flashEspViaWebSerial(
           });
         }
       }
+
+      onLog({
+        text: `✓ Partisi ${part.name || 'firmware'} (${rawBytes.length} bytes) berhasil ditulis!`,
+        type: 'success',
+      });
     }
 
     // ESP_FLASH_END (0x04): [0x00000000 -> reboot into user application]
@@ -1456,6 +1466,7 @@ export async function flashEspViaWebSerial(
     try { await readerLoopPromise; } catch {}
     try { await port.close(); } catch {}
 
+    onLog({ text: 'Hash of data verified.', type: 'stdout' });
     onLog({ text: 'Leaving... Hard resetting via RTS pin...', type: 'stdout' });
     onLog({ text: '🎉 [esptool-web] Firmware berhasil di-flash ke board via Web Serial!', type: 'success' });
     return { success: true };
@@ -1643,16 +1654,13 @@ export async function executeWebHardwareAction(params: {
     }
 
     // Action === 'upload':
-    // If local bridge is available (and not a pure cloud compilation), try High-Speed Local USB Bridge first
-    const hasLocalBridge = !result.cloudCompiled && (await checkLocalBridgeAvailable());
-    if (hasLocalBridge) {
-      if (targetWebPort) {
-        try {
-          await targetWebPort.port.close();
-          await sleep(300);
-        } catch {}
-      }
-
+    // When the user has selected a device via Web Serial (targetWebPort), always flash
+    // directly via Web Serial (flashEspViaWebSerial / flashAvrHexViaWebSerial) so real-time
+    // erasing flash (delete firmware) and writing progress blocks stream directly into the terminal!
+    // Local background bridge (/api/upload-local) is only used when no browser Web Serial port
+    // is active and a local COM port was specified.
+    const shouldUseLocalBridge = !targetWebPort && isLocalComPort && !result.cloudCompiled && (await checkLocalBridgeAvailable());
+    if (shouldUseLocalBridge) {
       try {
         const localUploadResp = await fetchCompilerApi('/api/upload-local', {
           method: 'POST',
@@ -1671,7 +1679,7 @@ export async function executeWebHardwareAction(params: {
           }
           if (localData.success) {
             onProgress?.(100);
-            const finalPort = localData.port || targetWebPort?.address || port;
+            const finalPort = localData.port || port;
             if (finalPort && onPortSelected) onPortSelected(finalPort);
             return { success: true, selectedPort: finalPort };
           }
@@ -1679,10 +1687,6 @@ export async function executeWebHardwareAction(params: {
             onProgress?.(100);
             return { success: false, error: localData.error || 'Upload gagal.' };
           }
-          onLog({
-            text: `🔄 Jembatan lokal gagal (${localData.error}). Mencoba flashing langsung melalui Web Serial Browser...`,
-            type: 'info',
-          });
         }
       } catch {}
     }
