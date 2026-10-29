@@ -726,6 +726,9 @@ function convertCtoPython(
       trimmed.startsWith('Blynk.config(') ||
       trimmed.startsWith('Blynk.connect(') ||
       trimmed === 'Blynk.connect()' ||
+      trimmed.startsWith('int _gw_timeout') ||
+      trimmed.startsWith('while (WiFi.gatewayIP()') ||
+      trimmed.startsWith('_gw_timeout++') ||
       trimmed.startsWith('IPAddress _blynkIP') ||
       trimmed.startsWith('if (!WiFi.hostByName(') ||
       trimmed.startsWith('_blynkIP = IPAddress(') ||

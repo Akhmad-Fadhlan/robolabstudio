@@ -5511,10 +5511,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}  delay(500);\n`;
           code += `${indent}  Serial.print(".");\n`;
           code += `${indent}}\n`;
+          code += `${indent}int _gw_timeout = 0;\n`;
+          code += `${indent}while (WiFi.gatewayIP() == IPAddress(0, 0, 0, 0) && _gw_timeout < 50) {\n`;
+          code += `${indent}  delay(100);\n`;
+          code += `${indent}  _gw_timeout++;\n`;
+          code += `${indent}}\n`;
           code += `${indent}Serial.println("\\nConnected to WiFi!");\n`;
           code += `${indent}Serial.print("IP: ");\n`;
           code += `${indent}Serial.println(WiFi.localIP());\n`;
-          code += `${indent}delay(500);\n`;
+          code += `${indent}delay(300);\n`;
           code += `${indent}Serial.println("Connecting to Blynk...");\n`;
           code += `${indent}IPAddress _blynkIP;\n`;
           code += `${indent}if (!WiFi.hostByName("blynk.cloud", _blynkIP)) {\n`;
