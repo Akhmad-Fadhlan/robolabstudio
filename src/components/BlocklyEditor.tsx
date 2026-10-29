@@ -5440,7 +5440,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const hasBlynkInWs = ws ? (ws.getBlocksByType('blynk_config').some((b: any) => isBlockActive(b)) || ws.getBlocksByType('blynk_run').some((b: any) => isBlockActive(b))) : false;
           const hasBlynkBeginInWs = ws ? ws.getBlocksByType('blynk_begin').some((b: any) => isBlockActive(b)) : false;
           if (hasBlynkInWs && !hasBlynkBeginInWs) {
-            code += `${indent}Blynk.config(BLYNK_AUTH_TOKEN);\n`;
+            code += `${indent}Blynk.config(BLYNK_AUTH_TOKEN, "blynk.cloud", 80);\n`;
             code += `${indent}Blynk.connect();\n`;
           }
         } else {
@@ -5506,14 +5506,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
         if (lang === 'arduino') {
           code += `${indent}WiFi.mode(WIFI_STA);\n`;
-          code += `${indent}WiFi.begin(${ssid}, ${pass});\n`;
-          code += `${indent}while (WiFi.status() != WL_CONNECTED) {\n`;
-          code += `${indent}  delay(500);\n`;
-          code += `${indent}  Serial.print(".");\n`;
-          code += `${indent}}\n`;
-          code += `${indent}Serial.println("\\nConnected to WiFi!");\n`;
-          code += `${indent}Blynk.config(${auth});\n`;
-          code += `${indent}Blynk.connect();\n`;
+          code += `${indent}Blynk.begin(${auth}, ${ssid}, ${pass}, "blynk.cloud", 80);\n`;
         } else {
           code += `${indent}robot.blynk_begin(${auth}, ${ssid}, ${pass})\n`;
         }

@@ -1159,7 +1159,7 @@ if __name__ == '__main__':
 // Petunjuk:
 // 1. Ganti BLYNK_TEMPLATE_ID, BLYNK_TEMPLATE_NAME, & BLYNK_AUTH_TOKEN dari Dashboard Blynk Cloud.
 // 2. Ganti "RoboLab-WiFi" & "12345678" dengan nama dan sandi WiFi/Hotspot Anda (harus 2.4 GHz).
-// 3. Port 8080 digunakan agar koneksi stabil dan tidak diblokir oleh provider internet (ISP).
+// 3. Menggunakan port 80 resmi Blynk IoT Cloud (blynk.cloud).
 #define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
 #define BLYNK_TEMPLATE_NAME "ESP32 Smart LED"
 #define BLYNK_AUTH_TOKEN "p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT"
@@ -1186,7 +1186,7 @@ void setup() {
   pinMode(2, OUTPUT);
 
   digitalWrite(2, LOW);
-  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 8080);
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 80);
 }
 
 void loop() {

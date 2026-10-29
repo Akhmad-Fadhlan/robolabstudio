@@ -3202,8 +3202,8 @@ void setup() {
 
   digitalWrite(4, LOW);
   digitalWrite(5, LOW);
-  // Gunakan port 8080 agar koneksi tidak diblokir oleh provider internet (ISP)
-  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 8080);
+  // Gunakan port 80 resmi Blynk IoT Cloud (blynk.cloud)
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 80);
 }
 
 void loop() {
@@ -4469,7 +4469,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const createBlynkTcpFrame = (msgType: number, msgId: number, body: string | Buffer) => {
     let bodyBuf = Buffer.isBuffer(body) ? body : Buffer.from(body || '', 'utf-8');
-    if (msgType === 2 && bodyBuf.length !== 32) {
+    if ((msgType === 2 || msgType === 29) && bodyBuf.length !== 32) {
       const padded = Buffer.alloc(32);
       bodyBuf.copy(padded, 0, 0, Math.min(32, bodyBuf.length));
       bodyBuf = padded;
@@ -4571,14 +4571,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (req) {
       try {
         const net = req('net');
-        // Connect to primary Blynk IoT Cloud server on port 8080
-        const primaryTarget = { host: 'blynk.cloud', port: 8080 };
+        // Connect to primary Blynk IoT Cloud server on port 80
+        const primaryTarget = { host: 'blynk.cloud', port: 80 };
         const onConnect = () => {
           setTerminalLogs(prev => [
             ...prev,
             { text: `[BLYNK HARDWARE TCP] 🔌 Socket Connected to ${primaryTarget.host}:${primaryTarget.port}! Sending Hardware Login...`, type: 'stdout' }
           ]);
-          const loginFrame = createBlynkTcpFrame(2, 1, cleanAuth);
+          const loginFrame = createBlynkTcpFrame(29, 1, cleanAuth);
           try { socket.write(loginFrame); } catch (e) {}
         };
 
