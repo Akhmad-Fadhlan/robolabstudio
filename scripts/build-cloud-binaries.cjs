@@ -101,6 +101,9 @@ static String evalStringExpr(String expr) {
   if (expr == "WiFi.localIP()") {
     return WiFi.localIP().toString();
   }
+  if (expr == "WiFi.gatewayIP()") {
+    return WiFi.gatewayIP().toString();
+  }
   for (int i = 0; i < g_varCount; i++) {
     if (g_vars[i].name == expr) {
       return g_vars[i].isStr ? g_vars[i].strVal : String(g_vars[i].numVal);
