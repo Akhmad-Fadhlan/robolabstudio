@@ -1602,14 +1602,14 @@ const LIBRARY_SIGNATURES: Array<{
   blocks: Array<{ type: string; message: string; inputs?: any[]; isStatement?: boolean; isValue?: boolean }>;
 }> = [
   {
-    patterns: ['tft', 'ili9', 'st7', 'ssd1', 'oled', 'display', 'lcd', 'screen'],
-    categoryName: 'Display',
+    patterns: ['liquidcrystal', 'lcd', 'display', 'screen', 'oled', 'tft', 'ili9', 'st7', 'ssd1'],
+    categoryName: 'Display (LCD I2C)',
     colour: '#f2c94c',
     blocks: [
-      { type: 'lib_display_begin',   message: 'Display Begin',              isStatement: true },
-      { type: 'lib_display_clear',   message: 'Display Clear',              isStatement: true },
-      { type: 'lib_display_print',   message: 'Display Print %1',           inputs: [{ name: 'TEXT', type: 'input_value' }], isStatement: true },
-      { type: 'lib_display_setcursor', message: 'Display Set Cursor X %1 Y %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
+      { type: 'lib_display_begin',   message: 'LCD I2C Mulai (Begin)',              isStatement: true },
+      { type: 'lib_display_clear',   message: 'LCD I2C Bersihkan Layar (Clear)',    isStatement: true },
+      { type: 'lib_display_print',   message: 'LCD I2C Cetak %1',                   inputs: [{ name: 'TEXT', type: 'input_value' }], isStatement: true },
+      { type: 'lib_display_setcursor', message: 'LCD I2C Atur Kursor Kolom %1 Baris %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
     ],
   },
   {
@@ -3327,16 +3327,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       }
 
-      // Display globals
+      // Display globals (LiquidCrystal_I2C)
       const displayBlock = workspace.getBlocksByType('lib_display_begin').find((b: any) => isBlockActive(b)) || 
                            workspace.getBlocksByType('lib_display_clear').find((b: any) => isBlockActive(b)) || 
-                           workspace.getBlocksByType('lib_display_print').find((b: any) => isBlockActive(b));
+                           workspace.getBlocksByType('lib_display_print').find((b: any) => isBlockActive(b)) ||
+                           workspace.getBlocksByType('lib_display_setcursor').find((b: any) => isBlockActive(b));
       if (displayBlock) {
         if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
-        if (!generatedCode.includes('#include <Adafruit_GFX.h>')) generatedCode += '#include <Adafruit_GFX.h>\n';
-        if (!generatedCode.includes('#include <Adafruit_SSD1306.h>')) generatedCode += '#include <Adafruit_SSD1306.h>\n';
-        if (!generatedCode.includes('Adafruit_SSD1306 display')) {
-          generatedCode += `Adafruit_SSD1306 display(128, 64, &Wire, -1);\n`;
+        if (!generatedCode.includes('#include <LiquidCrystal_I2C.h>')) generatedCode += '#include <LiquidCrystal_I2C.h>\n';
+        if (!generatedCode.includes('LiquidCrystal_I2C lcd')) {
+          generatedCode += `LiquidCrystal_I2C lcd(0x27, 16, 2);\n`;
         }
       }
 
@@ -4152,7 +4152,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       <category name="Sensors" colour="#A855F7" css-container="cat-sensor" css-row="cat-sensor">
         <block type="sensor_ultrasonic"></block>
       </category>
-      <category name="Displays" colour="#F59E0B" css-container="cat-display" css-row="cat-display">
+      <category name="Display (LCD I2C)" colour="#F59E0B" css-container="cat-display" css-row="cat-display">
         <block type="lib_display_begin"></block>
         <block type="lib_display_clear"></block>
         <block type="lib_display_print"></block>
@@ -4237,7 +4237,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     // Register library signatures and display toolbox categories only if active on workspace or matching an installed lib
     LIBRARY_SIGNATURES.forEach((sig, idx) => {
       registerLibraryBlocks(sig);
-      if (sig.categoryName.toLowerCase() === 'display') return;
+      if (sig.categoryName.toLowerCase().includes('display')) return;
 
       const ws = workspaceRef.current;
       const isUsedInWorkspace = !!(ws && ws.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
@@ -5743,13 +5743,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       } else if (currentBlock.type === 'lib_display_begin') {
         if (lang === 'arduino') {
-          code += `${indent}display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n`;
+          code += `${indent}lcd.init();\n${indent}lcd.backlight();\n`;
         } else {
           code += `${indent}robot.display_begin()\n`;
         }
       } else if (currentBlock.type === 'lib_display_clear') {
         if (lang === 'arduino') {
-          code += `${indent}display.clearDisplay();\n`;
+          code += `${indent}lcd.clear();\n`;
         } else {
           code += `${indent}robot.display_clear()\n`;
         }
@@ -5757,7 +5757,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const textBlock = currentBlock.getInputTargetBlock('TEXT');
         const valStr = textBlock ? getBlockValue(textBlock, lang) : '"Hello"';
         if (lang === 'arduino') {
-          code += `${indent}display.println(${valStr});\n${indent}display.display();\n`;
+          code += `${indent}lcd.print(${valStr});\n`;
         } else {
           code += `${indent}robot.display_print(${valStr})\n`;
         }
@@ -5765,7 +5765,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const x = currentBlock.getFieldValue('X') || 0;
         const y = currentBlock.getFieldValue('Y') || 0;
         if (lang === 'arduino') {
-          code += `${indent}display.setCursor(${x}, ${y});\n`;
+          code += `${indent}lcd.setCursor(${x}, ${y});\n`;
         } else {
           code += `${indent}robot.display_setcursor(${x}, ${y})\n`;
         }

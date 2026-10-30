@@ -869,8 +869,8 @@ function parseStatement(line: string, variables: Record<string, string>): string
     return `<block type="neopixel_show"></block>`;
   }
 
-  // 13. Display (OLED SSD1306)
-  if (line === 'robot.display_begin()' || line === 'display_begin()' || line.includes('SSD1306_I2C(')) {
+  // 13. Display (LCD I2C / OLED)
+  if (line === 'robot.display_begin()' || line === 'display_begin()' || line.includes('SSD1306_I2C(') || line.includes('LiquidCrystal_I2C(')) {
     return `<block type="lib_display_begin"></block>`;
   }
   if (line === 'robot.display_clear()' || line === 'display_clear()' || line === 'oled.fill(0)') {
@@ -1274,7 +1274,7 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     const method = libValMatch[2].trim();
     let param = libValMatch[3] ? libValMatch[3].trim().replace(/\\"/g, '"') : '';
     if (param === '""') param = '';
-    const skipInsts = ['math', 'time', 'robot', 'machine', 'display', 'oled', 'pixels', 'FastLED', 'Serial', 'WiFi', 'wifi', 'Blynk', 'blynk'];
+    const skipInsts = ['math', 'time', 'robot', 'machine', 'display', 'oled', 'lcd', 'pixels', 'FastLED', 'Serial', 'WiFi', 'wifi', 'Blynk', 'blynk'];
     if (!skipInsts.includes(inst)) {
       return `
         <block type="custom_library_call_val">

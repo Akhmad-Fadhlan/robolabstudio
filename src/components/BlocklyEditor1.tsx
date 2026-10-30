@@ -1276,14 +1276,14 @@ const LIBRARY_SIGNATURES: Array<{
   blocks: Array<{ type: string; message: string; inputs?: any[]; isStatement?: boolean; isValue?: boolean }>;
 }> = [
   {
-    patterns: ['tft', 'ili9', 'st7', 'ssd1', 'oled', 'display', 'lcd', 'screen'],
-    categoryName: '🖥️ Display',
+    patterns: ['liquidcrystal', 'lcd', 'display', 'screen', 'oled', 'tft', 'ili9', 'st7', 'ssd1'],
+    categoryName: '🖥️ Display (LCD I2C)',
     colour: '#f2c94c',
     blocks: [
-      { type: 'lib_display_begin',   message: 'Display Begin',              isStatement: true },
-      { type: 'lib_display_clear',   message: 'Display Clear',              isStatement: true },
-      { type: 'lib_display_print',   message: 'Display Print %1',           inputs: [{ name: 'TEXT', type: 'input_value' }], isStatement: true },
-      { type: 'lib_display_setcursor', message: 'Display Set Cursor X %1 Y %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
+      { type: 'lib_display_begin',   message: 'LCD I2C Mulai (Begin)',              isStatement: true },
+      { type: 'lib_display_clear',   message: 'LCD I2C Bersihkan Layar (Clear)',    isStatement: true },
+      { type: 'lib_display_print',   message: 'LCD I2C Cetak %1',                   inputs: [{ name: 'TEXT', type: 'input_value' }], isStatement: true },
+      { type: 'lib_display_setcursor', message: 'LCD I2C Atur Kursor Kolom %1 Baris %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
     ],
   },
   {
@@ -2342,7 +2342,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       <category name="Sensors" colour="#e0e0e0" css-container="cat-sensor" css-row="cat-sensor">
         <block type="sensor_ultrasonic"></block>
       </category>
-      <category name="Displays" colour="#f2c94c" css-container="cat-display" css-row="cat-display">
+      <category name="Display (LCD I2C)" colour="#f2c94c" css-container="cat-display" css-row="cat-display">
         <block type="lib_display_begin"></block>
         <block type="lib_display_clear"></block>
         <block type="lib_display_print"></block>

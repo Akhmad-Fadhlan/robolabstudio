@@ -304,7 +304,7 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
         args = args.substring(cls.length + 1, args.length - 1).trim();
       }
       const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
-      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel', 'Adafruit_SSD1306', 'LiquidCrystal_I2C'];
       if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
         libInstantiations.push({ className: cls, instanceName: inst, args });
         instanceToClass[inst] = cls;
@@ -323,7 +323,7 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
         args = args.substring(cls.length + 1, args.length - 1).trim();
       }
       const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
-      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel', 'Adafruit_SSD1306', 'LiquidCrystal_I2C'];
       if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
         if (!libInstantiations.some(li => li.instanceName === inst)) {
           libInstantiations.push({ className: cls, instanceName: inst, args });
@@ -386,7 +386,7 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
 
   // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
   res = res.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?:\.|::)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g, (full, inst, method, args) => {
-    const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot', 'display', 'oled'];
+    const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot', 'display', 'oled', 'lcd'];
     if (skipInsts.includes(inst)) return full;
     const cleanArgs = (args || '').trim();
     return `robot.custom_lib_val("${inst}", "${method}", "${cleanArgs.replace(/"/g, '\\"')}")`;
@@ -498,6 +498,8 @@ function convertCtoPython(
       trimmed === 'int param_val = param.asInt()' ||
       trimmed === 'display.display()' ||
       trimmed === 'oled.display()' ||
+      trimmed === 'lcd.backlight()' ||
+      trimmed === 'lcd.noBacklight()' ||
       trimmed.startsWith('oled.setTextSize(') ||
       trimmed.startsWith('oled.setTextColor(') ||
       trimmed.startsWith('display.setTextSize(') ||
@@ -525,7 +527,7 @@ function convertCtoPython(
         }
         continue;
       }
-      if (condRaw.includes('!oled.begin(') || condRaw.includes('!display.begin(')) {
+      if (condRaw.includes('!oled.begin(') || condRaw.includes('!display.begin(') || condRaw.includes('!lcd.init(')) {
         emitLine('robot.display_begin()');
         if (hasOpeningBrace && !hasInlineClosingBrace) {
           skipWifiConnectLoop = true;
@@ -810,20 +812,20 @@ function convertCtoPython(
       emitLine('robot.neopixel_show()');
       continue;
     }
-    if (trimmed.startsWith('display.begin(') || trimmed.startsWith('oled.begin(')) {
+    if (trimmed.startsWith('display.begin(') || trimmed.startsWith('oled.begin(') || trimmed.startsWith('lcd.init(') || trimmed.startsWith('lcd.begin(')) {
       emitLine('robot.display_begin()');
       continue;
     }
-    if (trimmed === 'display.clearDisplay()' || trimmed === 'oled.clearDisplay()') {
+    if (trimmed === 'display.clearDisplay()' || trimmed === 'oled.clearDisplay()' || trimmed === 'lcd.clear()') {
       emitLine('robot.display_clear()');
       continue;
     }
-    m = trimmed.match(/^(?:display|oled)\.setCursor\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+    m = trimmed.match(/^(?:display|oled|lcd)\.setCursor\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
     if (m) {
       emitLine(`robot.display_setcursor(${m[1]}, ${m[2]})`);
       continue;
     }
-    m = trimmed.match(/^(?:display|oled)\.print(?:ln)?\(\s*(.+?)\s*\)$/);
+    m = trimmed.match(/^(?:display|oled|lcd)\.print(?:ln)?\(\s*(.+?)\s*\)$/);
     if (m) {
       emitLine(`robot.display_print(${convertCppExpr(m[1], pinConstants)})`);
       continue;
@@ -892,7 +894,7 @@ function convertCtoPython(
       const inst = objCallMatch[1];
       const method = objCallMatch[2];
       const rawArgs = objCallMatch[3].trim();
-      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'pixels', 'FastLED', 'ss'];
+      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'lcd', 'pixels', 'FastLED', 'ss'];
       if (!skipInstances.includes(inst)) {
         if (servoPins[inst] && (method === 'write' || method === 'writeMicroseconds')) {
           const pin = servoPins[inst];
