@@ -2329,6 +2329,20 @@ export const isBlockActive = (block: any): boolean => {
     );
   }
 
+  // If the workspace does NOT have any explicit setup or loop wrapper blocks
+  // (e.g. blank workspace where user drops loose blocks), treat top-level statement blocks as active
+  const ws = cur.workspace;
+  if (ws) {
+    const hasExplicitRoots = ws.getAllBlocks(false).some((b: any) => 
+      (b.type === 'arduino_setup' || b.type === 'arduino_loop' || b.type === 'basic_on_start' || b.type === 'basic_forever') &&
+      !b.disabled &&
+      (typeof b.isEnabled !== 'function' || b.isEnabled())
+    );
+    if (!hasExplicitRoots) {
+      return true;
+    }
+  }
+
   return false;
 };
 
@@ -3624,7 +3638,22 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       });
       
-      // NOTE: Standalone/orphaned top blocks are strictly excluded from void loop()
+      // If no explicit arduino_loop exists, place active statement top-blocks into void loop()
+      if (loopBlocks.length === 0) {
+        const looseTopBlocks = topBlocks.filter(b => 
+          isBlockActive(b) && 
+          b.type !== 'arduino_setup' && 
+          b.type !== 'arduino_define_pin' && 
+          b.type !== 'arduino_define_const' && 
+          b.type !== 'procedures_defnoreturn' && 
+          b.type !== 'procedures_defreturn' && 
+          b.type !== 'blynk_on_write' &&
+          !b.outputConnection
+        );
+        looseTopBlocks.forEach(tb => {
+          generatedCode += generateBlockCode(tb, '  ', 'arduino');
+        });
+      }
       generatedCode += '}\n';
     } else {
       if (activeBoard === 'BBC micro:bit') {
@@ -3783,8 +3812,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
         });
 
-        // NOTE: Standalone/orphaned top blocks are strictly excluded from Python script
-
         // Render Loop Content
         if (loopBlocks.length > 0) {
           generatedCode += '\nwhile True:\n';
@@ -3798,6 +3825,19 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           });
           if (!hasContent) {
             generatedCode += '    pass\n';
+          }
+        } else if (setupBlocks.length === 0) {
+          const looseTopBlocks = topBlocks.filter(b => 
+            isBlockActive(b) && 
+            b.type !== 'procedures_defnoreturn' && 
+            b.type !== 'procedures_defreturn' && 
+            !b.outputConnection
+          );
+          if (looseTopBlocks.length > 0) {
+            generatedCode += '\nwhile True:\n';
+            looseTopBlocks.forEach(tb => {
+              generatedCode += generateBlockCode(tb, '    ', 'python');
+            });
           }
         }
       }

@@ -235,6 +235,21 @@ const DEFAULT_COMPONENT_POSITIONS: { [key: string]: { x: number; y: number } } =
   rfid: { x: 160, y: 640 }
 };
 
+export const isComponentPin = (pinId: string): boolean => {
+  return /^(LED_|SERVO_|SR04_|POT_|BTN_|DHT11_|LCD_|MOTOR_|RFID_)/.test(pinId);
+};
+
+export const hexToRgba = (hex: string, alpha: number): string => {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return `rgba(239, 68, 68, ${alpha})`;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 export const Simulator: React.FC<SimulatorProps> = ({
   isRunning,
   robotCommand,
@@ -377,6 +392,334 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const [extraPotValues, setExtraPotValues] = useState<{ [key: string]: number }>({});
   const [pressedButtons, setPressedButtons] = useState<{ [key: string]: boolean }>({});
+
+  // Component custom colors state
+  const [componentColors, setComponentColors] = useState<{ [id: string]: string }>({});
+  const [colorPickerOpenId, setColorPickerOpenId] = useState<string | null>(null);
+
+  const COMPONENT_COLOR_PALETTE = [
+    '#ef4444', // Red
+    '#22c55e', // Green
+    '#3b82f6', // Blue
+    '#eab308', // Yellow
+    '#f97316', // Orange
+    '#a855f7', // Purple
+    '#06b6d4', // Cyan
+    '#ffffff', // White
+  ];
+
+  const getComponentColor = (id: string, defaultColor?: string): string => {
+    if (componentColors[id]) return componentColors[id];
+    const base = getBaseComponentType(id);
+    if (componentColors[base]) return componentColors[base];
+    if (defaultColor) return defaultColor;
+    switch (base) {
+      case 'led': return '#ef4444';
+      case 'servo': return '#3b82f6';
+      case 'ultrasonic': return '#06b6d4';
+      case 'pot': return '#10b981';
+      case 'button': return '#eab308';
+      case 'dht11': return '#3b82f6';
+      case 'lcd': return '#0284c7';
+      case 'motor': return '#f97316';
+      case 'rfid': return '#8b5cf6';
+      default: return '#3b82f6';
+    }
+  };
+
+  // Interactive Wiring State
+  const [localWires, setLocalWires] = useState<Wire[]>([]);
+  const wires = wiresProp !== undefined ? wiresProp : localWires;
+  const setWires = (val: Wire[] | ((prev: Wire[]) => Wire[])) => {
+    const nextVal = typeof val === 'function' ? val(wires) : val;
+    if (onWiresChange) {
+      onWiresChange(nextVal);
+    } else {
+      setLocalWires(nextVal);
+    }
+  };
+
+  const handleUpdateComponentColor = (id: string, color: string) => {
+    setComponentColors(prev => ({ ...prev, [id]: color }));
+    const base = getBaseComponentType(id);
+    let sigPinName = '';
+    if (base === 'led') sigPinName = 'LED_A';
+    else if (base === 'servo') sigPinName = 'SERVO_SIG';
+    else if (base === 'button') sigPinName = 'BTN_SIG';
+    else if (base === 'pot') sigPinName = 'POT_SIG';
+    else if (base === 'motor') sigPinName = 'MOTOR_POS';
+
+    if (sigPinName) {
+      const sigPinId = getInstancePinId(id, sigPinName);
+      setWires(prev => prev.map(w => {
+        if (w.from === sigPinId || w.to === sigPinId) {
+          return { ...w, color };
+        }
+        return w;
+      }));
+    }
+  };
+
+  const renderColorPickerPopover = (id: string, x: number, y: number) => {
+    if (colorPickerOpenId !== id) return null;
+    return (
+      <g 
+        transform={`translate(${x}, ${y})`} 
+        className="z-50 select-none"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <rect x="-4" y="-4" width="76" height="42" rx="6" fill="#0f172a" stroke="#334155" strokeWidth="1.2" filter="url(#shadow3d)"/>
+        <text x="34" y="6" fontSize="6" fill="#94a3b8" fontWeight="bold" textAnchor="middle">WARNA</text>
+        {COMPONENT_COLOR_PALETTE.map((c, i) => {
+          const col = i % 4;
+          const row = Math.floor(i / 4);
+          const cx = 8 + col * 17;
+          const cy = 16 + row * 15;
+          const isSelected = getComponentColor(id) === c;
+          return (
+            <g 
+              key={c} 
+              className="cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUpdateComponentColor(id, c);
+              }}
+            >
+              <circle cx={cx} cy={cy} r="6" fill={c} stroke={isSelected ? '#ffffff' : '#475569'} strokeWidth={isSelected ? 1.8 : 0.8}/>
+              {isSelected && <circle cx={cx} cy={cy} r="2" fill="#ffffff" />}
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
+  // Comprehensive Auto-Wire: connects ALL component instances in workspace.
+  // Signal/Data/IO pins are uniquely allocated so no two components share the same signal pin.
+  // VCC and GND pins can safely be shared across components without restriction.
+  const runAutoWire = (componentsToWire?: string[]) => {
+    const isArduino = board === 'Arduino Uno';
+    const isMicrobit = board === 'BBC micro:bit';
+    const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
+
+    const list = componentsToWire || activeComponents;
+    if (!list || list.length === 0) return;
+
+    // Available Microcontroller I/O pin pools
+    let availableDigital: string[] = [];
+    let availableAnalog: string[] = [];
+    let gndPin = 'GND_B';
+    let vccPin = '5V';
+    let p3v3Pin = '3V3';
+    let sdaPin = 'A4';
+    let sclPin = 'A5';
+
+    if (isArduino) {
+      availableDigital = ['D13', 'D12', 'D11', 'D10', 'D9', 'D8', 'D7', 'D6', 'D5', 'D4', 'D3', 'D2'];
+      availableAnalog = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+      gndPin = 'GND_B';
+      vccPin = '5V';
+      p3v3Pin = '3V3';
+      sdaPin = 'A4';
+      sclPin = 'A5';
+    } else if (isMicrobit) {
+      availableDigital = ['P0', 'P1', 'P2', 'P8', 'P9', 'P12', 'P13', 'P14', 'P15', 'P16'];
+      availableAnalog = ['P0', 'P1', 'P2'];
+      gndPin = 'PAD_GND';
+      vccPin = 'PAD_3V';
+      p3v3Pin = 'PAD_3V';
+      sdaPin = 'P20';
+      sclPin = 'P19';
+    } else if (isEsp8266) {
+      availableDigital = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'];
+      availableAnalog = ['A0'];
+      gndPin = 'GND_R';
+      vccPin = '3V3_R';
+      p3v3Pin = '3V3_R';
+      sdaPin = 'D2';
+      sclPin = 'D1';
+    } else {
+      // ESP32 DevKit
+      availableDigital = ['G13', 'G12', 'G14', 'G27', 'G26', 'G25', 'G33', 'G32', 'G4', 'G16', 'G17', 'G5', 'G18', 'G19', 'G21', 'G22', 'G23'];
+      availableAnalog = ['G36', 'G39', 'G34', 'G35', 'G32', 'G33', 'G25', 'G26'];
+      gndPin = 'GND_L';
+      vccPin = 'VIN';
+      p3v3Pin = '3V3';
+      sdaPin = 'G21';
+      sclPin = 'G22';
+    }
+
+    const usedSignalPins = new Set<string>();
+
+    const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum: string): string => {
+      if (isArduino) {
+        const prefix = type === 'analog' ? 'A' : 'D';
+        return programPin ? `${prefix}${programPin}` : `${prefix}${defaultNum}`;
+      } else if (isMicrobit) {
+        return programPin ? `P${programPin}` : `P${defaultNum}`;
+      } else if (isEsp8266) {
+        if (type === 'analog') return 'A0';
+        if (!programPin) return `D${defaultNum}`;
+        return programPin.startsWith('D') ? programPin : (programPin.startsWith('G') ? programPin.replace('G', 'D') : `D${programPin}`);
+      } else {
+        return programPin ? `G${programPin}` : `G${defaultNum}`;
+      }
+    };
+
+    const allocatePin = (type: 'digital' | 'analog', preferredPin?: string, fallbackDefault?: string): string => {
+      if (preferredPin && !usedSignalPins.has(preferredPin)) {
+        usedSignalPins.add(preferredPin);
+        return preferredPin;
+      }
+      if (fallbackDefault && !usedSignalPins.has(fallbackDefault)) {
+        usedSignalPins.add(fallbackDefault);
+        return fallbackDefault;
+      }
+      const pool = type === 'analog' ? availableAnalog : availableDigital;
+      for (const p of pool) {
+        if (!usedSignalPins.has(p)) {
+          usedSignalPins.add(p);
+          return p;
+        }
+      }
+      const allPool = [...availableDigital, ...availableAnalog];
+      for (const p of allPool) {
+        if (!usedSignalPins.has(p)) {
+          usedSignalPins.add(p);
+          return p;
+        }
+      }
+      return fallbackDefault || (type === 'analog' ? 'A0' : 'D2');
+    };
+
+    const autoWires: Wire[] = [];
+
+    const leds = list.filter(id => id === 'led' || id.startsWith('led_'));
+    const servos = list.filter(id => id === 'servo' || id.startsWith('servo_'));
+    const ultrasonics = list.filter(id => id === 'ultrasonic' || id === 'hcsr04' || id === 'sr04' || id.startsWith('ultrasonic_') || id.startsWith('hcsr04_') || id.startsWith('sr04_'));
+    const pots = list.filter(id => id === 'pot' || id === 'potentiometer' || id.startsWith('pot_') || id.startsWith('potentiometer_'));
+    const buttons = list.filter(id => id === 'button' || id.startsWith('button_'));
+    const dht11s = list.filter(id => id === 'dht11' || id === 'dht' || id.startsWith('dht11_') || id.startsWith('dht_'));
+    const lcds = list.filter(id => id === 'lcd' || id.startsWith('lcd_'));
+    const motors = list.filter(id => id === 'motor' || id.startsWith('motor_'));
+    const rfids = list.filter(id => id === 'rfid' || id === 'mfrc522' || id === 'rc522' || id.startsWith('rfid_') || id.startsWith('mfrc522_') || id.startsWith('rc522_'));
+
+    // 1. LEDs
+    leds.forEach((id, idx) => {
+      const pref = idx === 0 ? getMcuPinId('digital', programPins?.ledPin, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '4'))) : undefined;
+      const def = isArduino ? (idx === 0 ? 'D9' : `D${Math.max(2, 9 - idx)}`) : undefined;
+      const pin = allocatePin('digital', pref, def);
+      const color = getComponentColor(id, '#ef4444');
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'LED_A'), color, bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'LED_K'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 2. Servos
+    servos.forEach((id, idx) => {
+      const pref = idx === 0 ? getMcuPinId('digital', programPins?.servoPin, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18'))) : undefined;
+      const def = isArduino ? (idx === 0 ? 'D3' : `D${Math.min(11, 3 + idx * 2)}`) : undefined;
+      const pin = allocatePin('digital', pref, def);
+      const color = getComponentColor(id, '#3b82f6');
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'SERVO_SIG'), color, bendPoints: [] });
+      autoWires.push({ from: vccPin, to: getInstancePinId(id, 'SERVO_VCC'), color: '#ef4444', bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'SERVO_GND'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 3. HC-SR04
+    ultrasonics.forEach((id) => {
+      const prefTrig = getMcuPinId('digital', programPins?.ultrasonicTrigPin, isArduino ? '12' : (isMicrobit ? '8' : (isEsp8266 ? '5' : '23')));
+      const prefEcho = getMcuPinId('digital', programPins?.ultrasonicEchoPin, isArduino ? '13' : (isMicrobit ? '9' : (isEsp8266 ? '6' : '22')));
+      const trig = allocatePin('digital', prefTrig, isArduino ? 'D12' : undefined);
+      const echo = allocatePin('digital', prefEcho, isArduino ? 'D13' : undefined);
+      autoWires.push({ from: vccPin, to: getInstancePinId(id, 'SR04_VCC'), color: '#ef4444', bendPoints: [] });
+      autoWires.push({ from: trig, to: getInstancePinId(id, 'SR04_TRIG'), color: '#10b981', bendPoints: [] });
+      autoWires.push({ from: echo, to: getInstancePinId(id, 'SR04_ECHO'), color: '#f59e0b', bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'SR04_GND'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 4. Potentiometers
+    pots.forEach((id, idx) => {
+      const pref = idx === 0 ? getMcuPinId('analog', programPins?.potPin, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '36'))) : undefined;
+      const def = isArduino ? `A${idx}` : undefined;
+      const pin = allocatePin('analog', pref, def);
+      const color = getComponentColor(id, '#a78bfa');
+      autoWires.push({ from: vccPin, to: getInstancePinId(id, 'POT_VCC'), color: '#ef4444', bendPoints: [] });
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'POT_SIG'), color, bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'POT_GND'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 5. Buttons
+    buttons.forEach((id, idx) => {
+      const pref = idx === 0 ? getMcuPinId('digital', programPins?.btnPin, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27'))) : undefined;
+      const def = isArduino ? (idx === 0 ? 'D2' : `D${Math.min(10, 2 + idx * 2)}`) : undefined;
+      const pin = allocatePin('digital', pref, def);
+      const color = getComponentColor(id, '#eab308');
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'BTN_SIG'), color, bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'BTN_GND'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 6. DHT11
+    dht11s.forEach((id, idx) => {
+      const def = isArduino ? (idx === 0 ? 'D4' : `D${Math.max(2, 4 + idx)}`) : undefined;
+      const pin = allocatePin('digital', undefined, def);
+      const color = getComponentColor(id, '#a78bfa');
+      autoWires.push({ from: vccPin, to: getInstancePinId(id, 'DHT11_VCC'), color: '#ef4444', bendPoints: [] });
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'DHT11_DATA'), color, bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'DHT11_GND'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 7. LCD (I2C bus: shared SDA/SCL, VCC, GND)
+    lcds.forEach((id) => {
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'LCD_GND'), color: '#1e293b', bendPoints: [] });
+      autoWires.push({ from: vccPin, to: getInstancePinId(id, 'LCD_VCC'), color: '#ef4444', bendPoints: [] });
+      autoWires.push({ from: sdaPin, to: getInstancePinId(id, 'LCD_SDA'), color: '#a78bfa', bendPoints: [] });
+      autoWires.push({ from: sclPin, to: getInstancePinId(id, 'LCD_SCL'), color: '#3b82f6', bendPoints: [] });
+    });
+
+    // 8. Motors
+    motors.forEach((id, idx) => {
+      const def = isArduino ? (idx === 0 ? 'D5' : `D${Math.min(11, 5 + idx * 2)}`) : undefined;
+      const pin = allocatePin('digital', undefined, def);
+      const color = getComponentColor(id, '#ef4444');
+      autoWires.push({ from: pin, to: getInstancePinId(id, 'MOTOR_POS'), color, bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'MOTOR_NEG'), color: '#1e293b', bendPoints: [] });
+    });
+
+    // 9. RFID
+    rfids.forEach((id, idx) => {
+      const sdaPinRfid = idx === 0 ? (isArduino ? 'D10' : (isMicrobit ? 'P16' : (isEsp8266 ? 'D8' : 'G5'))) : allocatePin('digital');
+      const rstPinRfid = idx === 0 ? (isArduino ? 'D9' : (isMicrobit ? 'P8' : (isEsp8266 ? 'D4' : 'G22'))) : allocatePin('digital');
+      const sckPinRfid = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
+      const mosiPinRfid = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
+      const misoPinRfid = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
+      autoWires.push({ from: sdaPinRfid, to: getInstancePinId(id, 'RFID_SDA'), color: '#06b6d4', bendPoints: [] });
+      autoWires.push({ from: sckPinRfid, to: getInstancePinId(id, 'RFID_SCK'), color: '#3b82f6', bendPoints: [] });
+      autoWires.push({ from: mosiPinRfid, to: getInstancePinId(id, 'RFID_MOSI'), color: '#10b981', bendPoints: [] });
+      autoWires.push({ from: misoPinRfid, to: getInstancePinId(id, 'RFID_MISO'), color: '#eab308', bendPoints: [] });
+      autoWires.push({ from: gndPin, to: getInstancePinId(id, 'RFID_GND'), color: '#1e293b', bendPoints: [] });
+      autoWires.push({ from: rstPinRfid, to: getInstancePinId(id, 'RFID_RST'), color: '#8b5cf6', bendPoints: [] });
+      autoWires.push({ from: p3v3Pin, to: getInstancePinId(id, 'RFID_3V3'), color: '#f43f5e', bendPoints: [] });
+    });
+
+    if (autoWires.length > 0) {
+      setWires(prev => {
+        const targetCompPins = new Set<string>();
+        autoWires.forEach(w => {
+          if (isComponentPin(w.from)) targetCompPins.add(w.from);
+          if (isComponentPin(w.to)) targetCompPins.add(w.to);
+        });
+
+        const kept = prev.filter(w => {
+          const fromIsTarget = isComponentPin(w.from) && targetCompPins.has(w.from);
+          const toIsTarget = isComponentPin(w.to) && targetCompPins.has(w.to);
+          return !fromIsTarget && !toIsTarget;
+        });
+
+        return [...kept, ...autoWires];
+      });
+    }
+  };
 
   // Component rotations state
   const [rotations, setRotations] = useState<{ [key: string]: number }>({
@@ -638,129 +981,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
     }
 
     // MERGE detected with existing — never wipe what the user manually added
-    setActiveComponents(prev => {
-      const merged = [...prev];
-      detected.forEach(c => { if (!merged.includes(c)) merged.push(c); });
-      return merged;
-    });
+    const mergedList = [...activeComponents];
+    detected.forEach(c => { if (!mergedList.includes(c)) mergedList.push(c); });
+    setActiveComponents(mergedList);
 
-    const autoWires: Wire[] = [];
-    const hasLed = detected.includes('led');
-    const hasServo = detected.includes('servo');
-    const hasUltrasonic = detected.includes('ultrasonic');
-    const hasPot = detected.includes('pot');
-    const hasButton = detected.includes('button');
-    const hasMotor = detected.includes('motor');
-
-    const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum: string): string => {
-      if (isArduino) {
-        const prefix = type === 'analog' ? 'A' : 'D';
-        return programPin ? `${prefix}${programPin}` : `${prefix}${defaultNum}`;
-      } else if (isMicrobit) {
-        return programPin ? `P${programPin}` : `P${defaultNum}`;
-      } else if (isEsp8266) {
-        if (type === 'analog') return 'A0';
-        if (!programPin) return `D${defaultNum}`;
-        return programPin.startsWith('D') ? programPin : (programPin.startsWith('G') ? programPin.replace('G', 'D') : `D${programPin}`);
-      } else {
-        return programPin ? `G${programPin}` : `G${defaultNum}`;
-      }
-    };
-
-    const gndPin = isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_L'));
-    const vccPin = isArduino ? '5V' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
-
-    if (hasLed) {
-      const pin = getMcuPinId('digital', programPins?.ledPin, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '2')));
-      autoWires.push({ from: pin, to: 'LED_A', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'LED_K', color: '#1e293b', bendPoints: [] });
-    }
-    if (hasServo) {
-      const pin = getMcuPinId('digital', programPins?.servoPin, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18')));
-      autoWires.push({ from: pin, to: 'SERVO_SIG', color: '#3b82f6', bendPoints: [] });
-      autoWires.push({ from: vccPin, to: 'SERVO_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_R')), to: 'SERVO_GND', color: '#1e293b', bendPoints: [] });
-    }
-    if (hasUltrasonic) {
-      const trig = getMcuPinId('digital', programPins?.ultrasonicTrigPin, isArduino ? '12' : (isMicrobit ? '8' : (isEsp8266 ? '5' : '23')));
-      const echo = getMcuPinId('digital', programPins?.ultrasonicEchoPin, isArduino ? '13' : (isMicrobit ? '9' : (isEsp8266 ? '6' : '22')));
-      autoWires.push({ from: vccPin, to: 'SR04_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: trig, to: 'SR04_TRIG', color: '#10b981', bendPoints: [] });
-      autoWires.push({ from: echo, to: 'SR04_ECHO', color: '#f59e0b', bendPoints: [] });
-      autoWires.push({ from: isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_R')), to: 'SR04_GND', color: '#1e293b', bendPoints: [] });
-    }
-    if (hasPot) {
-      const pin = getMcuPinId('analog', programPins?.potPin, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '26')));
-      autoWires.push({ from: vccPin, to: 'POT_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: pin, to: 'POT_SIG', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'POT_GND', color: '#1e293b', bendPoints: [] });
-    }
-    if (hasButton) {
-      const pin = getMcuPinId('digital', programPins?.btnPin, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27')));
-      autoWires.push({ from: pin, to: 'BTN_SIG', color: '#eab308', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'BTN_GND', color: '#1e293b', bendPoints: [] });
-    }
-    if (detected.includes('dht11')) {
-      const pin = getMcuPinId('digital', undefined, isArduino ? '4' : (isMicrobit ? '4' : (isEsp8266 ? '7' : '4')));
-      autoWires.push({ from: vccPin, to: 'DHT11_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: pin, to: 'DHT11_DATA', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'DHT11_GND', color: '#1e293b', bendPoints: [] });
-    }
-    if (detected.includes('lcd')) {
-      const sdaPin = isArduino ? 'A4' : (isMicrobit ? 'P20' : (isEsp8266 ? 'D2' : 'G21'));
-      const sclPin = isArduino ? 'A5' : (isMicrobit ? 'P19' : (isEsp8266 ? 'D1' : 'G22'));
-      autoWires.push({ from: gndPin, to: 'LCD_GND', color: '#1e293b', bendPoints: [] });
-      autoWires.push({ from: vccPin, to: 'LCD_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: sdaPin, to: 'LCD_SDA', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: sclPin, to: 'LCD_SCL', color: '#3b82f6', bendPoints: [] });
-    }
-    if (hasMotor) {
-      const pin = getMcuPinId('digital', undefined, isArduino ? '5' : (isMicrobit ? '5' : (isEsp8266 ? '1' : '5')));
-      autoWires.push({ from: pin, to: 'MOTOR_POS', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'MOTOR_NEG', color: '#1e293b', bendPoints: [] });
-    }
-    if (detected.includes('rfid')) {
-      const sdaPin = isArduino ? 'D10' : (isMicrobit ? 'P16' : (isEsp8266 ? 'D8' : 'G5'));
-      const sckPin = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
-      const mosiPin = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
-      const misoPin = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
-      const rstPin = isArduino ? 'D9' : (isMicrobit ? 'P8' : (isEsp8266 ? 'D4' : 'G22'));
-      const p3v3Pin = isArduino ? '3V3' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
-      autoWires.push({ from: sdaPin, to: 'RFID_SDA', color: '#06b6d4', bendPoints: [] });
-      autoWires.push({ from: sckPin, to: 'RFID_SCK', color: '#3b82f6', bendPoints: [] });
-      autoWires.push({ from: mosiPin, to: 'RFID_MOSI', color: '#10b981', bendPoints: [] });
-      autoWires.push({ from: misoPin, to: 'RFID_MISO', color: '#eab308', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'RFID_GND', color: '#1e293b', bendPoints: [] });
-      autoWires.push({ from: rstPin, to: 'RFID_RST', color: '#8b5cf6', bendPoints: [] });
-      autoWires.push({ from: p3v3Pin, to: 'RFID_3V3', color: '#f43f5e', bendPoints: [] });
-    }
-
-    // Merge autoWires with any existing manually-placed wires (preserve manual connections)
-    setWires(prev => {
-      const componentPins = [
-        'LED_A', 'LED_K',
-        'SERVO_SIG', 'SERVO_VCC', 'SERVO_GND',
-        'SR04_VCC', 'SR04_TRIG', 'SR04_ECHO', 'SR04_GND',
-        'POT_VCC', 'POT_SIG', 'POT_GND',
-        'BTN_SIG', 'BTN_GND',
-        'DHT11_VCC', 'DHT11_DATA', 'DHT11_GND',
-        'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL',
-        'RFID_SDA', 'RFID_SCK', 'RFID_MOSI', 'RFID_MISO', 'RFID_IRQ', 'RFID_GND', 'RFID_RST', 'RFID_3V3'
-      ];
-
-      const autoTargetComponentPins = new Set<string>();
-      autoWires.forEach(w => {
-        if (componentPins.includes(w.from)) autoTargetComponentPins.add(w.from);
-        if (componentPins.includes(w.to)) autoTargetComponentPins.add(w.to);
-      });
-
-      const existingKept = prev.filter(w => {
-        const connectsToAutoTarget = autoTargetComponentPins.has(w.from) || autoTargetComponentPins.has(w.to);
-        return !connectsToAutoTarget;
-      });
-
-      return [...existingKept, ...autoWires];
-    });
+    // Auto-wire all components using smart pin allocation
+    runAutoWire(mergedList);
   }, [activeCode, board, programPins]);
 
   // Draggable Component Positions (Optimized for expanded 780px canvas height)
@@ -795,17 +1021,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
-  // Interactive Wiring State
-  const [localWires, setLocalWires] = useState<Wire[]>([]);
-  const wires = wiresProp !== undefined ? wiresProp : localWires;
-  const setWires = (val: Wire[] | ((prev: Wire[]) => Wire[])) => {
-    const nextVal = typeof val === 'function' ? val(wires) : val;
-    if (onWiresChange) {
-      onWiresChange(nextVal);
-    } else {
-      setLocalWires(nextVal);
-    }
-  };
   const [selectedColor, setSelectedColor] = useState('#ef4444'); // Red default
   const [activePinStart, setActivePinStart] = useState<Pin | null>(null);
   const [activeBendPoints, setActiveBendPoints] = useState<{ x: number; y: number }[]>([]);
@@ -861,7 +1076,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const gndPins = [
     'GND', 'GND_L', 'GND_R', 'GND_T', 'GND_B', 'PAD_GND', 'GND_M', 'G_M', 'GND_L2', 'GND_R2',
-    ...Array.from({ length: 21 }, (_, i) => `G${i}`)
+    ...(board === 'BBC micro:bit' ? Array.from({ length: 21 }, (_, i) => `G${i}`) : [])
   ];
 
   // Define Pins coordinates dynamically based on component positions (Mapping to Custom SVGs)
@@ -1264,17 +1479,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const powerPins = [
     '5V', '3V3', '3V', 'VIN', 'VIN_L', 'VIN_R', 'PAD_3V', '5V_M', 'V_M', '3V3_L', '3V3_R', '3V3_R2',
-    ...Array.from({ length: 21 }, (_, i) => `V${i}`)
+    ...(board === 'BBC micro:bit' ? Array.from({ length: 21 }, (_, i) => `V${i}`) : [])
   ];
 
   const ledAnodePin = getConnectedMcuPin('LED_A');
   const ledCathodePin = getConnectedMcuPin('LED_K');
   
-  const checkLedPinMatch = (targetPin: Pin | null): boolean => {
+  const checkLedPinMatch = (targetPin: Pin | null, _instanceId: string = 'led'): boolean => {
     if (!targetPin) return false;
-    if (!programPins.ledPin) return true; // if not defined in code, we don't block
-    const mcuPinNum = targetPin.id.match(/\d+/)?.[0] || targetPin.id;
-    return mcuPinNum === programPins.ledPin;
+    return targetPin.type === 'mcu' && !gndPins.includes(targetPin.id) && !powerPins.includes(targetPin.id);
   };
 
   const isLedActiveHighWired = ledAnodePin !== null && 
@@ -1333,11 +1546,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const servoVccPin = getConnectedMcuPin('SERVO_VCC');
   const servoGndPin = getConnectedMcuPin('SERVO_GND');
 
-  const checkServoPinMatch = (targetSigPin: Pin | null = servoSigPin): boolean => {
+  const checkServoPinMatch = (targetSigPin: Pin | null = servoSigPin, _instanceId: string = 'servo'): boolean => {
     if (!targetSigPin) return false;
-    if (!programPins.servoPin) return true;
-    const mcuPinNum = targetSigPin.id.match(/\d+/)?.[0] || targetSigPin.id;
-    return mcuPinNum === programPins.servoPin;
+    return targetSigPin.type === 'mcu' && !gndPins.includes(targetSigPin.id) && !powerPins.includes(targetSigPin.id);
   };
 
   const isServoWired = servoSigPin !== null && 
@@ -1388,47 +1599,28 @@ export const Simulator: React.FC<SimulatorProps> = ({
     
     const isPowerOk = vccPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
     if (!isPowerOk || !trigPin || !echoPin) return false;
-    
-    if (programPins.ultrasonicTrigPin) {
-      const trigNum = trigPin.id.match(/\d+/)?.[0] || trigPin.id;
-      if (trigNum !== programPins.ultrasonicTrigPin) return false;
-    }
-    if (programPins.ultrasonicEchoPin) {
-      const echoNum = echoPin.id.match(/\d+/)?.[0] || echoPin.id;
-      if (echoNum !== programPins.ultrasonicEchoPin) return false;
-    }
-    return true;
+    return trigPin.type === 'mcu' && echoPin.type === 'mcu' && !gndPins.includes(trigPin.id) && !gndPins.includes(echoPin.id);
   };
 
   const isUltrasonicWired = checkUltrasonicWiring();
 
-  const checkPotWiring = (): boolean => {
-    const sigPin = getConnectedMcuPin('POT_SIG');
-    const vccPin = getConnectedMcuPin('POT_VCC');
-    const gndPin = getConnectedMcuPin('POT_GND');
+  const checkPotWiring = (instanceId: string = 'pot'): boolean => {
+    const sigPin = getConnectedMcuPin(getInstancePinId(instanceId, 'POT_SIG'));
+    const vccPin = getConnectedMcuPin(getInstancePinId(instanceId, 'POT_VCC'));
+    const gndPin = getConnectedMcuPin(getInstancePinId(instanceId, 'POT_GND'));
     
     if (!sigPin || !vccPin || !gndPin || !gndPins.includes(gndPin.id) || !powerPins.includes(vccPin.id)) return false;
-    
-    if (programPins.potPin) {
-      const sigNum = sigPin.id.match(/\d+/)?.[0] || sigPin.id;
-      if (sigNum !== programPins.potPin) return false;
-    }
-    return true;
+    return sigPin.type === 'mcu' && !gndPins.includes(sigPin.id) && !powerPins.includes(sigPin.id);
   };
 
   const isPotWired = checkPotWiring();
 
-  const checkBtnWiring = (): boolean => {
-    const sigPin = getConnectedMcuPin('BTN_SIG');
-    const gndPin = getConnectedMcuPin('BTN_GND');
+  const checkBtnWiring = (instanceId: string = 'button'): boolean => {
+    const sigPin = getConnectedMcuPin(getInstancePinId(instanceId, 'BTN_SIG'));
+    const gndPin = getConnectedMcuPin(getInstancePinId(instanceId, 'BTN_GND'));
     
-    if (!sigPin || !gndPin || !gndPins.includes(gndPin.id)) return false;
-    
-    if (programPins.btnPin) {
-      const sigNum = sigPin.id.match(/\d+/)?.[0] || sigPin.id;
-      if (sigNum !== programPins.btnPin) return false;
-    }
-    return true;
+    if (!sigPin || !gndPin || (!gndPins.includes(gndPin.id) && !powerPins.includes(gndPin.id))) return false;
+    return sigPin.type === 'mcu' && !gndPins.includes(sigPin.id) && !powerPins.includes(sigPin.id);
   };
 
   const isButtonWired = checkBtnWiring();
@@ -1572,7 +1764,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
           return;
         }
 
+        if (colorPickerOpenId) {
+          setColorPickerOpenId(null);
+        }
+
         setActiveBendPoints(prev => [...prev, { x: transformedPoint.x, y: transformedPoint.y }]);
+      }
+    } else {
+      if (colorPickerOpenId) {
+        setColorPickerOpenId(null);
       }
     }
   };
@@ -1606,125 +1806,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   // Auto-wire: only wires components ALREADY in the workspace (activeComponents)
   // Does NOT spawn new components — respects user's existing workspace layout
   const handleAutoWire = () => {
-    const isArduino = board === 'Arduino Uno';
-    const isMicrobit = board === 'BBC micro:bit';
-    const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
-    const autoWires: Wire[] = [];
-
-    const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum: string): string => {
-      if (isArduino) {
-        const prefix = type === 'analog' ? 'A' : 'D';
-        return programPin ? `${prefix}${programPin}` : `${prefix}${defaultNum}`;
-      } else if (isMicrobit) {
-        return programPin ? `P${programPin}` : `P${defaultNum}`;
-      } else if (isEsp8266) {
-        if (type === 'analog') return 'A0';
-        if (!programPin) return `D${defaultNum}`;
-        return programPin.startsWith('D') ? programPin : (programPin.startsWith('G') ? programPin.replace('G', 'D') : `D${programPin}`);
-      } else {
-        return programPin ? `G${programPin}` : `G${defaultNum}`;
-      }
-    };
-
-    const gndPin = isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_L'));
-    const vccPin = isArduino ? '5V' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
-
-    // Only wire LED if it's already added
-    if (hasLed) {
-      const pin = getMcuPinId('digital', programPins?.ledPin, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '2')));
-      autoWires.push({ from: pin,    to: 'LED_A', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'LED_K', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire Servo if it's already added
-    if (hasServo) {
-      const pin = getMcuPinId('digital', programPins?.servoPin, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18')));
-      autoWires.push({ from: pin,  to: 'SERVO_SIG', color: '#3b82f6', bendPoints: [] });
-      autoWires.push({ from: vccPin,  to: 'SERVO_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_R')), to: 'SERVO_GND', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire HC-SR04 if it's already added
-    if (hasUltrasonic) {
-      const trig = getMcuPinId('digital', programPins?.ultrasonicTrigPin, isArduino ? '12' : (isMicrobit ? '8' : (isEsp8266 ? '5' : '23')));
-      const echo = getMcuPinId('digital', programPins?.ultrasonicEchoPin, isArduino ? '13' : (isMicrobit ? '9' : (isEsp8266 ? '6' : '22')));
-      autoWires.push({ from: vccPin,  to: 'SR04_VCC',  color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: trig, to: 'SR04_TRIG', color: '#10b981', bendPoints: [] });
-      autoWires.push({ from: echo, to: 'SR04_ECHO', color: '#f59e0b', bendPoints: [] });
-      autoWires.push({ from: isArduino ? 'GND_B' : (isMicrobit ? 'PAD_GND' : (isEsp8266 ? 'GND_R' : 'GND_R')), to: 'SR04_GND', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire Potentiometer if it's already added
-    if (hasPot) {
-      const pin = getMcuPinId('analog', programPins?.potPin, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '26')));
-      autoWires.push({ from: vccPin,  to: 'POT_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: pin,  to: 'POT_SIG', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'POT_GND', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire Button if it's already added
-    if (hasButton) {
-      const pin = getMcuPinId('digital', programPins?.btnPin, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27')));
-      autoWires.push({ from: pin,  to: 'BTN_SIG', color: '#eab308', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'BTN_GND', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire DHT11 if it's already added
-    if (hasDht11) {
-      const pin = getMcuPinId('digital', undefined, isArduino ? '4' : (isMicrobit ? '4' : (isEsp8266 ? '7' : '4')));
-      autoWires.push({ from: vccPin,  to: 'DHT11_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: pin,   to: 'DHT11_DATA', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'DHT11_GND', color: '#1e293b', bendPoints: [] });
-    }
-    // Only wire LCD if it's already added
-    if (hasLcd) {
-      const sdaPin = isArduino ? 'A4' : (isMicrobit ? 'P20' : (isEsp8266 ? 'D2' : 'G21'));
-      const sclPin = isArduino ? 'A5' : (isMicrobit ? 'P19' : (isEsp8266 ? 'D1' : 'G22'));
-      autoWires.push({ from: gndPin, to: 'LCD_GND', color: '#1e293b', bendPoints: [] });
-      autoWires.push({ from: vccPin, to: 'LCD_VCC', color: '#ef4444', bendPoints: [] });
-      autoWires.push({ from: sdaPin, to: 'LCD_SDA', color: '#a78bfa', bendPoints: [] });
-      autoWires.push({ from: sclPin, to: 'LCD_SCL', color: '#3b82f6', bendPoints: [] });
-    }
-    // Only wire RC522 RFID if it's already added
-    if (hasRfid) {
-      const sdaPin = isArduino ? 'D10' : (isMicrobit ? 'P16' : (isEsp8266 ? 'D8' : 'G5'));
-      const sckPin = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
-      const mosiPin = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
-      const misoPin = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
-      const rstPin = isArduino ? 'D9' : (isMicrobit ? 'P8' : (isEsp8266 ? 'D4' : 'G22'));
-      const p3v3Pin = isArduino ? '3V3' : (isMicrobit ? 'PAD_3V' : (isEsp8266 ? '3V3_R' : '3V3'));
-      autoWires.push({ from: sdaPin, to: 'RFID_SDA', color: '#06b6d4', bendPoints: [] });
-      autoWires.push({ from: sckPin, to: 'RFID_SCK', color: '#3b82f6', bendPoints: [] });
-      autoWires.push({ from: mosiPin, to: 'RFID_MOSI', color: '#10b981', bendPoints: [] });
-      autoWires.push({ from: misoPin, to: 'RFID_MISO', color: '#eab308', bendPoints: [] });
-      autoWires.push({ from: gndPin, to: 'RFID_GND', color: '#1e293b', bendPoints: [] });
-      autoWires.push({ from: rstPin, to: 'RFID_RST', color: '#8b5cf6', bendPoints: [] });
-      autoWires.push({ from: p3v3Pin, to: 'RFID_3V3', color: '#f43f5e', bendPoints: [] });
-    }
-
-    // Only apply wires (don't change activeComponents — preserve user's workspace)
-    if (autoWires.length > 0) {
-      setWires(prev => {
-        const componentPins = [
-          'LED_A', 'LED_K',
-          'SERVO_SIG', 'SERVO_VCC', 'SERVO_GND',
-          'SR04_VCC', 'SR04_TRIG', 'SR04_ECHO', 'SR04_GND',
-          'POT_VCC', 'POT_SIG', 'POT_GND',
-          'BTN_SIG', 'BTN_GND',
-          'DHT11_VCC', 'DHT11_DATA', 'DHT11_GND',
-          'LCD_GND', 'LCD_VCC', 'LCD_SDA', 'LCD_SCL',
-          'RFID_SDA', 'RFID_SCK', 'RFID_MOSI', 'RFID_MISO', 'RFID_IRQ', 'RFID_GND', 'RFID_RST', 'RFID_3V3'
-        ];
-
-        const autoTargetComponentPins = new Set<string>();
-        autoWires.forEach(w => {
-          if (componentPins.includes(w.from)) autoTargetComponentPins.add(w.from);
-          if (componentPins.includes(w.to)) autoTargetComponentPins.add(w.to);
-        });
-
-        const existingKept = prev.filter(w => {
-          const connectsToAutoTarget = autoTargetComponentPins.has(w.from) || autoTargetComponentPins.has(w.to);
-          return !connectsToAutoTarget;
-        });
-
-        return [...existingKept, ...autoWires];
-      });
-    }
+    runAutoWire();
   };
 
   const handleClearWires = () => {
@@ -2366,12 +2448,13 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const pinK = getInstancePinId(id, 'LED_K');
             const anode = getConnectedMcuPin(pinA);
             const cathode = getConnectedMcuPin(pinK);
-            const isActHigh = anode !== null && cathode !== null && gndPins.includes(cathode.id) && checkLedPinMatch(anode);
-            const isActLow = anode !== null && cathode !== null && powerPins.includes(anode.id) && !gndPins.includes(cathode.id) && checkLedPinMatch(cathode);
+            const isActHigh = anode !== null && cathode !== null && gndPins.includes(cathode.id) && checkLedPinMatch(anode, id);
+            const isActLow = anode !== null && cathode !== null && powerPins.includes(anode.id) && !gndPins.includes(cathode.id) && checkLedPinMatch(cathode, id);
             const isWired = isActHigh || isActLow;
             const targetLed = isActLow ? cathode : anode;
             const brightness = isRunning && isWired && targetLed ? getPinBrightness(targetLed, isActLow) : 0.0;
             const label = id.includes('_') ? `LED #${id.split('_')[1]}` : 'LED';
+            const compColor = getComponentColor(id, '#ef4444');
 
             return (
               <g
@@ -2379,6 +2462,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2388,40 +2472,51 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {/* LED Glow Halo */}
                 {brightness > 0 && (
                   <ellipse cx="100" cy="85" rx={35 + brightness * 18} ry={35 + brightness * 18}
-                    fill={`rgba(239,68,68,${brightness * 0.4})`} className="animate-pulse"/>
+                    fill={hexToRgba(compColor, brightness * 0.45)} className="animate-pulse"/>
                 )}
 
                 {/* PNG Image */}
                 <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
 
+                {/* LED Lens Tint */}
+                <ellipse cx="100" cy="78" rx="24" ry="28" fill={compColor} opacity="0.35" style={{ mixBlendMode: 'screen' }} />
+
                 {/* Pin indicator dots */}
-                <circle cx="80" cy="185" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="80" cy="185" r="3.5" fill={isWired ? compColor : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
                 <circle cx="120" cy="185" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
 
                 {/* Pin labels */}
-                <text x="80" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">A (+)</text>
+                <text x="80" y="198" fontSize="7" fill={compColor} fontWeight="bold" textAnchor="middle">A (+)</text>
                 <text x="120" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">K (−)</text>
 
                 {/* Badge label */}
-                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#6366f1'} strokeWidth="1.2"/>
-                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#a5b4fc'} fontWeight="bold" textAnchor="middle">
+                <rect x="50" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#6366f1'} strokeWidth="1.2"/>
+                <text x="95" y="26" fontSize="8" fill={isWired ? '#34d399' : '#a5b4fc'} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna LED</title>
+                  <circle cx="148" cy="23" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
                   <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 110, 35)}
               </g>
             );
           })}
@@ -2441,9 +2536,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
                             gndPin !== null && 
                             gndPins.includes(gndPin.id) &&
                             powerPins.includes(vccPin.id) &&
-                            checkServoPinMatch(sigPin);
+                            checkServoPinMatch(sigPin, id);
             const angle = getServoAngle(sigPin, isWired);
             const label = id.includes('_') ? `Servo #${id.split('_')[1]}` : 'Servo SG90';
+            const compColor = getComponentColor(id, '#3b82f6');
 
             return (
               <g
@@ -2451,6 +2547,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2463,40 +2560,48 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
                 <g transform={`translate(100, 95) rotate(${angle - 90}) translate(-100, -95)`}>
                   <rect x="75" y="91" width="50" height="8" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                  <circle cx="100" cy="95" r="5" fill="#38bdf8" />
+                  <circle cx="100" cy="95" r="5" fill={compColor} />
                   <circle cx="120" cy="95" r="2.5" fill="#ef4444" />
                 </g>
 
                 {/* Pin indicator dots directly over cable header plug (GND left:85, VCC center:100, SIG right:115) */}
                 <circle cx="85" cy="20" r="3.5" fill={isWired ? "#1e293b" : "#64748b"} stroke="#ffffff" strokeWidth="1" />
                 <circle cx="100" cy="20" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-                <circle cx="115" cy="20" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="115" cy="20" r="3.5" fill={isWired ? compColor : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
 
                 {/* Pin labels */}
                 <text x="85" y="34" fontSize="6.5" fill="#94a3b8" fontWeight="bold" textAnchor="middle">GND</text>
                 <text x="100" y="34" fontSize="6.5" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
-                <text x="115" y="34" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">SIG</text>
+                <text x="115" y="34" fontSize="6.5" fill={compColor} fontWeight="bold" textAnchor="middle">SIG</text>
 
                 {/* Badge label at BOTTOM */}
-                <rect x="50" y="170" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#0284c7'} strokeWidth="1.2"/>
+                <rect x="50" y="170" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.2"/>
                 <text x="100" y="181" fontSize="8" fill={isWired ? '#34d399' : '#38bdf8'} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna Servo</title>
+                  <circle cx="8" cy="23" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="25" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 22.5 23 A 3 3 0 1 1 25 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
                   <path d="M 25 24 L 25 26 L 27 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="42" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="39" y1="20" x2="45" y2="26" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="45" y1="20" x2="39" y2="26" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 8, 35)}
               </g>
             );
           })}
@@ -2516,6 +2621,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const isPowerOk = vccPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
             const isWired = isPowerOk && !!trigPin && !!echoPin;
             const label = id.includes('_') ? `HC-SR04 #${id.split('_')[1]}` : 'HC-SR04';
+            const compColor = getComponentColor(id, '#06b6d4');
 
             return (
               <g
@@ -2523,6 +2629,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2552,13 +2659,19 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 <text x="115" y="174" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
 
                 {/* Component Label */}
-                <rect x="50" y="32" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#3b82f6'} strokeWidth="1.2"/>
-                <text x="100" y="43" fontSize="8.5" fill={isWired ? '#34d399' : '#93c5fd'} fontWeight="bold" textAnchor="middle">
+                <rect x="50" y="32" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.2"/>
+                <text x="95" y="43" fontSize="8.5" fill={isWired ? '#34d399' : compColor} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna Ultrasonic</title>
+                  <circle cx="148" cy="45" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
+
                 {/* Rotate button */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="165" cy="45" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 162.5 45 A 3 3 0 1 1 165 48" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
@@ -2566,12 +2679,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 </g>
 
                 {/* Delete button */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="182" cy="45" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="179" y1="42" x2="185" y2="48" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="185" y1="42" x2="179" y2="48" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 110, 57)}
               </g>
             );
           })}
@@ -2590,9 +2706,11 @@ export const Simulator: React.FC<SimulatorProps> = ({
                             vccPin !== null && 
                             gndPin !== null && 
                             gndPins.includes(gndPin.id) && 
-                            powerPins.includes(vccPin.id);
+                            powerPins.includes(vccPin.id) &&
+                            checkPotWiring(id);
             const currentVal = id === 'pot' ? potValue : (extraPotValues[id] ?? potValue);
             const label = id.includes('_') ? `Potentiometer #${id.split('_')[1]}` : 'Potentiometer';
+            const compColor = getComponentColor(id, '#10b981');
 
             return (
               <g
@@ -2600,6 +2718,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2611,12 +2730,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
                 {/* Pin indicator dots at bottom */}
                 <circle cx="50" cy="150" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-                <circle cx="100" cy="150" r="3.5" fill={isWired ? "#a78bfa" : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="100" cy="150" r="3.5" fill={isWired ? compColor : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
                 <circle cx="150" cy="150" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
 
                 {/* Pin labels */}
                 <text x="50" y="165" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
-                <text x="100" y="165" fontSize="7" fill="#a78bfa" fontWeight="bold" textAnchor="middle">SIG</text>
+                <text x="100" y="165" fontSize="7" fill={compColor} fontWeight="bold" textAnchor="middle">SIG</text>
                 <text x="150" y="165" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
 
                 {/* Knob indicator dot rotating over center (100, 80) */}
@@ -2624,12 +2743,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   x1="100" y1="80"
                   x2={100 + Math.cos(((currentVal - 50) * 2.6 - 90) * Math.PI / 180) * 14}
                   y2={80 + Math.sin(((currentVal - 50) * 2.6 - 90) * Math.PI / 180) * 14}
-                  stroke="#10b981" strokeWidth="3" strokeLinecap="round"
+                  stroke={compColor} strokeWidth="3" strokeLinecap="round"
                 />
 
                 {/* Value display */}
-                <rect x="75" y="170" width="50" height="14" rx="3" fill="rgba(15, 23, 42, 0.9)" stroke="#22c55e" strokeWidth="1"/>
-                <text x="100" y="180" fontSize="7.5" fill="#34d399" textAnchor="middle" fontWeight="bold">{currentVal}%</text>
+                <rect x="75" y="170" width="50" height="14" rx="3" fill="rgba(15, 23, 42, 0.9)" stroke={compColor} strokeWidth="1"/>
+                <text x="100" y="180" fontSize="7.5" fill={compColor} textAnchor="middle" fontWeight="bold">{currentVal}%</text>
 
                 {/* Slider */}
                 <foreignObject x="35" y="186" width="130" height="14" onMouseDown={e => e.stopPropagation()}>
@@ -2648,25 +2767,33 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 </foreignObject>
 
                 {/* Badge label */}
-                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#22c55e'} strokeWidth="1.2"/>
-                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#86efac'} fontWeight="bold" textAnchor="middle">
+                <rect x="50" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.2"/>
+                <text x="95" y="26" fontSize="8" fill={isWired ? '#34d399' : compColor} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna Potentiometer</title>
+                  <circle cx="148" cy="23" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
                   <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 110, 35)}
               </g>
             );
           })}
@@ -2679,9 +2806,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const pinGnd = getInstancePinId(id, 'BTN_GND');
             const sigPin = getConnectedMcuPin(pinSig);
             const gndPin = getConnectedMcuPin(pinGnd);
-            const isWired = sigPin !== null && gndPin !== null && gndPins.includes(gndPin.id);
+            const isWired = sigPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && checkBtnWiring(id);
             const isPressed = id === 'button' ? buttonPressed : (pressedButtons[id] || false);
             const label = id.includes('_') ? `Button #${id.split('_')[1]}` : 'Button';
+            const compColor = getComponentColor(id, '#eab308');
 
             return (
               <g
@@ -2689,6 +2817,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 60, 60)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2699,19 +2828,20 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />
 
                 {/* Pin indicator dots */}
-                <circle cx="35" cy="95" r="3" fill={isWired ? "#eab308" : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="35" cy="95" r="3" fill={isWired ? compColor : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
                 <circle cx="85" cy="95" r="3" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
 
                 {/* Pin labels */}
-                <text x="35" y="108" fontSize="6.5" fill="#eab308" fontWeight="bold" textAnchor="middle">SIG</text>
+                <text x="35" y="108" fontSize="6.5" fill={compColor} fontWeight="bold" textAnchor="middle">SIG</text>
                 <text x="85" y="108" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
 
-                {/* Clickable button cap trigger overlay */}
+                {/* Clickable button cap trigger overlay with dynamic custom color */}
                 <circle
-                  cx="60" cy="55" r="18"
-                  fill={isPressed ? "rgba(239,68,68,0.4)" : "transparent"}
-                  stroke={isPressed ? "#ef4444" : "none"}
-                  strokeWidth="2"
+                  cx="60" cy="55" r="16"
+                  fill={compColor}
+                  opacity={isPressed ? 0.95 : 0.8}
+                  stroke={isPressed ? "#ffffff" : hexToRgba(compColor, 0.5)}
+                  strokeWidth={isPressed ? "2" : "1"}
                   className="cursor-pointer"
                   onMouseDown={(e) => {
                     e.stopPropagation();
@@ -2743,28 +2873,52 @@ export const Simulator: React.FC<SimulatorProps> = ({
                       onPinStateChange(btnPin.id, 'LOW');
                     }
                   }}
+                  onMouseLeave={() => {
+                    if (id === 'button' ? buttonPressed : (pressedButtons[id] || false)) {
+                      if (id === 'button') {
+                        setButtonPressed(false);
+                      } else {
+                        setPressedButtons(prev => ({ ...prev, [id]: false }));
+                      }
+                      const btnPin = getConnectedMcuPin(pinSig);
+                      if (btnPin && onPinStateChange) {
+                        const numMatch = btnPin.id.match(/\d+/);
+                        const pinKey = numMatch ? numMatch[0] : btnPin.id;
+                        onPinStateChange(pinKey, 'LOW');
+                        onPinStateChange(btnPin.id, 'LOW');
+                      }
+                    }
+                  }}
                 />
 
                 {/* Badge label */}
-                <rect x="15" y="8" width="90" height="14" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#475569'} strokeWidth="1"/>
-                <text x="60" y="18" fontSize="7" fill={isWired ? '#34d399' : '#94a3b8'} fontWeight="bold" textAnchor="middle">
+                <rect x="15" y="8" width="72" height="14" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1"/>
+                <text x="51" y="18" fontSize="7" fill={isWired ? '#34d399' : compColor} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna Tombol</title>
+                  <circle cx="90" cy="15" r="5.5" fill={compColor} stroke="#ffffff" strokeWidth="0.8"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="102" cy="15" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
                   <path d="M 100 15 A 2 2 0 1 1 102 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
                   <path d="M 102 15.5 L 102 17 L 103.5 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="114" cy="15" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
                   <line x1="112" y1="13" x2="116" y2="17" stroke="#fff" strokeWidth="1"/>
                   <line x1="116" y1="13" x2="112" y2="17" stroke="#fff" strokeWidth="1"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 20, 25)}
               </g>
             );
           })}
@@ -2783,6 +2937,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const sclPin = getConnectedMcuPin(pinScl);
             const isWired = !!gndPin && !!vccPin && !!sdaPin && !!sclPin && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
             const label = id.includes('_') ? `LCD #${id.split('_')[1]}` : 'LCD 16x2 I2C';
+            const compColor = getComponentColor(id, '#0284c7');
 
             return (
               <g
@@ -2790,6 +2945,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2799,15 +2955,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {/* LCD PNG Image */}
                 <image href="./displayLCD16x2I2C.png" xlinkHref="./displayLCD16x2I2C.png" x="0" y="0" width="200" height="200" />
 
-                {/* Dynamic LCD Screen Content Overlay */}
-                <rect x="52" y="80" width="96" height="34" rx="2" fill="#0f172a" opacity="0.9" />
-                <text x="56" y="93" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
+                {/* Dynamic LCD Screen Content Overlay with Custom Color Backlight */}
+                <rect x="52" y="80" width="96" height="34" rx="2" fill={hexToRgba(compColor, 0.25)} stroke={compColor} strokeWidth="1" />
+                <text x="56" y="93" fontSize="6.5" fill={compColor === '#ffffff' ? '#ffffff' : '#93c5fd'} fontWeight="bold" fontFamily="monospace">
                   {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `TEMP: ${currentTemp}C` : 'NO WIRES!') : 'SYSTEM IDLE'}
                 </text>
-                <text x="56" y="107" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
+                <text x="56" y="107" fontSize="6.5" fill={compColor === '#ffffff' ? '#ffffff' : '#93c5fd'} fontWeight="bold" fontFamily="monospace">
                   {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `DIST: ${currentDistance}CM` : 'CONNECT PINS') : 'READY TO WIRE'}
                 </text>
-                {isRunning && <rect x="16" y="53" width="4" height="6" fill="#60a5fa" opacity="0.7" className="animate-pulse"/>}
+                {isRunning && <rect x="16" y="53" width="4" height="6" fill={compColor} opacity="0.7" className="animate-pulse"/>}
 
                 {/* Pin indicator dots on I2C module (left side) */}
                 <circle cx="22" cy="68" r="3" fill={isWired ? "#10b981" : "#6ee7b7"} stroke="#ffffff" strokeWidth="1" />
@@ -2822,25 +2978,33 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 <text x="12" y="112" fontSize="5.5" fill="#3b82f6" fontWeight="bold" textAnchor="end">SCL</text>
 
                 {/* Badge label */}
-                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#047857'} strokeWidth="1.2"/>
-                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#a7f3d0'} fontWeight="bold" textAnchor="middle">
+                <rect x="50" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.2"/>
+                <text x="95" y="26" fontSize="8" fill={isWired ? '#34d399' : compColor} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna LCD</title>
+                  <circle cx="148" cy="23" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
                   <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 110, 35)}
               </g>
             );
           })}
@@ -2857,6 +3021,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const gndPin = getConnectedMcuPin(pinGnd);
             const isWired = !!dataPin && !!vccPin && !!gndPin && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
             const label = id.includes('_') ? `DHT11 #${id.split('_')[1]}` : 'DHT11 Sensor';
+            const compColor = getComponentColor(id, '#3b82f6');
 
             return (
               <g
@@ -2864,6 +3029,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 45, 60)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2875,38 +3041,43 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {/* 3D board depth — right face */}
                 <polygon points="90,0 96,6 96,126 90,120" fill="#012b4a" opacity="0.9"/>
                 {/* Main PCB face */}
-                <rect x="0" y="0" width="90" height="120" rx="5" fill="url(#pcbBlueGrad)" stroke={isWired ? '#34d399' : '#0284c7'} strokeWidth="1.5"/>
+                <rect x="0" y="0" width="90" height="120" rx="5" fill="url(#pcbBlueGrad)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.5"/>
                 {/* PCB surface highlight */}
                 <rect x="2" y="2" width="86" height="18" rx="3" fill="rgba(255,255,255,0.06)"/>
                 {/* Label */}
-                <text x="8" y="13" fontSize="7.5" fill={isWired ? '#34d399' : '#38bdf8'} fontWeight="bold">
+                <text x="8" y="13" fontSize="7.5" fill={isWired ? '#34d399' : compColor} fontWeight="bold">
                   {isWired ? `✔ ${label}` : label}
                 </text>
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna DHT11</title>
+                  <circle cx="58" cy="8" r="5" fill={compColor} stroke="#ffffff" strokeWidth="0.8"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="71" cy="8" r="5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
                   <path d="M 69 8 A 2 2 0 1 1 71 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
                   <path d="M 71 8.5 L 71 10 L 72.5 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete button */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <circle cx="83" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
                   <line x1="81" y1="6" x2="85" y2="10" stroke="#fff" strokeWidth="1.2"/>
                   <line x1="85" y1="6" x2="81" y2="10" stroke="#fff" strokeWidth="1.2"/>
                 </g>
 
-                {/* Sensor Case */}
-                <rect x="5" y="22" width="80" height="72" rx="5" fill="url(#bodyBlueGrad)" stroke="#0369a1" strokeWidth="1.5"/>
+                {/* Sensor Case Tint */}
+                <rect x="5" y="22" width="80" height="72" rx="5" fill={hexToRgba(compColor, 0.4)} stroke={compColor} strokeWidth="1.5"/>
                 <rect x="7" y="24" width="76" height="8" rx="3" fill="rgba(255,255,255,0.15)"/>
-                <rect x="12" y="34" width="66" height="44" rx="3" fill="#082f49" stroke="#0369a1" strokeWidth="1"/>
-                <rect x="15" y="38" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-                <rect x="15" y="46" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-                <rect x="15" y="54" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-                <rect x="15" y="62" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-                <rect x="15" y="70" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-                <line x1="33" y1="34" x2="33" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
-                <line x1="57" y1="34" x2="57" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
+                <rect x="12" y="34" width="66" height="44" rx="3" fill="#082f49" stroke={compColor} strokeWidth="1"/>
+                <rect x="15" y="38" width="60" height="4" rx="1" fill={compColor} opacity="0.6"/>
+                <rect x="15" y="46" width="60" height="4" rx="1" fill={compColor} opacity="0.6"/>
+                <rect x="15" y="54" width="60" height="4" rx="1" fill={compColor} opacity="0.6"/>
+                <rect x="15" y="62" width="60" height="4" rx="1" fill={compColor} opacity="0.6"/>
+                <rect x="15" y="70" width="60" height="4" rx="1" fill={compColor} opacity="0.6"/>
+                <line x1="33" y1="34" x2="33" y2="78" stroke={compColor} strokeWidth="0.8" opacity="0.6"/>
+                <line x1="57" y1="34" x2="57" y2="78" stroke={compColor} strokeWidth="0.8" opacity="0.6"/>
                 <text x="45" y="92" fontSize="9" fill="#ffffff" textAnchor="middle" fontWeight="bold">DHT11</text>
                 <rect x="13" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
                 <rect x="33" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
@@ -2916,6 +3087,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 <text x="29" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">DAT</text>
                 <text x="50" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">NC</text>
                 <text x="69" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">GND</text>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 5, 20)}
               </g>
             );
           })}
@@ -2926,6 +3100,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const rot = rotations[id] || (rotations.motor ?? 0);
             const isWired = checkMotorWiring(id);
             const label = id.includes('_') ? `DC Motor #${id.split('_')[1]}` : 'DC Motor';
+            const compColor = getComponentColor(id, '#f97316');
 
             return (
               <g
@@ -2933,6 +3108,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
                 className="cursor-move"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -2945,42 +3121,50 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {/* Spinning Propeller Fan Overlay when Motor is Running */}
                 {isRunning && isWired && (
                   <g transform="translate(100, 45)" className="animate-spin" style={{ transformOrigin: '100px 45px', animationDuration: '0.3s' }}>
-                    <circle cx="100" cy="45" r="6" fill="#ca8a04" />
-                    <ellipse cx="100" cy="30" rx="4" ry="15" fill="#eab308" opacity="0.8" />
-                    <ellipse cx="100" cy="60" rx="4" ry="15" fill="#eab308" opacity="0.8" />
-                    <ellipse cx="85" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
-                    <ellipse cx="115" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
+                    <circle cx="100" cy="45" r="6" fill={compColor} />
+                    <ellipse cx="100" cy="30" rx="4" ry="15" fill={compColor} opacity="0.85" />
+                    <ellipse cx="100" cy="60" rx="4" ry="15" fill={compColor} opacity="0.85" />
+                    <ellipse cx="85" cy="45" rx="15" ry="4" fill={compColor} opacity="0.85" />
+                    <ellipse cx="115" cy="45" rx="15" ry="4" fill={compColor} opacity="0.85" />
                   </g>
                 )}
 
                 {/* Pin indicator dots at bottom terminals */}
-                <circle cx="78" cy="185" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="78" cy="185" r="3.5" fill={isWired ? compColor : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
                 <circle cx="122" cy="185" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
 
                 {/* Pin labels */}
-                <text x="78" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">POS (+)</text>
+                <text x="78" y="198" fontSize="7" fill={compColor} fontWeight="bold" textAnchor="middle">POS (+)</text>
                 <text x="122" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">NEG (−)</text>
 
                 {/* Badge label */}
-                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#eab308'} strokeWidth="1.2"/>
-                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#fef08a'} fontWeight="bold" textAnchor="middle">
+                <rect x="50" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : compColor} strokeWidth="1.2"/>
+                <text x="95" y="26" fontSize="8" fill={isWired ? '#34d399' : compColor} fontWeight="bold" textAnchor="middle">
                   {isWired ? `✔ ${label}` : label}
                 </text>
 
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna Motor</title>
+                  <circle cx="148" cy="23" r="7" fill={compColor} stroke="#ffffff" strokeWidth="1.2"/>
+                </g>
                 {/* Rotate */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Rotate Component</title>
                   <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
                   <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
                   <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
                 {/* Delete */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <title>Remove Component</title>
                   <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
                   <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
                   <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
                 </g>
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 110, 35)}
               </g>
             );
           })}
@@ -2990,6 +3174,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const pos = positions[id] || (positions.rfid ?? DEFAULT_COMPONENT_POSITIONS.rfid);
             const rot = rotations[id] || (rotations.rfid ?? 0);
             const label = id.includes('_') ? `RFID #${id.split('_')[1]}` : 'RFID-RC522';
+            const compColor = getComponentColor(id, '#8b5cf6');
 
             return (
               <g
@@ -2997,6 +3182,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 55, 80)`}
                 className="cursor-move select-none"
                 onMouseDown={(e) => startDrag(id, e)}
+                onClick={() => setActivePopup(id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleRotateComponent(id);
@@ -3004,20 +3190,25 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 filter="url(#shadow3d)"
               >
                 {/* Rotate Button */}
-                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRotateComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <circle cx="8" cy="8" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
                   <path d="M6 8a2 2 0 1 1 2 2M6 8l1.5-1M6 8l1.5 1" stroke="#fff" strokeWidth="0.9" fill="none"/>
                 </g>
+                {/* Color Button */}
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setColorPickerOpenId(prev => prev === id ? null : id); }} onMouseDown={e => e.stopPropagation()}>
+                  <title>Ganti Warna RFID</title>
+                  <circle cx="22" cy="8" r="5.5" fill={compColor} stroke="#ffffff" strokeWidth="0.8"/>
+                </g>
                 {/* Delete button */}
-                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRemoveComponent(id); }} onMouseDown={e => e.stopPropagation()}>
                   <circle cx="102" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
                   <line x1="100" y1="6" x2="104" y2="10" stroke="#fff" strokeWidth="1.2"/>
                   <line x1="104" y1="6" x2="100" y2="10" stroke="#fff" strokeWidth="1.2"/>
                 </g>
 
                 {/* PCB Base: Classic blue FR-4 (110x150, rx=6) */}
-                <rect x="0" y="16" width="110" height="136" rx="6" fill="#1e3a8a" stroke="#172554" strokeWidth="1.5"/>
-                <rect x="2" y="18" width="106" height="132" rx="5" fill="none" stroke="#2563eb" strokeWidth="0.8" opacity="0.6"/>
+                <rect x="0" y="16" width="110" height="136" rx="6" fill="#1e3a8a" stroke={compColor} strokeWidth="1.5"/>
+                <rect x="2" y="18" width="106" height="132" rx="5" fill={hexToRgba(compColor, 0.15)} stroke={compColor} strokeWidth="0.8" opacity="0.6"/>
 
                 {/* Top Antenna Area (Coil traces in silkscreen gold) */}
                 <rect x="8" y="24" width="94" height="64" rx="4" fill="#172554" stroke="#d97706" strokeWidth="1.2"/>
@@ -3080,6 +3271,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 {!sensorData.rfidCardPresent && (
                   <text x="55" y="124" fontSize="5.5" fill="#93c5fd" textAnchor="middle" fontWeight="bold">3.3V SPI READER</text>
                 )}
+
+                {/* Color Popover */}
+                {renderColorPickerPopover(id, 15, 20)}
 
                 {/* Bottom 8-Pin Header (Pins: SDA, SCK, MOSI, MISO, IRQ, GND, RST, 3.3V) */}
                 <rect x="10" y="132" width="90" height="8" rx="1" fill="#09090b" stroke="#27272a" strokeWidth="0.5"/>
@@ -3259,27 +3453,45 @@ export const Simulator: React.FC<SimulatorProps> = ({
           const isDhtPopup = basePopup === 'dht11' || basePopup === 'dht';
           const isPotPopup = basePopup === 'pot';
           const isRfidPopup = basePopup === 'rfid' || basePopup === 'mfrc522' || basePopup === 'rc522';
-          
-          if (!isUltrasonicPopup && !isDhtPopup && !isPotPopup && !isRfidPopup) return null;
-          
+          const isLedPopup = basePopup === 'led';
+          const isServoPopup = basePopup === 'servo';
+          const isButtonPopup = basePopup === 'button';
+          const isLcdPopup = basePopup === 'lcd';
+          const isMotorPopup = basePopup === 'motor';
+
           const instanceSuffix = activePopup !== basePopup ? ` #${activePopup.split('_')[1]}` : '';
+          const compColor = getComponentColor(activePopup);
+
+          const getPopupTitle = () => {
+            if (isUltrasonicPopup) return `🔊 HC-SR04${instanceSuffix}`;
+            if (isDhtPopup) return `🌡️ DHT11${instanceSuffix}`;
+            if (isRfidPopup) return `🏷️ RFID RC522${instanceSuffix}`;
+            if (isPotPopup) return `🎛️ Potentiometer${instanceSuffix}`;
+            if (isLedPopup) return `💡 LED${instanceSuffix}`;
+            if (isServoPopup) return `🦾 Servo SG90${instanceSuffix}`;
+            if (isButtonPopup) return `🔘 Button${instanceSuffix}`;
+            if (isLcdPopup) return `📟 LCD 16x2${instanceSuffix}`;
+            if (isMotorPopup) return `⚙️ DC Motor${instanceSuffix}`;
+            return `${activePopup.toUpperCase()}${instanceSuffix}`;
+          };
 
           return (
-            <div className="absolute top-2 left-2 z-40 bg-slate-900/95 border border-slate-750 p-3 rounded-xl shadow-2xl w-44 text-white select-none animate-in fade-in zoom-in-95 duration-100">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider">
-                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ PN532 / RFID' : '🎛️ Potentiometer'}{instanceSuffix}
+            <div className="absolute top-2 left-2 z-40 bg-slate-900/95 border border-slate-750 p-3 rounded-xl shadow-2xl w-48 text-white select-none animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex justify-between items-center mb-2.5 pb-1.5 border-b border-slate-800">
+                <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block shadow-sm" style={{ backgroundColor: compColor }} />
+                  {getPopupTitle()}
                 </span>
                 <button 
                   onClick={() => setActivePopup(null)}
-                  className="text-[10px] hover:text-rose-400 text-slate-400 font-bold transition cursor-pointer select-none"
+                  className="text-[11px] hover:text-rose-400 text-slate-400 font-bold transition cursor-pointer select-none px-1"
                 >
                   ✕
                 </button>
               </div>
               
               {isUltrasonicPopup && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 mb-2.5">
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                     <span>Distance:</span>
                     <span className="font-mono text-cyan-400">{Math.round(sensorData.distance ?? 42)} cm</span>
@@ -3298,8 +3510,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               )}
 
               {isDhtPopup && (
-                <div className="space-y-2.5">
-                  {/* Temp slider */}
+                <div className="space-y-2 mb-2.5">
                   <div className="space-y-1">
                     <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                       <span>Temp:</span>
@@ -3317,7 +3528,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
                       className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
                     />
                   </div>
-                  {/* Humidity slider */}
                   <div className="space-y-1">
                     <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                       <span>Humidity:</span>
@@ -3341,7 +3551,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               {isPotPopup && (() => {
                 const curPotVal = extraPotValues[activePopup] ?? potValue;
                 return (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 mb-2.5">
                     <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                       <span>Analog In:</span>
                       <span className="font-mono text-cyan-400">{Math.round((curPotVal / 100) * 1023)}</span>
@@ -3360,15 +3570,36 @@ export const Simulator: React.FC<SimulatorProps> = ({
                       }}
                       className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
                     />
-                    <div className="text-[7px] text-slate-500 text-center font-mono">
+                    <div className="text-[8px] text-slate-400 text-center font-mono">
                       Percentage: {curPotVal}%
                     </div>
                   </div>
                 );
               })()}
 
+              {isButtonPopup && (() => {
+                const isPressed = activePopup === 'button' ? buttonPressed : (pressedButtons[activePopup] || false);
+                return (
+                  <div className="space-y-2 mb-2.5">
+                    <button
+                      onMouseDown={() => {
+                        if (activePopup === 'button') setButtonPressed(true);
+                        else setPressedButtons(prev => ({ ...prev, [activePopup]: true }));
+                      }}
+                      onMouseUp={() => {
+                        if (activePopup === 'button') setButtonPressed(false);
+                        else setPressedButtons(prev => ({ ...prev, [activePopup]: false }));
+                      }}
+                      className={`w-full py-1.5 rounded-lg text-[9px] font-bold transition shadow cursor-pointer ${isPressed ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700'}`}
+                    >
+                      {isPressed ? '🔘 Sedang Ditekan' : '👆 Tekan Tombol'}
+                    </button>
+                  </div>
+                );
+              })()}
+
               {isRfidPopup && (
-                <div className="space-y-2">
+                <div className="space-y-2 mb-2.5">
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
                     <span>Status Kartu:</span>
                     <span className={`font-mono font-bold ${sensorData.rfidCardPresent ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -3417,6 +3648,25 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Component Color Swatches in Active Popup */}
+              <div className="pt-2 border-t border-slate-800">
+                <div className="text-[8px] font-bold text-slate-400 mb-1.5 flex items-center justify-between">
+                  <span>GANTI WARNA:</span>
+                  <span className="font-mono text-[7px] text-slate-400">{compColor}</span>
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {COMPONENT_COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => handleUpdateComponentColor(activePopup, c)}
+                      className={`w-4 h-4 rounded-full border transition cursor-pointer ${compColor === c ? 'border-white scale-110 shadow ring-1 ring-white' : 'border-slate-700 hover:scale-105'}`}
+                      style={{ backgroundColor: c }}
+                      title={`Pilih warna ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           );
         })()}

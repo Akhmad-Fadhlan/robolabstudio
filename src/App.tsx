@@ -1304,6 +1304,28 @@ const evalExpr = (exprStr: string, vars: { [key: string]: any }): any => {
     return Math.round(outMin + (val - inMin) * (outMax - outMin) / (inMax - inMin));
   }
 
+  // Replace constrain(x, a, b)
+  const constrainMatch = replaced.match(/constrain\(\s*(.*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*\)/);
+  if (constrainMatch) {
+    const val = Number(evalExpr(constrainMatch[1], vars));
+    const low = Number(evalExpr(constrainMatch[2], vars));
+    const high = Number(evalExpr(constrainMatch[3], vars));
+    return Math.max(low, Math.min(high, val));
+  }
+
+  // Replace random(min, max) or random(max)
+  const randMatch = replaced.match(/random\(\s*(.*?)\s*(?:,\s*(.*?)\s*)?\)/);
+  if (randMatch) {
+    if (randMatch[2] !== undefined) {
+      const rMin = Number(evalExpr(randMatch[1], vars));
+      const rMax = Number(evalExpr(randMatch[2], vars));
+      return Math.floor(Math.random() * (rMax - rMin) + rMin);
+    } else {
+      const rMax = Number(evalExpr(randMatch[1], vars));
+      return Math.floor(Math.random() * rMax);
+    }
+  }
+
   // Replace int(var) with Math.floor(var) using a balanced parenthesis parser
   let intIdx = replaced.indexOf('int(');
   while (intIdx >= 0) {
@@ -1336,8 +1358,21 @@ const evalExpr = (exprStr: string, vars: { [key: string]: any }): any => {
 
   try {
     // Safe evaluation for math and comparison expressions
-    const cleaned = replaced.replace(/True/g, 'true').replace(/False/g, 'false');
-    if (/^[0-9+\-*/().\s|Math.floor&|!=<>truefals]+$/.test(cleaned)) {
+    let cleaned = replaced
+      .replace(/\bHIGH\b/g, '1')
+      .replace(/\bLOW\b/g, '0')
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      .replace(/\band\b/g, '&&')
+      .replace(/\bor\b/g, '||')
+      .replace(/\bnot\s+/g, '!')
+      .replace(/\babs\(/g, 'Math.abs(')
+      .replace(/\bmin\(/g, 'Math.min(')
+      .replace(/\bmax\(/g, 'Math.max(')
+      .replace(/\bmillis\(\s*\)/g, String(Date.now()))
+      .replace(/\bmicros\(\s*\)/g, String(Date.now() * 1000));
+
+    if (/^[0-9+\-*/().\s|Math.floorabsmin&|!=<>truefals]+$/.test(cleaned)) {
       // eslint-disable-next-line no-eval
       return eval(cleaned);
     }
@@ -4700,8 +4735,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
 
   const handlePinStateChange = (pin: string, state: 'HIGH' | 'LOW' | number) => {
+    const cleanPin = pin.replace(/^[DPGA]/, '');
     pinStatesRef.current[pin] = state;
-    setPinStates(prev => ({ ...prev, [pin]: state }));
+    pinStatesRef.current[cleanPin] = state;
+    pinStatesRef.current['D' + cleanPin] = state;
+    pinStatesRef.current['P' + cleanPin] = state;
+    pinStatesRef.current['A' + cleanPin] = state;
+    setPinStates(prev => ({
+      ...prev,
+      [pin]: state,
+      [cleanPin]: state,
+      ['D' + cleanPin]: state,
+      ['P' + cleanPin]: state,
+      ['A' + cleanPin]: state
+    }));
   };
 
   const parseProgramPins = (codeText: string): ProgramPinConfig => {
@@ -4709,10 +4756,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     const codeLines = codeText.split('\n');
     const vars: { [key: string]: string } = {};
 
-    // First pass: extract all const/variable assignments
+    // First pass: extract all const/variable assignments and #define
     codeLines.forEach(line => {
       let clean = line;
       if (clean.includes('//')) clean = clean.split('//')[0];
+      const trimmedRaw = clean.trim();
+      const defineMatch = trimmedRaw.match(/^#define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$/);
+      if (defineMatch) {
+        vars[defineMatch[1].trim()] = defineMatch[2].replace(/;$/, '').trim();
+      }
       if (clean.includes('#')) clean = clean.split('#')[0];
       const trimmed = clean.trim();
       
@@ -5658,6 +5710,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     // Pre-scan: detect which pins are used as servo (Microbit MicroPython pattern)
     // Must be before parseLines so the closure can access servoPins
     const servoPins = new Set<string>();
+    const pullupPins = new Set<string>();
     for (const rawLine of lines) {
       // Detect: pinN.set_analog_period(20) — marks pin N as servo
       const periodMatch = rawLine.match(/pin(\d+)\.set_analog_period\(\s*20\s*\)/);
@@ -5668,6 +5721,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       // Detect: pinN.write_analog(...) # Servo
       const servoCommentMatch = rawLine.match(/pin(\d+)\.write_analog\(.+\)\s*#\s*Servo/);
       if (servoCommentMatch) servoPins.add(servoCommentMatch[1]);
+      // Detect: pinMode(pin, INPUT_PULLUP)
+      const puMatch = rawLine.match(/pinMode\(\s*([a-zA-Z0-9_]+)\s*,\s*INPUT_PULLUP\s*\)/);
+      if (puMatch) {
+        pullupPins.add(puMatch[1]);
+        pullupPins.add(puMatch[1].replace(/^[DPG]/, ''));
+      }
     }
     console.log("ROBOLAB SIMULATOR: Detected servo pins:", [...servoPins]);
 
@@ -6027,11 +6086,37 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           continue;
         }
 
-        // 5. DigitalWrite
+        // 5. DigitalWrite & Tone
         const pythonDigitalWriteMatch = trimmed.match(/robot\.digital_write\(\s*([a-zA-Z0-9_]+)\s*,\s*(['"]?)([a-zA-Z0-9_]+)\2\s*\)/) ||
                                        trimmed.match(/Pin\(\s*([a-zA-Z0-9_]+)\s*,\s*Pin\.OUT\)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
                                        trimmed.match(/pin(\d+)\.write_digital\(\s*([a-zA-Z0-9_]+)\s*\)/);
-        const arduinoDigitalWriteMatch = trimmed.match(/digitalWrite\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/);
+        const arduinoDigitalWriteMatch = trimmed.match(/digitalWrite\(\s*([a-zA-Z0-9_]+)\s*,\s*(.+?)\s*\);?/);
+        const toneMatch = trimmed.match(/tone\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)(?:\s*,\s*([a-zA-Z0-9_]+))?\s*\);?/);
+        const noToneMatch = trimmed.match(/noTone\(\s*([a-zA-Z0-9_]+)\s*\);?/);
+        const pinModeMatch = trimmed.match(/pinMode\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\);?/);
+
+        if (pinModeMatch) {
+          const pin = pinModeMatch[1];
+          const mode = pinModeMatch[2];
+          if (mode === 'INPUT_PULLUP') {
+            queue.push({ type: 'assign', value: { varName: `__pullup_${pin}`, expr: '1' } });
+          }
+          continue;
+        }
+        if (toneMatch) {
+          queue.push({ 
+            type: 'digitalWrite', 
+            value: { pin: toneMatch[1], state: 'HIGH' } 
+          });
+          continue;
+        }
+        if (noToneMatch) {
+          queue.push({ 
+            type: 'digitalWrite', 
+            value: { pin: noToneMatch[1], state: 'LOW' } 
+          });
+          continue;
+        }
         if (pythonDigitalWriteMatch) {
           const pin = pythonDigitalWriteMatch[1];
           const state = pythonDigitalWriteMatch[3] || pythonDigitalWriteMatch[2];
@@ -6513,8 +6598,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (executionVars[pin] !== undefined) {
           pin = String(executionVars[pin]);
         }
-        const cleanPin = pin.startsWith('A') ? pin.replace('A', '') : pin;
-        const val = pinStatesRef.current[cleanPin] !== undefined ? Number(pinStatesRef.current[cleanPin]) : (pinStatesRef.current[pin] !== undefined ? Number(pinStatesRef.current[pin]) : 512);
+        const cleanPin = pin.replace(/^[ADP]/, '');
+        const rawVal = pinStatesRef.current[pin] ?? pinStatesRef.current[cleanPin] ?? pinStatesRef.current['A' + cleanPin] ?? pinStatesRef.current['D' + cleanPin];
+        const val = rawVal !== undefined ? Number(rawVal) : 512;
         replaced = replaced.replace(match[0], String(val));
       }
 
@@ -6528,11 +6614,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (executionVars[pin] !== undefined) {
           pin = String(executionVars[pin]);
         }
-        const val = pinStatesRef.current[pin] === 'HIGH' ? 1 : 0;
+        const cleanPin = pin.replace(/^[DPG]/, '');
+        const pinVal = pinStatesRef.current[pin] ?? pinStatesRef.current[cleanPin] ?? pinStatesRef.current['D' + cleanPin] ?? pinStatesRef.current['P' + cleanPin] ?? pinStatesRef.current['G' + cleanPin];
+        const isHigh = pinVal === 'HIGH' || pinVal === 1 || pinVal === '1' || pinVal === true || pinVal === 'true';
+        const isPullup = executionVars[`__pullup_${pin}`] || executionVars[`__pullup_${cleanPin}`] || pullupPins.has(pin) || pullupPins.has(cleanPin);
+        let val = isHigh ? 1 : 0;
+        if (isPullup) {
+          val = isHigh ? 0 : 1;
+        }
         replaced = replaced.replace(match[0], String(val));
       }
 
-      // 3. readDistance / readUltrasonic / read_ultrasonic
+      // 3. pulseIn for Ultrasonic sensor
+      while (replaced.includes('pulseIn')) {
+        const match = replaced.match(/pulseIn\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*(?:,\s*\d+)?\s*\)/);
+        if (!match) break;
+        const dist = sensorDataRef.current.distance || 25;
+        const durationUs = Math.round(dist * 58.82);
+        replaced = replaced.replace(match[0], String(durationUs));
+      }
+
+      // 3b. readDistance / readUltrasonic / read_ultrasonic
       while (replaced.includes('readDistance') || replaced.includes('readUltrasonic') || replaced.includes('read_ultrasonic')) {
         const match = replaced.match(/(?:readDistance|readUltrasonic|read_ultrasonic)\(\s*.*?\s*\)/) || replaced.match(/(?:readDistance|readUltrasonic|read_ultrasonic)\s*\(\s*\)/);
         if (!match) break;
@@ -6650,7 +6752,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       } else if (item.type === 'if') {
         const resolvedCond = resolveSensorReads(item.value.condition);
         const condVal = evalExpr(resolvedCond, executionVars);
-        const condBool = condVal === 'true' || condVal === true || (typeof condVal === 'number' && condVal !== 0);
+        const condBool = condVal === 'true' || condVal === true || condVal === '1' || (typeof condVal === 'number' && condVal !== 0);
         if (condBool) {
           executeBlock(item.value.ifBody, 0, next, onReturn || onComplete);
         } else if (item.value.elseBody) {
@@ -6845,7 +6947,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const evalState = executionVars[state] !== undefined ? executionVars[state] : evalExpr(resolvedStateExpr, executionVars);
         const isHigh = evalState === 'HIGH' || evalState === '1' || evalState === 1 || evalState === 'true' || evalState === true;
         const finalState = isHigh ? 'HIGH' : 'LOW';
-        setPinStates(prev => ({ ...prev, [pin]: finalState }));
+        const cleanPin = pin.replace(/^[DPG]/, '');
+        pinStatesRef.current[pin] = finalState;
+        pinStatesRef.current[cleanPin] = finalState;
+        pinStatesRef.current['D' + cleanPin] = finalState;
+        pinStatesRef.current['P' + cleanPin] = finalState;
+        pinStatesRef.current['G' + cleanPin] = finalState;
+        setPinStates(prev => ({
+          ...prev,
+          [pin]: finalState,
+          [cleanPin]: finalState,
+          ['D' + cleanPin]: finalState,
+          ['P' + cleanPin]: finalState,
+          ['G' + cleanPin]: finalState
+        }));
         setTerminalLogs(prev => [
           ...prev, 
           { text: `[GPIO] Pin ${pin} -> ${finalState}`, type: 'stdout' }
@@ -6884,7 +6999,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         } else {
           stateValue = numericAngle;
         }
-        setPinStates(prev => ({ ...prev, [pin]: stateValue }));
+        const cleanPin = pin.replace(/^[DPG]/, '');
+        pinStatesRef.current[pin] = stateValue;
+        pinStatesRef.current[cleanPin] = stateValue;
+        pinStatesRef.current['D' + cleanPin] = stateValue;
+        pinStatesRef.current['P' + cleanPin] = stateValue;
+        setPinStates(prev => ({
+          ...prev,
+          [pin]: stateValue,
+          [cleanPin]: stateValue,
+          ['D' + cleanPin]: stateValue,
+          ['P' + cleanPin]: stateValue
+        }));
         setTerminalLogs(prev => [
           ...prev, 
           { text: `[SERVO] Pin ${pin} -> ${numericAngle}°`, type: 'stdout' }
@@ -6897,7 +7023,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
         const resolvedValExpr = resolveSensorReads(String(val));
         const numericVal = typeof val === 'number' ? val : Number(evalExpr(resolvedValExpr, executionVars));
-        setPinStates(prev => ({ ...prev, [pin]: numericVal }));
+        const cleanPin = pin.replace(/^[DPGA]/, '');
+        pinStatesRef.current[pin] = numericVal;
+        pinStatesRef.current[cleanPin] = numericVal;
+        pinStatesRef.current['D' + cleanPin] = numericVal;
+        pinStatesRef.current['P' + cleanPin] = numericVal;
+        pinStatesRef.current['A' + cleanPin] = numericVal;
+        setPinStates(prev => ({
+          ...prev,
+          [pin]: numericVal,
+          [cleanPin]: numericVal,
+          ['D' + cleanPin]: numericVal,
+          ['P' + cleanPin]: numericVal,
+          ['A' + cleanPin]: numericVal
+        }));
         setTerminalLogs(prev => [
           ...prev, 
           { text: `[PWM] Pin ${pin} -> ${numericVal}`, type: 'stdout' }
@@ -7482,10 +7621,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setShowPaywallModal(true);
       return;
     }
+    const isSimWorkspace = currentTab === 'simulator' || isSimulatorExpanded;
     const codeStr = typeof customCode === 'string'
       ? customCode
-      : (simFiles[simActiveFile] || simFiles['firmware/main.ino'] || files[activeFile] || files['firmware/main.ino'] || '');
-    startRunAll(codeStr);
+      : (isSimWorkspace
+          ? (simFiles[simActiveFile] || simFiles['firmware/main.ino'] || '')
+          : (files[activeFile] || files['firmware/main.ino'] || ''));
+
+    if (isSimWorkspace) {
+      if (isRunning) return;
+      clearSimulationTimeouts();
+      setIsRunning(true);
+      setPinStates({});
+      setTerminalTab('terminal');
+      setTerminalLogs([{ text: '🚀 [SIMULATOR] Memulai simulasi rangkaian...', type: 'info' }]);
+      startCodeInterpreter(codeStr);
+    } else {
+      startRunAll(codeStr);
+    }
   };
 
 
