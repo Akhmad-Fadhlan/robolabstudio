@@ -146,11 +146,15 @@ const INITIAL_PACKAGES = {
 
 interface ProgramPinConfig {
   ledPin?: string;
+  ledPins?: string[];
   servoPin?: string;
+  servoPins?: string[];
   ultrasonicTrigPin?: string;
   ultrasonicEchoPin?: string;
   potPin?: string;
+  potPins?: string[];
   btnPin?: string;
+  btnPins?: string[];
 }
 
 const PYTHON_LESSONS = [
@@ -4752,11 +4756,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   };
 
   const parseProgramPins = (codeText: string): ProgramPinConfig => {
-    const config: ProgramPinConfig = {};
+    const config: ProgramPinConfig = {
+      ledPins: [],
+      servoPins: [],
+      potPins: [],
+      btnPins: []
+    };
     const codeLines = codeText.split('\n');
     const vars: { [key: string]: string } = {};
 
-    // First pass: extract all const/variable assignments and #define
+    // First pass: extract all const/variable assignments, #define, and Pin definitions
     codeLines.forEach(line => {
       let clean = line;
       if (clean.includes('//')) clean = clean.split('//')[0];
@@ -4765,7 +4774,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       if (defineMatch) {
         vars[defineMatch[1].trim()] = defineMatch[2].replace(/;$/, '').trim();
       }
-      if (clean.includes('#')) clean = clean.split('#')[0];
+      if (clean.includes('#') && !clean.trim().startsWith('#define')) {
+        clean = clean.split('#')[0];
+      }
       const trimmed = clean.trim();
       
       const assignMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/) ||
@@ -4775,35 +4786,68 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     });
 
-    // Helper to resolve variable or direct value to clean pin string (e.g. 'A0' -> '0', 'D9' -> '9', 'P0' -> '0')
+    // Helper to resolve variable or direct value to clean pin string (e.g. 'A0' -> '0', 'D9' -> '9', 'P0' -> '0', 'pin35' -> '35')
     const resolvePin = (p: string): string => {
       let val = p.trim();
       if (vars[val] !== undefined) {
         val = vars[val];
       }
-      // Remove 'D', 'A', or 'P' prefixes followed by digits or quotes
+      const pinObjMatch = val.match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/);
+      if (pinObjMatch) {
+        val = pinObjMatch[1];
+        if (vars[val] !== undefined) {
+          val = vars[val];
+        }
+      }
       val = val.replace(/['"]/g, '');
-      if (/^[ADP]\d+$/.test(val)) {
+      if (/^[ADPG]\d+$/i.test(val)) {
         return val.substring(1);
       }
+      if (/^pin(\d+)$/i.test(val)) {
+        return val.substring(3);
+      }
       return val;
+    };
+
+    const addPin = (arr: string[] | undefined, pinVal: string) => {
+      if (!arr) return;
+      const clean = resolvePin(pinVal);
+      if (clean && !arr.includes(clean)) {
+        arr.push(clean);
+      }
     };
 
     // Second pass: detect pin usage
     codeLines.forEach(line => {
       let clean = line;
       if (clean.includes('//')) clean = clean.split('//')[0];
-      if (clean.includes('#')) clean = clean.split('#')[0];
+      if (clean.includes('#') && !clean.trim().startsWith('#define')) clean = clean.split('#')[0];
       const trimmed = clean.trim();
+      if (!trimmed) return;
       
-      // 1. LED Pin: look for digitalWrite/analogWrite
-      const ledMatch = trimmed.match(/(?:digitalWrite|analogWrite|digital_write|analog_write)\(\s*([a-zA-Z0-9_]+)/) ||
-                       trimmed.match(/microbit\.pin(\d+)\.write_digital/) ||
-                       trimmed.match(/pins\.digitalWrite\(\s*"(P\d+)"/) ||
-                       trimmed.match(/microbit\.pin(\d+)\.write_analog/) ||
-                       trimmed.match(/pins\.analogWrite\(\s*"(P\d+)"/);
-      if (ledMatch) {
-        config.ledPin = resolvePin(ledMatch[1]);
+      // 1. LED Pin: look for digitalWrite/analogWrite, machine.Pin(N, Pin.OUT), pin.value(), etc.
+      const dwMatches = trimmed.matchAll(/(?:digitalWrite|analogWrite|digital_write|analog_write)\(\s*([a-zA-Z0-9_]+)/g);
+      for (const m of dwMatches) {
+        addPin(config.ledPins, m[1]);
+      }
+      const pyPinOutMatch = trimmed.match(/([a-zA-Z0-9_]+)\s*=\s*(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)\s*,\s*(?:machine\.)?Pin\.OUT/);
+      if (pyPinOutMatch) {
+        addPin(config.ledPins, pyPinOutMatch[2]);
+      }
+      const pyPinValMatch = trimmed.match(/([a-zA-Z0-9_]+)\.value\(\s*.*?\s*\)/) ||
+                            trimmed.match(/([a-zA-Z0-9_]+)\.(?:on|off|high|low)\(\s*\)/);
+      if (pyPinValMatch) {
+        const objName = pyPinValMatch[1];
+        if (/^pin\d+$/i.test(objName) || (vars[objName] && vars[objName].includes('Pin'))) {
+          addPin(config.ledPins, objName);
+        }
+      }
+      const mbMatch = trimmed.match(/microbit\.pin(\d+)\.write_digital/) ||
+                      trimmed.match(/pins\.digitalWrite\(\s*"(P\d+)"/) ||
+                      trimmed.match(/microbit\.pin(\d+)\.write_analog/) ||
+                      trimmed.match(/pins\.analogWrite\(\s*"(P\d+)"/);
+      if (mbMatch) {
+        addPin(config.ledPins, mbMatch[1]);
       }
 
       // 2. Servo Pin
@@ -4813,23 +4857,25 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                          trimmed.match(/pin(\d+)_servo\s*=\s*True/) ||
                          trimmed.match(/pin(\d+)\.set_analog_period\(\s*20\s*\)/);
       if (servoMatch) {
-        config.servoPin = resolvePin(servoMatch[2] || servoMatch[1]);
+        addPin(config.servoPins, servoMatch[2] || servoMatch[1]);
       }
 
       // 3. Potentiometer Pin
       const potMatch = trimmed.match(/(?:analogRead|analog_read)\(\s*([a-zA-Z0-9_]+)/) ||
+                       trimmed.match(/ADC\(\s*(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/) ||
                        trimmed.match(/microbit\.pin(\d+)\.read_analog/) ||
                        trimmed.match(/pins\.analogRead\(\s*"(P\d+)"/);
       if (potMatch) {
-        config.potPin = resolvePin(potMatch[1]);
+        addPin(config.potPins, potMatch[1]);
       }
 
       // 4. Button Pin
       const btnMatch = trimmed.match(/(?:digitalRead|digital_read)\(\s*([a-zA-Z0-9_]+)/) ||
+                       trimmed.match(/([a-zA-Z0-9_]+)\s*=\s*(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)\s*,\s*(?:machine\.)?Pin\.IN/) ||
                        trimmed.match(/microbit\.pin(\d+)\.read_digital/) ||
                        trimmed.match(/pins\.digitalRead\(\s*"(P\d+)"/);
       if (btnMatch) {
-        config.btnPin = resolvePin(btnMatch[1]);
+        addPin(config.btnPins, btnMatch[2] || btnMatch[1]);
       }
 
       // 5. Ultrasonic Pins (Trig & Echo)
@@ -4839,6 +4885,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         config.ultrasonicEchoPin = resolvePin(ultraMatch[2]);
       }
     });
+
+    config.ledPin = config.ledPins?.[0];
+    config.servoPin = config.servoPins?.[0];
+    config.potPin = config.potPins?.[0];
+    config.btnPin = config.btnPins?.[0];
 
     return config;
   };
@@ -5650,6 +5701,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (isRunning) return;
     clearSimulationTimeouts();
     setIsRunning(true);
+    isRunningRef.current = true;
     setPinStates({});
     setTerminalTab('terminal');
     setBuildProgress(0);
@@ -5704,6 +5756,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   };
 
   const startCodeInterpreter = (customCode?: string) => {
+    isRunningRef.current = true;
     const code = customCode !== undefined ? customCode : (simFiles[simActiveFile] || files[activeFile] || '');
     const lines = code.split('\n');
 
@@ -5823,6 +5876,94 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             queue.push({ type: 'assign', value: { varName: loopVar, expr: String(val) } });
             queue.push(...parseLines(bodyLines, 0, bodyLines.length - 1));
           }
+          continue;
+        }
+
+        // Check C++ / Python While statements
+        const pythonWhileMatch = trimmed.match(/^while\s+(.+?)\s*:/);
+        let isCppWhile = false;
+        let cppWhileCondition = '';
+        if (/^while\s*\(/.test(trimmed)) {
+          const openParenIdx = trimmed.indexOf('(');
+          if (openParenIdx !== -1) {
+            let depth = 0;
+            let closeParenIdx = -1;
+            for (let cIdx = openParenIdx; cIdx < trimmed.length; cIdx++) {
+              if (trimmed[cIdx] === '(') depth++;
+              else if (trimmed[cIdx] === ')') {
+                depth--;
+                if (depth === 0) {
+                  closeParenIdx = cIdx;
+                  break;
+                }
+              }
+            }
+            if (closeParenIdx !== -1) {
+              isCppWhile = true;
+              cppWhileCondition = trimmed.substring(openParenIdx + 1, closeParenIdx).trim();
+            }
+          }
+        }
+
+        if (pythonWhileMatch || isCppWhile) {
+          const condition = pythonWhileMatch ? pythonWhileMatch[1].trim() : cppWhileCondition;
+          const whileBodyLines: string[] = [];
+          let j = i + 1;
+
+          if (pythonWhileMatch) {
+            const whileLineIndent = line.length - line.trimStart().length;
+            while (j < lineList.length) {
+              const bodyLine = lineList[j];
+              const bodyTrimmed = bodyLine.trim();
+              if (bodyTrimmed === '') { whileBodyLines.push(bodyLine); j++; continue; }
+              const bodyIndent = bodyLine.length - bodyLine.trimStart().length;
+              if (bodyIndent > whileLineIndent) {
+                whileBodyLines.push(bodyLine);
+                j++;
+              } else {
+                break;
+              }
+            }
+          } else {
+            let braceCount = trimmed.includes('{') ? 1 : 0;
+            if (braceCount === 0 && j < lineList.length && lineList[j].trim() === '{') {
+              braceCount = 1;
+              j++;
+            }
+            if (braceCount > 0) {
+              while (j < lineList.length) {
+                const bodyLine = lineList[j];
+                let ended = false;
+                for (let charIdx = 0; charIdx < bodyLine.length; charIdx++) {
+                  const char = bodyLine[charIdx];
+                  if (char === '{') braceCount++;
+                  else if (char === '}') {
+                    braceCount--;
+                    if (braceCount <= 0) {
+                      ended = true;
+                      break;
+                    }
+                  }
+                }
+                if (ended) {
+                  j++;
+                  break;
+                }
+                whileBodyLines.push(bodyLine);
+                j++;
+              }
+            } else {
+              whileBodyLines.push(lineList[j]);
+              j++;
+            }
+          }
+
+          i = j - 1;
+          const body = parseLines(whileBodyLines, 0, whileBodyLines.length - 1);
+          queue.push({
+            type: 'while',
+            value: { condition, body }
+          });
           continue;
         }
 
@@ -5991,7 +6132,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
 
         // Regular statement parsing...
-        // 0. Return statement (e.g. return; or return 0;)
+        // 0. Break / Continue / Return statements
+        if (/^break\b/.test(trimmed)) {
+          queue.push({ type: 'break' });
+          continue;
+        }
+        if (/^continue\b/.test(trimmed)) {
+          queue.push({ type: 'continue' });
+          continue;
+        }
         if (/^return\b/.test(trimmed)) {
           queue.push({ type: 'return' });
           continue;
@@ -6087,9 +6236,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
 
         // 5. DigitalWrite & Tone
-        const pythonDigitalWriteMatch = trimmed.match(/robot\.digital_write\(\s*([a-zA-Z0-9_]+)\s*,\s*(['"]?)([a-zA-Z0-9_]+)\2\s*\)/) ||
-                                       trimmed.match(/Pin\(\s*([a-zA-Z0-9_]+)\s*,\s*Pin\.OUT\)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
-                                       trimmed.match(/pin(\d+)\.write_digital\(\s*([a-zA-Z0-9_]+)\s*\)/);
+        const pythonDigitalWriteMatch =
+          trimmed.match(/robot\.digital_write\(\s*([a-zA-Z0-9_]+)\s*,\s*(['"]?)([a-zA-Z0-9_]+)\2\s*\)/) ||
+          trimmed.match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)(?:\s*,\s*(?:machine\.)?Pin\.OUT)?\s*\)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
+          trimmed.match(/([a-zA-Z0-9_]+)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
+          trimmed.match(/([a-zA-Z0-9_]+)\.write_digital\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
+          trimmed.match(/([a-zA-Z0-9_]+)\.(on|off|high|low)\(\s*\)/);
         const arduinoDigitalWriteMatch = trimmed.match(/digitalWrite\(\s*([a-zA-Z0-9_]+)\s*,\s*(.+?)\s*\);?/);
         const toneMatch = trimmed.match(/tone\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)(?:\s*,\s*([a-zA-Z0-9_]+))?\s*\);?/);
         const noToneMatch = trimmed.match(/noTone\(\s*([a-zA-Z0-9_]+)\s*\);?/);
@@ -6119,7 +6271,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
         if (pythonDigitalWriteMatch) {
           const pin = pythonDigitalWriteMatch[1];
-          const state = pythonDigitalWriteMatch[3] || pythonDigitalWriteMatch[2];
+          let state = pythonDigitalWriteMatch[3] || pythonDigitalWriteMatch[2];
+          if (state === 'on' || state === 'high') state = 'HIGH';
+          else if (state === 'off' || state === 'low') state = 'LOW';
           queue.push({ 
             type: 'digitalWrite', 
             value: { pin, state } 
@@ -6604,15 +6758,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         replaced = replaced.replace(match[0], String(val));
       }
 
-      // 2. digitalRead / digital_read / micro:bit pin.read_digital / ESP32 Pin.value
+      // 2. digitalRead / digital_read / micro:bit pin.read_digital / ESP32 Pin.value / pinN.value()
       while (replaced.includes('digitalRead') || replaced.includes('digital_read') || replaced.includes('read_digital') || replaced.includes('.value(')) {
         let match = replaced.match(/(?:digitalRead|digital_read)\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
                     replaced.match(/(?:microbit\.)?pin(\d+)\.read_digital\(\s*\)/) ||
-                    replaced.match(/Pin\(\s*([a-zA-Z0-9_]+)\s*(?:,\s*Pin\.IN)?\s*\)\.value\(\s*\)/);
+                    replaced.match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)\s*(?:,\s*(?:machine\.)?Pin\.IN)?\s*\)\.value\(\s*\)/) ||
+                    replaced.match(/([a-zA-Z0-9_]+)\.value\(\s*\)/);
         if (!match) break;
         let pin = match[1];
         if (executionVars[pin] !== undefined) {
           pin = String(executionVars[pin]);
+        }
+        if (/^pin(\d+)$/i.test(pin)) {
+          pin = pin.replace(/^pin/i, '');
         }
         const cleanPin = pin.replace(/^[DPG]/, '');
         const pinVal = pinStatesRef.current[pin] ?? pinStatesRef.current[cleanPin] ?? pinStatesRef.current['D' + cleanPin] ?? pinStatesRef.current['P' + cleanPin] ?? pinStatesRef.current['G' + cleanPin];
@@ -6722,7 +6880,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     let hasOpenLine = false;
 
-    const executeBlock = (blockQueue: any[], blockIndex: number, onComplete: () => void, onReturn?: () => void) => {
+    const executeBlock = (
+      blockQueue: any[], 
+      blockIndex: number, 
+      onComplete: () => void, 
+      onReturn?: () => void,
+      onBreak?: () => void,
+      onContinue?: () => void
+    ) => {
       if (!isRunningRef.current) return;
 
       if (blockIndex >= blockQueue.length) {
@@ -6732,7 +6897,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
       const item = blockQueue[blockIndex];
       console.log("ROBOLAB SIMULATOR: Executing block item:", item);
-      const next = () => executeBlock(blockQueue, blockIndex + 1, onComplete, onReturn);
+      const next = () => executeBlock(blockQueue, blockIndex + 1, onComplete, onReturn, onBreak, onContinue);
 
       if (item.type === 'return') {
         if (onReturn) {
@@ -6743,23 +6908,74 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         return;
       }
 
+      if (item.type === 'break') {
+        if (onBreak) {
+          onBreak();
+        } else {
+          onComplete();
+        }
+        return;
+      }
+
+      if (item.type === 'continue') {
+        if (onContinue) {
+          onContinue();
+        } else {
+          onComplete();
+        }
+        return;
+      }
+
       if (item.type === 'assign') {
         const { varName, expr } = item.value as { varName: string, expr: string };
-        const resolvedExpr = resolveSensorReads(expr);
-        const val = evalExpr(resolvedExpr, executionVars);
-        executionVars[varName] = val;
+        const pinObjMatch = expr.match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/);
+        if (pinObjMatch) {
+          executionVars[varName] = pinObjMatch[1];
+        } else {
+          const resolvedExpr = resolveSensorReads(expr);
+          const val = evalExpr(resolvedExpr, executionVars);
+          executionVars[varName] = val;
+        }
         next();
       } else if (item.type === 'if') {
         const resolvedCond = resolveSensorReads(item.value.condition);
         const condVal = evalExpr(resolvedCond, executionVars);
         const condBool = condVal === 'true' || condVal === true || condVal === '1' || (typeof condVal === 'number' && condVal !== 0);
         if (condBool) {
-          executeBlock(item.value.ifBody, 0, next, onReturn || onComplete);
+          executeBlock(item.value.ifBody, 0, next, onReturn || onComplete, onBreak, onContinue);
         } else if (item.value.elseBody) {
-          executeBlock(item.value.elseBody, 0, next, onReturn || onComplete);
+          executeBlock(item.value.elseBody, 0, next, onReturn || onComplete, onBreak, onContinue);
         } else {
           next();
         }
+      } else if (item.type === 'while') {
+        const runWhileLoop = () => {
+          if (!isRunningRef.current) return;
+          const resolvedCond = resolveSensorReads(item.value.condition);
+          const condVal = evalExpr(resolvedCond, executionVars);
+          const condBool = condVal === 'true' || condVal === true || condVal === '1' || (typeof condVal === 'number' && condVal !== 0);
+          if (condBool) {
+            executeBlock(
+              item.value.body,
+              0,
+              () => {
+                if (!isRunningRef.current) return;
+                const t = setTimeout(runWhileLoop, 20);
+                simulationTimeouts.current.push(t);
+              },
+              onReturn || onComplete,
+              next,
+              () => {
+                if (!isRunningRef.current) return;
+                const t = setTimeout(runWhileLoop, 0);
+                simulationTimeouts.current.push(t);
+              }
+            );
+          } else {
+            next();
+          }
+        };
+        runWhileLoop();
       } else if (item.type === 'print') {
         const { expr, newline } = item.value as { expr: string, newline: boolean };
         const resolvedExpr = resolveSensorReads(expr);
@@ -6943,11 +7159,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (executionVars[pin] !== undefined) {
           pin = String(executionVars[pin]);
         }
+        const pinObjMatch = String(pin).match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/);
+        if (pinObjMatch) {
+          pin = pinObjMatch[1];
+        }
+        if (/^pin(\d+)$/i.test(pin)) {
+          pin = pin.replace(/^pin/i, '');
+        }
+        if (executionVars[pin] !== undefined) {
+          pin = String(executionVars[pin]);
+        }
         const resolvedStateExpr = resolveSensorReads(state);
         const evalState = executionVars[state] !== undefined ? executionVars[state] : evalExpr(resolvedStateExpr, executionVars);
-        const isHigh = evalState === 'HIGH' || evalState === '1' || evalState === 1 || evalState === 'true' || evalState === true;
+        const isHigh = evalState === 'HIGH' || evalState === '1' || evalState === 1 || evalState === 'true' || evalState === true || evalState === 'on' || evalState === 'high';
         const finalState = isHigh ? 'HIGH' : 'LOW';
-        const cleanPin = pin.replace(/^[DPG]/, '');
+        const cleanPin = pin.replace(/^[DPGA]/i, '');
         pinStatesRef.current[pin] = finalState;
         pinStatesRef.current[cleanPin] = finalState;
         pinStatesRef.current['D' + cleanPin] = finalState;
@@ -6963,7 +7189,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }));
         setTerminalLogs(prev => [
           ...prev, 
-          { text: `[GPIO] Pin ${pin} -> ${finalState}`, type: 'stdout' }
+          { text: `[GPIO] Pin ${cleanPin || pin} -> ${finalState}`, type: 'stdout' }
         ]);
         next();
       } else if (item.type === 'servoWrite') {
@@ -6977,6 +7203,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           } else {
             pin = programPins.servoPin || '3';
           }
+        }
+        const pinObjMatch = String(pin).match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/);
+        if (pinObjMatch) {
+          pin = pinObjMatch[1];
+        }
+        if (/^pin(\d+)$/i.test(pin)) {
+          pin = pin.replace(/^pin/i, '');
+        }
+        if (executionVars[pin] !== undefined) {
+          pin = String(executionVars[pin]);
         }
         const resolvedAngleExpr = resolveSensorReads(String(angle));
         let numericAngle = typeof angle === 'number' ? angle : Number(evalExpr(resolvedAngleExpr, executionVars));
@@ -7013,11 +7249,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }));
         setTerminalLogs(prev => [
           ...prev, 
-          { text: `[SERVO] Pin ${pin} -> ${numericAngle}°`, type: 'stdout' }
+          { text: `[SERVO] Pin ${cleanPin || pin} -> ${numericAngle}°`, type: 'stdout' }
         ]);
         next();
       } else if (item.type === 'analogWrite') {
         let { pin, val } = item.value as { pin: string, val: any };
+        if (executionVars[pin] !== undefined) {
+          pin = String(executionVars[pin]);
+        }
+        const pinObjMatch = String(pin).match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/);
+        if (pinObjMatch) {
+          pin = pinObjMatch[1];
+        }
+        if (/^pin(\d+)$/i.test(pin)) {
+          pin = pin.replace(/^pin/i, '');
+        }
         if (executionVars[pin] !== undefined) {
           pin = String(executionVars[pin]);
         }
@@ -7039,7 +7285,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }));
         setTerminalLogs(prev => [
           ...prev, 
-          { text: `[PWM] Pin ${pin} -> ${numericVal}`, type: 'stdout' }
+          { text: `[PWM] Pin ${cleanPin || pin} -> ${numericVal}`, type: 'stdout' }
         ]);
         next();
       } else if (item.type === 'blynk_begin') {
@@ -7632,6 +7878,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       if (isRunning) return;
       clearSimulationTimeouts();
       setIsRunning(true);
+      isRunningRef.current = true;
       setPinStates({});
       setTerminalTab('terminal');
       setTerminalLogs([{ text: '🚀 [SIMULATOR] Memulai simulasi rangkaian...', type: 'info' }]);
@@ -7655,6 +7902,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (isRunning) return;
     clearSimulationTimeouts();
     setIsRunning(true);
+    isRunningRef.current = true;
     setPinStates({});
     setTerminalTab('terminal');
     setBuildProgress(20);
@@ -7716,9 +7964,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       });
 
       const tEnd = setTimeout(() => {
-        if (!code.includes('while True:')) {
+        const isContinuous = code.includes('while True') || code.includes('while 1') || code.includes('void loop') || code.includes('while(') || code.includes('while (');
+        if (!isContinuous) {
           logToBoth(`\n[PYTHON] Process exited with code 0`, 'info');
           setIsRunning(false);
+          isRunningRef.current = false;
           setBuildStatusText('Finished');
         } else {
           setBuildStatusText(`${pyFile} is running in loop...`);
@@ -7755,6 +8005,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const handleStopCode = () => {
     clearSimulationTimeouts();
     setIsRunning(false);
+    isRunningRef.current = false;
     setRobotCommand('STOP');
     setPinStates({});
     setActiveLoopPrints([]);
@@ -9965,7 +10216,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           isRunning={isRunning}
                           onMicrobitPreview={(frames) => setMicrobitFrames(frames)}
                           onRunSimulator={(code) => {
-                            if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                            const isArduinoSketch = code.includes('void loop') || code.includes('void setup') || code.includes('digitalWrite');
+                            if (isArduinoSketch) {
+                              handleRunCode(code);
+                            } else if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
                               handleRunPython(code);
                             } else {
                               handleRunCode(code);
@@ -10064,7 +10318,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           isRunning={isRunning}
                           onRunSimulator={() => {
                             const codeToRun = simFiles[simActiveFile] || '';
-                            if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                            const isArduinoSketch = codeToRun.includes('void loop') || codeToRun.includes('void setup') || codeToRun.includes('digitalWrite');
+                            if (isArduinoSketch) {
+                              handleRunCode(codeToRun);
+                            } else if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
                               handleRunPython(codeToRun);
                             } else {
                               handleRunCode(codeToRun);

@@ -11,11 +11,15 @@ import {
 
 interface ProgramPinConfig {
   ledPin?: string;
+  ledPins?: string[];
   servoPin?: string;
+  servoPins?: string[];
   ultrasonicTrigPin?: string;
   ultrasonicEchoPin?: string;
   potPin?: string;
+  potPins?: string[];
   btnPin?: string;
+  btnPins?: string[];
 }
 
 export interface Wire {
@@ -248,6 +252,34 @@ export const hexToRgba = (hex: string, alpha: number): string => {
   const g = (num >> 8) & 255;
   const b = num & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+export const hexToRgb = (hex: string): { r: number, g: number, b: number } => {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16);
+  if (isNaN(num)) return { r: 0.93, g: 0.26, b: 0.26 };
+  return {
+    r: ((num >> 16) & 255) / 255,
+    g: ((num >> 8) & 255) / 255,
+    b: (num & 255) / 255
+  };
+};
+
+export const hexToRgbBoost = (hex: string, factor: number = 1.25): string => {
+  const { r, g, b } = hexToRgb(hex);
+  const br = Math.min(255, Math.round(r * 255 * factor + (1 - r) * 255 * 0.25));
+  const bg = Math.min(255, Math.round(g * 255 * factor + (1 - g) * 255 * 0.25));
+  const bb = Math.min(255, Math.round(b * 255 * factor + (1 - b) * 255 * 0.25));
+  return `rgb(${br}, ${bg}, ${bb})`;
+};
+
+export const hexToRgbDarken = (hex: string, factor: number = 0.65): string => {
+  const { r, g, b } = hexToRgb(hex);
+  const dr = Math.round(r * 255 * factor);
+  const dg = Math.round(g * 255 * factor);
+  const db = Math.round(b * 255 * factor);
+  return `rgb(${dr}, ${dg}, ${db})`;
 };
 
 export const Simulator: React.FC<SimulatorProps> = ({
@@ -552,27 +584,28 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     const usedSignalPins = new Set<string>();
 
-    const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum: string): string => {
+    const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum?: string): string => {
+      const cleanProgramPin = programPin ? programPin.replace(/^[ADPG]/i, '') : undefined;
       if (isArduino) {
         const prefix = type === 'analog' ? 'A' : 'D';
-        return programPin ? `${prefix}${programPin}` : `${prefix}${defaultNum}`;
+        return cleanProgramPin !== undefined ? `${prefix}${cleanProgramPin}` : (defaultNum !== undefined ? `${prefix}${defaultNum}` : '');
       } else if (isMicrobit) {
-        return programPin ? `P${programPin}` : `P${defaultNum}`;
+        return cleanProgramPin !== undefined ? `P${cleanProgramPin}` : (defaultNum !== undefined ? `P${defaultNum}` : '');
       } else if (isEsp8266) {
         if (type === 'analog') return 'A0';
-        if (!programPin) return `D${defaultNum}`;
-        return programPin.startsWith('D') ? programPin : (programPin.startsWith('G') ? programPin.replace('G', 'D') : `D${programPin}`);
+        if (cleanProgramPin === undefined) return defaultNum !== undefined ? `D${defaultNum}` : '';
+        return cleanProgramPin.startsWith('D') ? cleanProgramPin : `D${cleanProgramPin}`;
       } else {
-        return programPin ? `G${programPin}` : `G${defaultNum}`;
+        return cleanProgramPin !== undefined ? `G${cleanProgramPin}` : (defaultNum !== undefined ? `G${defaultNum}` : '');
       }
     };
 
     const allocatePin = (type: 'digital' | 'analog', preferredPin?: string, fallbackDefault?: string): string => {
-      if (preferredPin && !usedSignalPins.has(preferredPin)) {
+      if (preferredPin && preferredPin !== '' && !usedSignalPins.has(preferredPin)) {
         usedSignalPins.add(preferredPin);
         return preferredPin;
       }
-      if (fallbackDefault && !usedSignalPins.has(fallbackDefault)) {
+      if (fallbackDefault && fallbackDefault !== '' && !usedSignalPins.has(fallbackDefault)) {
         usedSignalPins.add(fallbackDefault);
         return fallbackDefault;
       }
@@ -607,7 +640,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // 1. LEDs
     leds.forEach((id, idx) => {
-      const pref = idx === 0 ? getMcuPinId('digital', programPins?.ledPin, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '4'))) : undefined;
+      const targetPin = (programPins?.ledPins && programPins.ledPins[idx]) 
+        ? programPins.ledPins[idx] 
+        : (idx === 0 ? programPins?.ledPin : undefined);
+      const pref = targetPin 
+        ? getMcuPinId('digital', targetPin) 
+        : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '4'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D9' : `D${Math.max(2, 9 - idx)}`) : undefined;
       const pin = allocatePin('digital', pref, def);
       const color = getComponentColor(id, '#ef4444');
@@ -617,7 +655,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // 2. Servos
     servos.forEach((id, idx) => {
-      const pref = idx === 0 ? getMcuPinId('digital', programPins?.servoPin, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18'))) : undefined;
+      const targetPin = (programPins?.servoPins && programPins.servoPins[idx])
+        ? programPins.servoPins[idx]
+        : (idx === 0 ? programPins?.servoPin : undefined);
+      const pref = targetPin
+        ? getMcuPinId('digital', targetPin)
+        : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D3' : `D${Math.min(11, 3 + idx * 2)}`) : undefined;
       const pin = allocatePin('digital', pref, def);
       const color = getComponentColor(id, '#3b82f6');
@@ -640,7 +683,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // 4. Potentiometers
     pots.forEach((id, idx) => {
-      const pref = idx === 0 ? getMcuPinId('analog', programPins?.potPin, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '36'))) : undefined;
+      const targetPin = (programPins?.potPins && programPins.potPins[idx])
+        ? programPins.potPins[idx]
+        : (idx === 0 ? programPins?.potPin : undefined);
+      const pref = targetPin
+        ? getMcuPinId('analog', targetPin)
+        : (idx === 0 ? getMcuPinId('analog', undefined, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '36'))) : undefined);
       const def = isArduino ? `A${idx}` : undefined;
       const pin = allocatePin('analog', pref, def);
       const color = getComponentColor(id, '#a78bfa');
@@ -651,7 +699,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // 5. Buttons
     buttons.forEach((id, idx) => {
-      const pref = idx === 0 ? getMcuPinId('digital', programPins?.btnPin, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27'))) : undefined;
+      const targetPin = (programPins?.btnPins && programPins.btnPins[idx])
+        ? programPins.btnPins[idx]
+        : (idx === 0 ? programPins?.btnPin : undefined);
+      const pref = targetPin
+        ? getMcuPinId('digital', targetPin)
+        : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D2' : `D${Math.min(10, 2 + idx * 2)}`) : undefined;
       const pin = allocatePin('digital', pref, def);
       const color = getComponentColor(id, '#eab308');
@@ -2247,6 +2300,55 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <stop offset="40%" stopColor="#a16207"/>
               <stop offset="100%" stopColor="#713f12"/>
             </linearGradient>
+
+            {/* LED Bulb and Legs Clip Paths */}
+            <clipPath id="led_bulb_clip"><rect x="0" y="0" width="200" height="118" /></clipPath>
+            <clipPath id="led_legs_clip"><rect x="0" y="118" width="200" height="82" /></clipPath>
+
+            {/* Dynamic Gradients for LED Custom Colors */}
+            {ledComponents.map(id => {
+              const compColor = getComponentColor(id, '#ef4444');
+              const lightColor = hexToRgbBoost(compColor, 1.35);
+              const darkColor = hexToRgbDarken(compColor, 0.55);
+              return (
+                <React.Fragment key={`led_grads_${id}`}>
+                  <linearGradient id={`led_body_grad_${id}`} x1="15%" y1="0%" x2="85%" y2="100%">
+                    <stop offset="0%" stopColor={lightColor} stopOpacity={0.93} />
+                    <stop offset="35%" stopColor={compColor} stopOpacity={0.90} />
+                    <stop offset="100%" stopColor={darkColor} stopOpacity={0.96} />
+                  </linearGradient>
+                  <radialGradient id={`led_core_grad_${id}`} cx="50%" cy="40%" r="50%">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity={0.98} />
+                    <stop offset="35%" stopColor={lightColor} stopOpacity={0.90} />
+                    <stop offset="70%" stopColor={compColor} stopOpacity={0.55} />
+                    <stop offset="100%" stopColor={compColor} stopOpacity={0} />
+                  </radialGradient>
+                </React.Fragment>
+              );
+            })}
+            {servoComponents.map(id => {
+              const compColor = getComponentColor(id, '#3b82f6');
+              if (compColor.toLowerCase() === '#3b82f6') return null;
+              const rgb = hexToRgb(compColor);
+              const boost = 1.3;
+              const rVal = Math.min(2.0, rgb.r * boost).toFixed(3);
+              const gVal = Math.min(2.0, rgb.g * boost).toFixed(3);
+              const bVal = Math.min(2.0, rgb.b * boost).toFixed(3);
+              return (
+                <filter key={`servo_tint_${id}`} id={`servo_tint_${id}`} colorInterpolationFilters="sRGB">
+                  <feColorMatrix type="matrix" values="
+                    0.15 0.25 0.60 0 0
+                    0.15 0.25 0.60 0 0
+                    0.15 0.25 0.60 0 0
+                    0    0    0    1 0" result="gray" />
+                  <feColorMatrix in="gray" type="matrix" values={`
+                    ${rVal} 0 0 0 0
+                    0 ${gVal} 0 0 0
+                    0 0 ${bVal} 0 0
+                    0 0 0 1 0`} />
+                </filter>
+              );
+            })}
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)" />
 
@@ -2471,15 +2573,46 @@ export const Simulator: React.FC<SimulatorProps> = ({
               >
                 {/* LED Glow Halo */}
                 {brightness > 0 && (
-                  <ellipse cx="100" cy="85" rx={35 + brightness * 18} ry={35 + brightness * 18}
-                    fill={hexToRgba(compColor, brightness * 0.45)} className="animate-pulse"/>
+                  <>
+                    <ellipse cx="100" cy="74" rx={38 + brightness * 22} ry={42 + brightness * 22}
+                      fill={hexToRgba(compColor, brightness * 0.45)} className="animate-pulse" filter="url(#ledGlow)"/>
+                    <circle cx="100" cy="74" r={20 + brightness * 8} fill={compColor} opacity={0.75 * brightness} filter="url(#ledGlow)" />
+                  </>
                 )}
 
-                {/* PNG Image */}
-                <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
+                {/* Metallic Legs (always realistic silver from led.png) */}
+                <g clipPath="url(#led_legs_clip)">
+                  <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
+                </g>
 
-                {/* LED Lens Tint */}
-                <ellipse cx="100" cy="78" rx="24" ry="28" fill={compColor} opacity="0.35" style={{ mixBlendMode: 'screen' }} />
+                {/* Internal Lead Frame (Cathode Anvil Cup & Anode Post) */}
+                <path d="M 112,118 L 112,88 L 118,78 L 105,78 L 108,88 L 108,118 Z" fill="#94a3b8" opacity={0.6} />
+                <path d="M 88,118 L 88,88 L 93,88 L 93,118 Z" fill="#94a3b8" opacity={0.6} />
+                <path d="M 91,88 Q 97,76 106,78" fill="none" stroke="#fde68a" strokeWidth="1" opacity={0.75} />
+                <rect x="105" y="77" width="3.5" height="3.5" fill={brightness > 0 ? '#ffffff' : '#f8fafc'} opacity={brightness > 0 ? 1 : 0.8} />
+
+                {/* 100% Vector Bulb Dome — Transforms Entire Component to Selected Color */}
+                <path
+                  d="M 64,106 L 64,52 C 64,24 80,16 100,16 C 120,16 136,24 136,52 L 136,106 L 140,108 L 140,118 L 60,118 L 60,108 Z"
+                  fill={`url(#led_body_grad_${id})`}
+                  stroke={hexToRgbDarken(compColor, 0.45)}
+                  strokeWidth="1.2"
+                />
+
+                {/* Active Core Illumination when ON */}
+                {brightness > 0 && (
+                  <ellipse cx="100" cy="74" rx={24 + brightness * 6} ry={28 + brightness * 6} fill={`url(#led_core_grad_${id})`} />
+                )}
+
+                {/* 3D Glass Specular Reflections */}
+                {/* Left curved edge glossy reflection */}
+                <path d="M 68,102 L 68,52 C 68,28 78,20 95,18 C 92,21 74,32 74,54 L 74,102 Z" fill="#ffffff" opacity={0.34} />
+                {/* Top curvature glint */}
+                <ellipse cx="94" cy="24" rx="14" ry="4.5" transform="rotate(-15, 94, 24)" fill="#ffffff" opacity={0.42} />
+                {/* Bottom flange highlight */}
+                <rect x="62" y="110" width="76" height="2" rx="1" fill="#ffffff" opacity={0.25} />
+                {/* Right edge subtle rim reflection */}
+                <path d="M 132,102 L 132,54 C 132,38 126,26 116,21 C 124,27 128,38 128,54 L 128,102 Z" fill="#ffffff" opacity={0.14} />
 
                 {/* Pin indicator dots */}
                 <circle cx="80" cy="185" r="3.5" fill={isWired ? compColor : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
@@ -2555,7 +2688,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 filter="url(#shadow3d)"
               >
                 {/* Servo PNG Image */}
-                <image href="./servo.png" xlinkHref="./servo.png" x="0" y="0" width="200" height="200" />
+                <image href="./servo.png" xlinkHref="./servo.png" x="0" y="0" width="200" height="200" filter={compColor.toLowerCase() !== '#3b82f6' ? `url(#servo_tint_${id})` : undefined} />
+                {compColor.toLowerCase() !== '#3b82f6' && (
+                  <rect x="58" y="66" width="84" height="92" rx="6" fill={compColor} opacity={0.65} style={{ mixBlendMode: 'color' }} />
+                )}
 
                 {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
                 <g transform={`translate(100, 95) rotate(${angle - 90}) translate(-100, -95)`}>
