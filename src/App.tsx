@@ -6624,7 +6624,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (!currentFunc) {
           const setupMatch = trimmed.match(/void\s+setup\s*\([^)]*\)\s*\{?/);
           const loopMatch = trimmed.match(/void\s+loop\s*\([^)]*\)\s*\{?/);
-          const otherFuncMatch = trimmed.match(/^(?:void|int|bool|String|float|double|uint8_t|uint16_t|uint32_t|byte)\s+([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{?/);
+          const otherFuncMatch = trimmed.match(/^(?:void|int|bool|String|float|double|uint8_t|uint16_t|uint32_t|byte|long)\s+([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{?/);
 
           if (setupMatch) {
             currentFunc = 'setup';

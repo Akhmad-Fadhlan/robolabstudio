@@ -371,6 +371,8 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
   res = res.replace(/digitalRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `digital_read(${pinConstants[p] || p})`);
   res = res.replace(/analogRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `analog_read(${pinConstants[p] || p})`);
   res = res.replace(/touchRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `touch_read(${pinConstants[p] || p})`);
+  res = res.replace(/(?:readUltrasonic|read_ultrasonic|readDistance)\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/g, (_, t, e) => `robot.read_ultrasonic(${pinConstants[t] || t}, ${pinConstants[e] || e})`);
+  res = res.replace(/\bsonar\.ping_cm\(\s*\)/g, 'robot.read_ultrasonic(12, 13)');
   res = res.replace(/pulseIn\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p, st) => `pulse_in(${pinConstants[p] || p}, "${st}")`);
   res = res.replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
   res = res.replace(/\bdht\.readTemperature\s*\(\s*\)/g, 'robot.dht_read_temp()');

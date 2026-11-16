@@ -388,7 +388,11 @@ body.color-sky.theme-light .app-root {
 .app-root.theme-light .border-cyan-500 { border-color: #0e7490 !important; }
 
 /* Exception: colored buttons keep white text + helper class */
-.app-root.theme-light .text-white-force { color: #ffffff !important; }
+.app-root.theme-light .text-white-force,
+.app-root.theme-light .text-white-force * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
 
 /* border-slate */
 .app-root.theme-light .border-slate-700,

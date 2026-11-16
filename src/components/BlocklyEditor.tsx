@@ -597,7 +597,7 @@ try {
     // 4. Sensors
     {
       "type": "sensor_ultrasonic",
-      "message0": "Read Ultrasonic Trigger %1 Echo %2",
+      "message0": "Read Ultrasonic HC-SR04 Trigger %1 Echo %2 (cm)",
       "args0": [
         {
           "type": "field_number",
@@ -614,7 +614,7 @@ try {
       ],
       "output": "Number",
       "colour": "#A855F7",
-      "tooltip": "Read distance from ultrasonic sensor in cm",
+      "tooltip": "Membaca jarak dari sensor ultrasonik HC-SR04 dalam satuan centimeter (cm)",
       "helpUrl": ""
     },
     // 5. AI Vision
@@ -3523,6 +3523,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
       generatedCode += '\n';
 
+      // Ultrasonic HC-SR04 globals & reading function
+      const hasUltrasonicBlocks = workspace.getAllBlocks(false).some((b: any) =>
+        isBlockActive(b) && (b.type === 'sensor_ultrasonic' || (b.type || '').toLowerCase().includes('ultrasonic'))
+      );
+      if (hasUltrasonicBlocks && !generatedCode.includes('long readUltrasonic(')) {
+        generatedCode += '// Sensor Jarak Ultrasonik HC-SR04\n' +
+          'long readUltrasonic(int trigPin, int echoPin) {\n' +
+          '  pinMode(trigPin, OUTPUT);\n' +
+          '  digitalWrite(trigPin, LOW);\n' +
+          '  delayMicroseconds(2);\n' +
+          '  digitalWrite(trigPin, HIGH);\n' +
+          '  delayMicroseconds(10);\n' +
+          '  digitalWrite(trigPin, LOW);\n' +
+          '  pinMode(echoPin, INPUT);\n' +
+          '  long duration = pulseIn(echoPin, HIGH, 30000);\n' +
+          '  if (duration == 0) return 0;\n' +
+          '  return duration * 0.034 / 2;\n' +
+          '}\n\n';
+      }
+
       // Declare all Blockly variables globally in Arduino C++
       const variables = workspace.getVariableMap().getAllVariables();
       if (variables.length > 0) {
@@ -3591,6 +3611,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const pin = block.getFieldValue('PIN');
           if (pin && (!isNaN(Number(pin)) || /^A\d+$/.test(pin))) {
             inputs.add(pin);
+          }
+        } else if (block.type === 'sensor_ultrasonic') {
+          const trig = block.getFieldValue('TRIGGER') || block.getFieldValue('TRIG');
+          const echo = block.getFieldValue('ECHO');
+          if (trig && (!isNaN(Number(trig)) || /^[AD]\d+$/.test(trig))) {
+            outputs.add(trig);
+          }
+          if (echo && (!isNaN(Number(echo)) || /^[AD]\d+$/.test(echo))) {
+            inputs.add(echo);
           }
         }
       });
@@ -3738,6 +3767,31 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         // === Arduino / ESP32: Standard MicroPython ===
         generatedCode += 'import machine\n';
         generatedCode += 'import time\n\n';
+
+        // Ultrasonic HC-SR04 for MicroPython
+        const hasPyUltrasonic = workspace.getAllBlocks(false).some((b: any) =>
+          isBlockActive(b) && (b.type === 'sensor_ultrasonic' || (b.type || '').toLowerCase().includes('ultrasonic'))
+        );
+        if (hasPyUltrasonic) {
+          generatedCode += '# Sensor Jarak Ultrasonik HC-SR04 MicroPython\n' +
+            'def read_ultrasonic(trig_pin, echo_pin):\n' +
+            '    trig = machine.Pin(trig_pin, machine.Pin.OUT)\n' +
+            '    echo = machine.Pin(echo_pin, machine.Pin.IN)\n' +
+            '    trig.value(0)\n' +
+            '    time.sleep_us(2)\n' +
+            '    trig.value(1)\n' +
+            '    time.sleep_us(10)\n' +
+            '    trig.value(0)\n' +
+            '    dur = machine.time_pulse_us(echo, 1, 30000)\n' +
+            '    if dur < 0:\n' +
+            '        return 0\n' +
+            '    return int((dur * 0.034) / 2)\n\n' +
+            'class _RobotUltrasonic:\n' +
+            '    @staticmethod\n' +
+            '    def read_ultrasonic(trig, echo):\n' +
+            '        return read_ultrasonic(trig, echo)\n\n' +
+            'robot = _RobotUltrasonic()\n\n';
+        }
         
         // Auto-collect used pins (only from active blocks)
         const outputs = new Set<string>();
@@ -4926,10 +4980,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `${funcName}(${args.join(', ')})`;
     }
     if (block.type === 'sensor_ultrasonic') {
-      const trig = block.getFieldValue('TRIGGER');
-      const echo = block.getFieldValue('ECHO');
+      const trig = block.getFieldValue('TRIGGER') || block.getFieldValue('TRIG') || '12';
+      const echo = block.getFieldValue('ECHO') || '13';
       if (lang === 'arduino') return `readUltrasonic(${trig}, ${echo})`;
-      return `robot.read_ultrasonic(${trig}, ${echo})`;
+      return `read_ultrasonic(${trig}, ${echo})`;
     }
     if (block.type === 'ai_detect') {
       const obj = block.getFieldValue('OBJECT');

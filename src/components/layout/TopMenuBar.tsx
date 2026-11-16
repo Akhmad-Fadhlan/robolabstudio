@@ -204,34 +204,34 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             <button
               onClick={() => handleArduinoHardwareAction('upload')}
               className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
-                isDark ? 'hover:bg-white/10 text-purple-300 bg-purple-500/10 border border-purple-500/20' : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
+                isDark ? 'bg-purple-600/40 hover:bg-purple-600/60 text-purple-200 border border-purple-500/40' : 'bg-purple-600 hover:bg-purple-700 !text-white text-white-force shadow-purple-500/30 border border-purple-600'
               }`}
               title="Upload to Hardware"
             >
-              <Upload className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-              <span className="hidden xl:inline">{tb('upload')}</span>
+              <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`} />
+              <span className={`hidden xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
             </button>
 
             <button
               onClick={handleInstallCores}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+              className={`hidden 2xl:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark ? 'hover:bg-white/10 text-cyan-300' : 'bg-cyan-100/70 hover:bg-cyan-200/80 text-cyan-900 border border-cyan-200/90'
               }`}
               title="Install Arduino/ESP Core"
             >
-              <Package className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-              <span className="hidden 2xl:inline">{tb('installCore')}</span>
+              <Package className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
+              <span>{tb('installCore')}</span>
             </button>
 
             <button
               onClick={handleRunPython}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+              className={`hidden 2xl:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark ? 'hover:bg-white/10 text-yellow-300' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-950 border border-amber-200/90'
               }`}
               title="Jalankan Kode Python"
             >
               <PythonLogo className="w-3.5 h-3.5" />
-              <span className="hidden 2xl:inline">{tb('runPython')}</span>
+              <span>{tb('runPython')}</span>
             </button>
 
             {/* Dropdown "More" */}
@@ -251,7 +251,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 title="Menu Lainnya"
               >
                 <MoreHorizontal className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden xl:inline">{tb('more')}</span>
+                <span className="hidden 2xl:inline">{tb('more')}</span>
               </button>
 
               {showMoreMenu && typeof document !== 'undefined' && createPortal(
@@ -267,6 +267,20 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                     isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/90' : 'bg-white border-slate-200 text-slate-800 shadow-slate-400/80'
                   }`}
                 >
+                  <div className="2xl:hidden border-b border-white/10 pb-1 mb-1">
+                    <button
+                      onClick={() => { setShowMoreMenu(false); handleInstallCores(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5 text-cyan-400" /> {tb('installCore')}
+                    </button>
+                    <button
+                      onClick={() => { setShowMoreMenu(false); handleRunPython(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
+                    >
+                      <PythonLogo className="w-3.5 h-3.5" /> {tb('runPython')}
+                    </button>
+                  </div>
                   <button
                     onClick={() => { setShowMoreMenu(false); onOpenBoardManager?.(); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
@@ -333,25 +347,25 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           }`}>
             <button
               onClick={() => setUiMode('student')}
-              className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 uiMode === 'student'
-                  ? 'text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? (isDark ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-600 !text-white text-white-force shadow-sm')
+                  : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
               }`}
               title="Student Mode: Tampilan sederhana untuk pemula"
             >
-              <span>{tb('student')}</span>
+              <span className="text-white-force">{tb('student')}</span>
             </button>
             <button
               onClick={() => setUiMode('pro')}
-              className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 uiMode === 'pro'
-                  ? 'text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? (isDark ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-600 !text-white text-white-force shadow-sm')
+                  : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
               }`}
               title="Professional Mode: Tampilan lengkap dengan Explorer & Multi-editor"
             >
-              <span>{tb('pro')}</span>
+              <span className="text-white-force">{tb('pro')}</span>
             </button>
           </div>
 
@@ -362,25 +376,25 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             }`}>
               <button
                 onClick={() => setStudentSubMode('block')}
-                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                   studentSubMode === 'block'
-                    ? 'bg-cyan-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? (isDark ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-600 !text-white text-white-force shadow-sm')
+                    : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
                 }`}
               >
                 <Sliders className="w-3 h-3" />
-                <span>{tb('block')}</span>
+                <span className="text-white-force">{tb('block')}</span>
               </button>
               <button
                 onClick={() => setStudentSubMode('code')}
-                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                   studentSubMode === 'code'
-                    ? 'bg-cyan-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? (isDark ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-600 !text-white text-white-force shadow-sm')
+                    : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
                 }`}
               >
                 <Code className="w-3 h-3" />
-                <span>{tb('code')}</span>
+                <span className="text-white-force">{tb('code')}</span>
               </button>
             </div>
           )}
