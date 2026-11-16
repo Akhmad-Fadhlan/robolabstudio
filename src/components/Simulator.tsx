@@ -2302,8 +2302,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
             </linearGradient>
 
             {/* LED Bulb and Legs Clip Paths */}
-            <clipPath id="led_bulb_clip"><rect x="0" y="0" width="200" height="118" /></clipPath>
-            <clipPath id="led_legs_clip"><rect x="0" y="118" width="200" height="82" /></clipPath>
+            <clipPath id="led_bulb_clip"><rect x="0" y="0" width="200" height="140" /></clipPath>
+            <clipPath id="led_legs_clip"><rect x="0" y="140" width="200" height="60" /></clipPath>
 
             {/* Dynamic Gradients for LED Custom Colors */}
             {ledComponents.map(id => {
@@ -2585,15 +2585,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
                 </g>
 
-                {/* Internal Lead Frame (Cathode Anvil Cup & Anode Post) */}
-                <path d="M 112,118 L 112,88 L 118,78 L 105,78 L 108,88 L 108,118 Z" fill="#94a3b8" opacity={0.6} />
-                <path d="M 88,118 L 88,88 L 93,88 L 93,118 Z" fill="#94a3b8" opacity={0.6} />
+                {/* Internal Lead Frame (Cathode Anvil Cup & Anode Post connecting to metallic legs at y=140) */}
+                <path d="M 112,140 L 112,88 L 118,78 L 105,78 L 108,88 L 108,140 Z" fill="#94a3b8" opacity={0.65} />
+                <path d="M 88,140 L 88,88 L 93,88 L 93,140 Z" fill="#94a3b8" opacity={0.65} />
                 <path d="M 91,88 Q 97,76 106,78" fill="none" stroke="#fde68a" strokeWidth="1" opacity={0.75} />
                 <rect x="105" y="77" width="3.5" height="3.5" fill={brightness > 0 ? '#ffffff' : '#f8fafc'} opacity={brightness > 0 ? 1 : 0.8} />
 
-                {/* 100% Vector Bulb Dome — Transforms Entire Component to Selected Color */}
+                {/* 100% Vector Bulb Dome — Covers ENTIRE LED body down to y=140 in Selected Color */}
                 <path
-                  d="M 64,106 L 64,52 C 64,24 80,16 100,16 C 120,16 136,24 136,52 L 136,106 L 140,108 L 140,118 L 60,118 L 60,108 Z"
+                  d="M 61,110 L 61,52 C 61,24 77,15 98,15 C 119,15 135,24 135,52 L 135,110 L 138,114 L 138,122 L 124,140 L 72,140 L 58,122 L 58,114 Z"
                   fill={`url(#led_body_grad_${id})`}
                   stroke={hexToRgbDarken(compColor, 0.45)}
                   strokeWidth="1.2"
@@ -2606,13 +2606,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
                 {/* 3D Glass Specular Reflections */}
                 {/* Left curved edge glossy reflection */}
-                <path d="M 68,102 L 68,52 C 68,28 78,20 95,18 C 92,21 74,32 74,54 L 74,102 Z" fill="#ffffff" opacity={0.34} />
+                <path d="M 66,128 L 66,52 C 66,28 76,20 95,18 C 92,21 72,32 72,54 L 72,126 Z" fill="#ffffff" opacity={0.34} />
                 {/* Top curvature glint */}
                 <ellipse cx="94" cy="24" rx="14" ry="4.5" transform="rotate(-15, 94, 24)" fill="#ffffff" opacity={0.42} />
-                {/* Bottom flange highlight */}
-                <rect x="62" y="110" width="76" height="2" rx="1" fill="#ffffff" opacity={0.25} />
+                {/* Flange rim highlight */}
+                <rect x="60" y="114" width="76" height="2" rx="1" fill="#ffffff" opacity={0.25} />
+                {/* Bottom tapered skirt reflection */}
+                <line x1="74" y1="139" x2="122" y2="139" stroke="#ffffff" strokeWidth="1" opacity={0.25} />
                 {/* Right edge subtle rim reflection */}
-                <path d="M 132,102 L 132,54 C 132,38 126,26 116,21 C 124,27 128,38 128,54 L 128,102 Z" fill="#ffffff" opacity={0.14} />
+                <path d="M 131,126 L 131,54 C 131,38 125,26 115,21 C 123,27 127,38 127,54 L 127,126 Z" fill="#ffffff" opacity={0.14} />
 
                 {/* Pin indicator dots */}
                 <circle cx="80" cy="185" r="3.5" fill={isWired ? compColor : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
@@ -2693,11 +2695,40 @@ export const Simulator: React.FC<SimulatorProps> = ({
                   <rect x="58" y="66" width="84" height="92" rx="6" fill={compColor} opacity={0.65} style={{ mixBlendMode: 'color' }} />
                 )}
 
-                {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
+                {/* Animated Rotating SG90 Horn — Single unified horn with 4 arms and linkage holes */}
                 <g transform={`translate(100, 95) rotate(${angle - 90}) translate(-100, -95)`}>
-                  <rect x="75" y="91" width="50" height="8" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                  <circle cx="100" cy="95" r="5" fill={compColor} />
-                  <circle cx="120" cy="95" r="2.5" fill="#ef4444" />
+                  {/* Primary vertical double arm */}
+                  <rect x="96" y="52" width="8" height="86" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.2" filter="url(#shadow3d)" />
+                  {/* Horizontal cross arm */}
+                  <rect x="72" y="91" width="56" height="8" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.2" />
+                  {/* Center hub disc */}
+                  <circle cx="100" cy="95" r="8" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.2" />
+
+                  {/* Precision linkage holes on primary top arm */}
+                  <circle cx="100" cy="58" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="66" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="74" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="82" r="1.3" fill="#64748b" />
+
+                  {/* Precision linkage holes on bottom arm */}
+                  <circle cx="100" cy="108" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="116" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="124" r="1.3" fill="#64748b" />
+                  <circle cx="100" cy="132" r="1.3" fill="#64748b" />
+
+                  {/* Precision linkage holes on left & right arms */}
+                  <circle cx="78" cy="95" r="1.3" fill="#64748b" />
+                  <circle cx="86" cy="95" r="1.3" fill="#64748b" />
+                  <circle cx="114" cy="95" r="1.3" fill="#64748b" />
+                  <circle cx="122" cy="95" r="1.3" fill="#64748b" />
+
+                  {/* Directional angle pointer indicator at top arm tip */}
+                  <circle cx="100" cy="58" r="2.2" fill={compColor} />
+
+                  {/* Center retaining screw */}
+                  <circle cx="100" cy="95" r="3.6" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+                  <line x1="97.5" y1="95" x2="102.5" y2="95" stroke="#334155" strokeWidth="0.8" />
+                  <line x1="100" y1="92.5" x2="100" y2="97.5" stroke="#334155" strokeWidth="0.8" />
                 </g>
 
                 {/* Pin indicator dots directly over cable header plug (GND left:85, VCC center:100, SIG right:115) */}
