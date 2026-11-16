@@ -802,6 +802,22 @@ try {
       "tooltip": "Print value to serial without newline",
       "helpUrl": ""
     },
+    // 13b. Serial Write
+    {
+      "type": "arduino_serial_write",
+      "message0": "Serial.write %1",
+      "args0": [
+        {
+          "type": "input_value",
+          "name": "TEXT"
+        }
+      ],
+      "previousStatement": null,
+      "nextStatement": null,
+      "colour": "#4CBFE6",
+      "tooltip": "Kirim byte / karakter biner ke Serial Monitor (Serial.write)",
+      "helpUrl": ""
+    },
     // 14. Arduino Map (New)
     {
       "type": "arduino_map",
@@ -4107,6 +4123,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="text_join"></block>
         <block type="arduino_serial_print"></block>
         <block type="arduino_serial_print_inline"></block>
+        <block type="arduino_serial_write"></block>
       </category>
       <category name="Variables" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
       </category>
@@ -4129,6 +4146,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       <category name="Arduino" colour="#14B8A6" css-container="cat-arduino" css-row="cat-arduino">
         <block type="arduino_setup"></block>
         <block type="arduino_loop"></block>
+        <block type="arduino_serial_print"></block>
+        <block type="arduino_serial_print_inline"></block>
+        <block type="arduino_serial_write"></block>
         <block type="arduino_serial_available"></block>
         <block type="arduino_serial_read"></block>
         <block type="arduino_pulsein"></block>
@@ -4507,13 +4527,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           </block>
         </xml>
       `;
-      const xmlToLoad = workspaceXml || defaultXml;
+      const xmlToLoad = (workspaceXml !== undefined && workspaceXml !== null) ? workspaceXml : defaultXml;
       lastLoadedXmlRef.current = xmlToLoad;
       isLoadingXmlRef.current = true;
       Blockly.Events.disable();
       try {
-        ensureCustomBlocks(xmlToLoad);
-        Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlToLoad), workspace);
+        if (xmlToLoad.trim() === '' || (xmlToLoad.includes('<xml') && !xmlToLoad.includes('<block'))) {
+          workspace.clear();
+        } else {
+          ensureCustomBlocks(xmlToLoad);
+          Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xmlToLoad), workspace);
+        }
       } catch (xmlErr) {
         console.warn("[RoboLab] Failed to load workspace XML, trying default XML:", xmlErr);
         workspace.clear();
@@ -4775,6 +4799,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           if (generatedXmlsRef.current.has(workspaceXml)) {
             lastLoadedXmlRef.current = workspaceXml;
             generatedXmlsRef.current.delete(workspaceXml);
+            return;
+          }
+
+          // Blank XML handler
+          if (workspaceXml === '' || (workspaceXml.includes('<xml') && !workspaceXml.includes('<block'))) {
+            lastLoadedXmlRef.current = workspaceXml;
+            workspaceRef.current.clear();
+            if (isSyncWithBlocksRef.current && updateCodeRef.current) {
+              updateCodeRef.current();
+            }
             return;
           }
 
@@ -5305,6 +5339,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}Serial.print(${valStr});\n`;
         } else {
           code += `${indent}print(${valStr}, end='')\n`;
+        }
+      } else if (currentBlock.type === 'arduino_serial_write') {
+        const textBlock = currentBlock.getInputTargetBlock('TEXT') || currentBlock.getInputTargetBlock('VALUE');
+        const valStr = textBlock ? getBlockValue(textBlock, lang) : '65';
+        if (lang === 'arduino') {
+          code += `${indent}Serial.write(${valStr});\n`;
+        } else {
+          code += `${indent}print(chr(int(${valStr})) if str(${valStr}).isdigit() else str(${valStr}), end='')\n`;
         }
       } else if (currentBlock.type === 'arduino_servo_write') {
         const pin = currentBlock.getFieldValue('PIN');

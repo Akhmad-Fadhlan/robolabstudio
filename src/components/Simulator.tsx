@@ -203,6 +203,38 @@ interface Pin {
   type: 'mcu' | 'component';
 }
 
+export const getBaseComponentType = (id: string): string => {
+  if (id.startsWith('led')) return 'led';
+  if (id.startsWith('servo')) return 'servo';
+  if (id.startsWith('ultrasonic') || id.startsWith('hcsr')) return 'ultrasonic';
+  if (id.startsWith('pot')) return 'pot';
+  if (id.startsWith('button') || id.startsWith('btn')) return 'button';
+  if (id.startsWith('lcd')) return 'lcd';
+  if (id.startsWith('motor') || id.startsWith('dc_motor') || id.startsWith('motordc')) return 'motor';
+  if (id.startsWith('dht')) return 'dht11';
+  if (id.startsWith('rfid') || id.startsWith('rc522') || id.startsWith('mfrc522')) return 'rfid';
+  return id.replace(/_\d+$/, '');
+};
+
+export const getInstancePinId = (instanceId: string, basePin: string): string => {
+  if (!instanceId.includes('_')) return basePin;
+  const suffix = instanceId.split('_').slice(1).join('_');
+  return `${basePin}_${suffix}`;
+};
+
+const DEFAULT_COMPONENT_POSITIONS: { [key: string]: { x: number; y: number } } = {
+  board: { x: 85, y: 15 },
+  led: { x: 15, y: 420 },
+  servo: { x: 110, y: 420 },
+  ultrasonic: { x: 215, y: 420 },
+  pot: { x: 15, y: 530 },
+  button: { x: 120, y: 530 },
+  lcd: { x: 210, y: 530 },
+  motor: { x: 330, y: 420 },
+  dht11: { x: 15, y: 640 },
+  rfid: { x: 160, y: 640 }
+};
+
 export const Simulator: React.FC<SimulatorProps> = ({
   isRunning,
   robotCommand,
@@ -248,7 +280,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   onToggleRun,
 }) => {
   const isLight = themeMode === 'light';
-  const [localSimMode, setLocalSimMode] = useState<'robot' | 'circuit'>('robot');
+  const [localSimMode, setLocalSimMode] = useState<'robot' | 'circuit'>('circuit');
   const activeSimMode = simulatorModeProp ?? localSimMode;
   const setSimMode = (m: 'robot' | 'circuit') => {
     if (onSimulatorModeChange) onSimulatorModeChange(m);
@@ -343,6 +375,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
     }
   };
 
+  const [extraPotValues, setExtraPotValues] = useState<{ [key: string]: number }>({});
+  const [pressedButtons, setPressedButtons] = useState<{ [key: string]: boolean }>({});
+
   // Component rotations state
   const [rotations, setRotations] = useState<{ [key: string]: number }>({
     led: 0,
@@ -363,15 +398,17 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const getRotatedPinCoords = (
-    compType: string,
+    compId: string,
     relX: number,
     relY: number,
     centerX: number,
     centerY: number
   ) => {
-    const angle = rotations[compType] || 0;
-    const posX = positions[compType]?.x ?? 0;
-    const posY = positions[compType]?.y ?? 0;
+    const angle = rotations[compId] || 0;
+    const baseType = getBaseComponentType(compId);
+    const defaultPos = DEFAULT_COMPONENT_POSITIONS[baseType] || { x: 50, y: 400 };
+    const posX = positions[compId]?.x ?? (positions[baseType]?.x ?? defaultPos.x);
+    const posY = positions[compId]?.y ?? (positions[baseType]?.y ?? defaultPos.y);
     if (angle === 0) {
       return { cx: posX + relX, cy: posY + relY };
     }
@@ -792,23 +829,35 @@ export const Simulator: React.FC<SimulatorProps> = ({
     else handleZoomOut();
   };
 
-  // Determine active components
-  const hasServo = activeComponents.includes('servo');
-  const hasUltrasonic = activeComponents.includes('ultrasonic') || activeComponents.includes('hcsr') || activeComponents.includes('hcsr04');
-  const hasLed = activeComponents.includes('led');
-  const hasPot = activeComponents.includes('pot');
-  const hasButton = activeComponents.includes('button');
-  const hasLcd = activeComponents.includes('lcd');
-  const hasMotor = activeComponents.includes('motor') || activeComponents.includes('dc_motor') || activeComponents.includes('motordc');
-  const hasDht11 = activeComponents.includes('dht11') || activeComponents.includes('dht');
-  const hasRfid = activeComponents.includes('rfid') || activeComponents.includes('mfrc522') || activeComponents.includes('rc522');
+  // Filter active components by base type
+  const ledComponents = activeComponents.filter(c => getBaseComponentType(c) === 'led');
+  const servoComponents = activeComponents.filter(c => getBaseComponentType(c) === 'servo');
+  const ultrasonicComponents = activeComponents.filter(c => getBaseComponentType(c) === 'ultrasonic');
+  const potComponents = activeComponents.filter(c => getBaseComponentType(c) === 'pot');
+  const buttonComponents = activeComponents.filter(c => getBaseComponentType(c) === 'button');
+  const lcdComponents = activeComponents.filter(c => getBaseComponentType(c) === 'lcd');
+  const motorComponents = activeComponents.filter(c => getBaseComponentType(c) === 'motor');
+  const dht11Components = activeComponents.filter(c => getBaseComponentType(c) === 'dht11');
+  const rfidComponents = activeComponents.filter(c => getBaseComponentType(c) === 'rfid');
 
-  const checkMotorWiring = (): boolean => {
-    const posWire = wires.find(w => w.to === 'MOTOR_POS' || w.from === 'MOTOR_POS');
-    const negWire = wires.find(w => w.to === 'MOTOR_NEG' || w.from === 'MOTOR_NEG');
+  const hasServo = servoComponents.length > 0;
+  const hasUltrasonic = ultrasonicComponents.length > 0;
+  const hasLed = ledComponents.length > 0;
+  const hasPot = potComponents.length > 0;
+  const hasButton = buttonComponents.length > 0;
+  const hasLcd = lcdComponents.length > 0;
+  const hasMotor = motorComponents.length > 0;
+  const hasDht11 = dht11Components.length > 0;
+  const hasRfid = rfidComponents.length > 0;
+
+  const checkMotorWiring = (id: string = 'motor'): boolean => {
+    const pinPos = getInstancePinId(id, 'MOTOR_POS');
+    const pinNeg = getInstancePinId(id, 'MOTOR_NEG');
+    const posWire = wires.find(w => w.to === pinPos || w.from === pinPos);
+    const negWire = wires.find(w => w.to === pinNeg || w.from === pinNeg);
     return !!posWire && !!negWire;
   };
-  const isMotorWired = checkMotorWiring();
+  const isMotorWired = checkMotorWiring('motor');
 
   const gndPins = [
     'GND', 'GND_L', 'GND_R', 'GND_T', 'GND_B', 'PAD_GND', 'GND_M', 'G_M', 'GND_L2', 'GND_R2',
@@ -991,122 +1040,131 @@ export const Simulator: React.FC<SimulatorProps> = ({
     const componentPins: Pin[] = [];
 
     // LED Pins (size 200x200, center 100x100)
-    if (hasLed) {
-      const ledA = getRotatedPinCoords('led', 80, 185, 100, 100);
-      const ledK = getRotatedPinCoords('led', 120, 185, 100, 100);
+    ledComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const ledA = getRotatedPinCoords(id, 80, 185, 100, 100);
+      const ledK = getRotatedPinCoords(id, 120, 185, 100, 100);
       componentPins.push(
-        { id: 'LED_A', name: 'LED Anode (+)',    cx: ledA.cx, cy: ledA.cy, type: 'component' },
-        { id: 'LED_K', name: 'LED Cathode (-)',  cx: ledK.cx, cy: ledK.cy, type: 'component' }
+        { id: getInstancePinId(id, 'LED_A'), name: `LED Anode (+)${s}`,    cx: ledA.cx, cy: ledA.cy, type: 'component' },
+        { id: getInstancePinId(id, 'LED_K'), name: `LED Cathode (-)${s}`,  cx: ledK.cx, cy: ledK.cy, type: 'component' }
       );
-    }
+    });
     
-    // Servo Pins (size 200x200, center 100x100) — GND left (85), VCC center (100), SIG right (115) over header cable
-    if (hasServo) {
-      const gnd = getRotatedPinCoords('servo', 85, 20, 100, 100);
-      const vcc = getRotatedPinCoords('servo', 100, 20, 100, 100);
-      const sig = getRotatedPinCoords('servo', 115, 20, 100, 100);
+    // Servo Pins (size 200x200, center 100x100)
+    servoComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const gnd = getRotatedPinCoords(id, 85, 20, 100, 100);
+      const vcc = getRotatedPinCoords(id, 100, 20, 100, 100);
+      const sig = getRotatedPinCoords(id, 115, 20, 100, 100);
       componentPins.push(
-        { id: 'SERVO_GND', name: 'Servo GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' },
-        { id: 'SERVO_VCC', name: 'Servo VCC (5V)', cx: vcc.cx, cy: vcc.cy, type: 'component' },
-        { id: 'SERVO_SIG', name: 'Servo PWM Signal', cx: sig.cx, cy: sig.cy, type: 'component' }
+        { id: getInstancePinId(id, 'SERVO_GND'), name: `Servo GND (Ground)${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' },
+        { id: getInstancePinId(id, 'SERVO_VCC'), name: `Servo VCC (5V)${s}`, cx: vcc.cx, cy: vcc.cy, type: 'component' },
+        { id: getInstancePinId(id, 'SERVO_SIG'), name: `Servo PWM Signal${s}`, cx: sig.cx, cy: sig.cy, type: 'component' }
       );
-    }
+    });
 
-    // HC-SR04 Pins - real PNG image coordinates (size 200x200, center 100x100)
-    if (hasUltrasonic) {
-      const vcc = getRotatedPinCoords('ultrasonic', 84, 157, 100, 100);
-      const trig = getRotatedPinCoords('ultrasonic', 94, 157, 100, 100);
-      const echo = getRotatedPinCoords('ultrasonic', 105, 157, 100, 100);
-      const gnd = getRotatedPinCoords('ultrasonic', 115, 157, 100, 100);
+    // HC-SR04 Pins (size 200x200, center 100x100)
+    ultrasonicComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const vcc = getRotatedPinCoords(id, 84, 157, 100, 100);
+      const trig = getRotatedPinCoords(id, 94, 157, 100, 100);
+      const echo = getRotatedPinCoords(id, 105, 157, 100, 100);
+      const gnd = getRotatedPinCoords(id, 115, 157, 100, 100);
       componentPins.push(
-        { id: 'SR04_VCC',  name: 'SR04 VCC (5V)',          cx: vcc.cx,  cy: vcc.cy,  type: 'component' },
-        { id: 'SR04_TRIG', name: 'SR04 Trig Trigger Pin',  cx: trig.cx, cy: trig.cy, type: 'component' },
-        { id: 'SR04_ECHO', name: 'SR04 Echo Pulse Pin',    cx: echo.cx, cy: echo.cy, type: 'component' },
-        { id: 'SR04_GND',  name: 'SR04 GND (Ground)',      cx: gnd.cx,  cy: gnd.cy,  type: 'component' }
+        { id: getInstancePinId(id, 'SR04_VCC'),  name: `SR04 VCC (5V)${s}`,          cx: vcc.cx,  cy: vcc.cy,  type: 'component' },
+        { id: getInstancePinId(id, 'SR04_TRIG'), name: `SR04 Trig Trigger Pin${s}`,  cx: trig.cx, cy: trig.cy, type: 'component' },
+        { id: getInstancePinId(id, 'SR04_ECHO'), name: `SR04 Echo Pulse Pin${s}`,    cx: echo.cx, cy: echo.cy, type: 'component' },
+        { id: getInstancePinId(id, 'SR04_GND'),  name: `SR04 GND (Ground)${s}`,      cx: gnd.cx,  cy: gnd.cy,  type: 'component' }
       );
-    }
+    });
 
     // Potentiometer Pins (size 200x200, center 100x100)
-    if (hasPot) {
-      const gnd = getRotatedPinCoords('pot', 50, 150, 100, 100);
-      const sig = getRotatedPinCoords('pot', 100, 150, 100, 100);
-      const vcc = getRotatedPinCoords('pot', 150, 150, 100, 100);
+    potComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const gnd = getRotatedPinCoords(id, 50, 150, 100, 100);
+      const sig = getRotatedPinCoords(id, 100, 150, 100, 100);
+      const vcc = getRotatedPinCoords(id, 150, 150, 100, 100);
       componentPins.push(
-        { id: 'POT_VCC', name: 'Pot VCC (3.3V/5V)', cx: vcc.cx, cy: vcc.cy, type: 'component' },
-        { id: 'POT_SIG', name: 'Pot Signal Analog Out', cx: sig.cx, cy: sig.cy, type: 'component' },
-        { id: 'POT_GND', name: 'Pot GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' }
+        { id: getInstancePinId(id, 'POT_VCC'), name: `Pot VCC (3.3V/5V)${s}`, cx: vcc.cx, cy: vcc.cy, type: 'component' },
+        { id: getInstancePinId(id, 'POT_SIG'), name: `Pot Signal Analog Out${s}`, cx: sig.cx, cy: sig.cy, type: 'component' },
+        { id: getInstancePinId(id, 'POT_GND'), name: `Pot GND (Ground)${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' }
       );
-    }
+    });
 
     // Push Button Pins (size 120x120, center 60x60)
-    if (hasButton) {
-      const sig = getRotatedPinCoords('button', 35, 95, 60, 60);
-      const gnd = getRotatedPinCoords('button', 85, 95, 60, 60);
+    buttonComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const sig = getRotatedPinCoords(id, 35, 95, 60, 60);
+      const gnd = getRotatedPinCoords(id, 85, 95, 60, 60);
       componentPins.push(
-        { id: 'BTN_SIG', name: 'Button Signal (Output)', cx: sig.cx, cy: sig.cy, type: 'component' },
-        { id: 'BTN_GND', name: 'Button GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' }
+        { id: getInstancePinId(id, 'BTN_SIG'), name: `Button Signal (Output)${s}`, cx: sig.cx, cy: sig.cy, type: 'component' },
+        { id: getInstancePinId(id, 'BTN_GND'), name: `Button GND (Ground)${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' }
       );
-    }
+    });
 
     // LCD 16x2 I2C Pins (size 200x200, center 100x100)
-    if (hasLcd) {
-      const gnd = getRotatedPinCoords('lcd', 22, 68, 100, 100);
-      const vcc = getRotatedPinCoords('lcd', 22, 82, 100, 100);
-      const sda = getRotatedPinCoords('lcd', 22, 96, 100, 100);
-      const scl = getRotatedPinCoords('lcd', 22, 110, 100, 100);
+    lcdComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const gnd = getRotatedPinCoords(id, 22, 68, 100, 100);
+      const vcc = getRotatedPinCoords(id, 22, 82, 100, 100);
+      const sda = getRotatedPinCoords(id, 22, 96, 100, 100);
+      const scl = getRotatedPinCoords(id, 22, 110, 100, 100);
       componentPins.push(
-        { id: 'LCD_GND', name: 'LCD GND', cx: gnd.cx, cy: gnd.cy, type: 'component' },
-        { id: 'LCD_VCC', name: 'LCD VCC (5V)', cx: vcc.cx, cy: vcc.cy, type: 'component' },
-        { id: 'LCD_SDA', name: 'LCD SDA (Data)', cx: sda.cx, cy: sda.cy, type: 'component' },
-        { id: 'LCD_SCL', name: 'LCD SCL (Clock)', cx: scl.cx, cy: scl.cy, type: 'component' }
+        { id: getInstancePinId(id, 'LCD_GND'), name: `LCD GND${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' },
+        { id: getInstancePinId(id, 'LCD_VCC'), name: `LCD VCC (5V)${s}`, cx: vcc.cx, cy: vcc.cy, type: 'component' },
+        { id: getInstancePinId(id, 'LCD_SDA'), name: `LCD SDA (Data)${s}`, cx: sda.cx, cy: sda.cy, type: 'component' },
+        { id: getInstancePinId(id, 'LCD_SCL'), name: `LCD SCL (Clock)${s}`, cx: scl.cx, cy: scl.cy, type: 'component' }
       );
-    }
+    });
 
     // DC Motor Pins (size 200x200, center 100x100)
-    if (hasMotor) {
-      const pos = getRotatedPinCoords('motor', 78, 185, 100, 100);
-      const neg = getRotatedPinCoords('motor', 122, 185, 100, 100);
+    motorComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const pos = getRotatedPinCoords(id, 78, 185, 100, 100);
+      const neg = getRotatedPinCoords(id, 122, 185, 100, 100);
       componentPins.push(
-        { id: 'MOTOR_POS', name: 'DC Motor Positif (+)', cx: pos.cx, cy: pos.cy, type: 'component' },
-        { id: 'MOTOR_NEG', name: 'DC Motor Negatif (-)', cx: neg.cx, cy: neg.cy, type: 'component' }
+        { id: getInstancePinId(id, 'MOTOR_POS'), name: `DC Motor Positif (+)${s}`, cx: pos.cx, cy: pos.cy, type: 'component' },
+        { id: getInstancePinId(id, 'MOTOR_NEG'), name: `DC Motor Negatif (-)${s}`, cx: neg.cx, cy: neg.cy, type: 'component' }
       );
-    }
+    });
 
     // DHT11 Pins (aligned with dht11 layout, pitch 20px, corrected offset)
-    if (hasDht11) {
-      const vcc = getRotatedPinCoords('dht11', 15, 115, 45, 60);
-      const data = getRotatedPinCoords('dht11', 35, 115, 45, 60);
-      const nc = getRotatedPinCoords('dht11', 55, 115, 45, 60);
-      const gnd = getRotatedPinCoords('dht11', 75, 115, 45, 60);
+    dht11Components.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const vcc = getRotatedPinCoords(id, 15, 115, 45, 60);
+      const data = getRotatedPinCoords(id, 35, 115, 45, 60);
+      const nc = getRotatedPinCoords(id, 55, 115, 45, 60);
+      const gnd = getRotatedPinCoords(id, 75, 115, 45, 60);
       componentPins.push(
-        { id: 'DHT11_VCC', name: 'DHT11 VCC (5V/3V3)', cx: vcc.cx, cy: vcc.cy, type: 'component' },
-        { id: 'DHT11_DATA', name: 'DHT11 Data Pin', cx: data.cx, cy: data.cy, type: 'component' },
-        { id: 'DHT11_NC', name: 'DHT11 NC (No Conn)', cx: nc.cx, cy: nc.cy, type: 'component' },
-        { id: 'DHT11_GND', name: 'DHT11 GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' }
+        { id: getInstancePinId(id, 'DHT11_VCC'), name: `DHT11 VCC (5V/3V3)${s}`, cx: vcc.cx, cy: vcc.cy, type: 'component' },
+        { id: getInstancePinId(id, 'DHT11_DATA'), name: `DHT11 Data Pin${s}`, cx: data.cx, cy: data.cy, type: 'component' },
+        { id: getInstancePinId(id, 'DHT11_NC'), name: `DHT11 NC (No Conn)${s}`, cx: nc.cx, cy: nc.cy, type: 'component' },
+        { id: getInstancePinId(id, 'DHT11_GND'), name: `DHT11 GND (Ground)${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' }
       );
-    }
+    });
 
     // RC522 RFID Reader Pins (8 pins, 2.54mm pitch)
-    if (hasRfid) {
-      const sda = getRotatedPinCoords('rfid', 16, 162, 55, 80);
-      const sck = getRotatedPinCoords('rfid', 27, 162, 55, 80);
-      const mosi = getRotatedPinCoords('rfid', 38, 162, 55, 80);
-      const miso = getRotatedPinCoords('rfid', 49, 162, 55, 80);
-      const irq = getRotatedPinCoords('rfid', 60, 162, 55, 80);
-      const gnd = getRotatedPinCoords('rfid', 71, 162, 55, 80);
-      const rst = getRotatedPinCoords('rfid', 82, 162, 55, 80);
-      const v33 = getRotatedPinCoords('rfid', 93, 162, 55, 80);
+    rfidComponents.forEach(id => {
+      const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
+      const sda = getRotatedPinCoords(id, 16, 162, 55, 80);
+      const sck = getRotatedPinCoords(id, 27, 162, 55, 80);
+      const mosi = getRotatedPinCoords(id, 38, 162, 55, 80);
+      const miso = getRotatedPinCoords(id, 49, 162, 55, 80);
+      const irq = getRotatedPinCoords(id, 60, 162, 55, 80);
+      const gnd = getRotatedPinCoords(id, 71, 162, 55, 80);
+      const rst = getRotatedPinCoords(id, 82, 162, 55, 80);
+      const v33 = getRotatedPinCoords(id, 93, 162, 55, 80);
       componentPins.push(
-        { id: 'RFID_SDA', name: 'RFID SDA / SS (Chip Select)', cx: sda.cx, cy: sda.cy, type: 'component' },
-        { id: 'RFID_SCK', name: 'RFID SCK (SPI Clock)', cx: sck.cx, cy: sck.cy, type: 'component' },
-        { id: 'RFID_MOSI', name: 'RFID MOSI (Master Out)', cx: mosi.cx, cy: mosi.cy, type: 'component' },
-        { id: 'RFID_MISO', name: 'RFID MISO (Master In)', cx: miso.cx, cy: miso.cy, type: 'component' },
-        { id: 'RFID_IRQ', name: 'RFID IRQ (Interrupt)', cx: irq.cx, cy: irq.cy, type: 'component' },
-        { id: 'RFID_GND', name: 'RFID GND (Ground)', cx: gnd.cx, cy: gnd.cy, type: 'component' },
-        { id: 'RFID_RST', name: 'RFID RST (Reset Pin)', cx: rst.cx, cy: rst.cy, type: 'component' },
-        { id: 'RFID_3V3', name: 'RFID 3.3V (VCC Power)', cx: v33.cx, cy: v33.cy, type: 'component' }
+        { id: getInstancePinId(id, 'RFID_SDA'), name: `RFID SDA / SS (Chip Select)${s}`, cx: sda.cx, cy: sda.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_SCK'), name: `RFID SCK (SPI Clock)${s}`, cx: sck.cx, cy: sck.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_MOSI'), name: `RFID MOSI (Master Out)${s}`, cx: mosi.cx, cy: mosi.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_MISO'), name: `RFID MISO (Master In)${s}`, cx: miso.cx, cy: miso.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_IRQ'), name: `RFID IRQ (Interrupt)${s}`, cx: irq.cx, cy: irq.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_GND'), name: `RFID GND (Ground)${s}`, cx: gnd.cx, cy: gnd.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_RST'), name: `RFID RST (Reset Pin)${s}`, cx: rst.cx, cy: rst.cy, type: 'component' },
+        { id: getInstancePinId(id, 'RFID_3V3'), name: `RFID 3.3V (VCC Power)${s}`, cx: v33.cx, cy: v33.cy, type: 'component' }
       );
-    }
+    });
 
     return [...mcuPins, ...componentPins];
   };
@@ -1175,26 +1233,34 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   useEffect(() => {
-    const potSigPin = getConnectedMcuPin('POT_SIG');
-    if (potSigPin && onPinStateChange) {
-      const numMatch = potSigPin.id.match(/\d+/);
-      const pinKey = numMatch ? numMatch[0] : potSigPin.id;
-      const analogVal = Math.round(potValue * 1023 / 100);
-      onPinStateChange(pinKey, analogVal);
-      onPinStateChange(potSigPin.id, analogVal);
-    }
-  }, [potValue, wires, board, onPinStateChange, isRunning]);
+    potComponents.forEach(id => {
+      const pinSig = getInstancePinId(id, 'POT_SIG');
+      const potSigPin = getConnectedMcuPin(pinSig);
+      if (potSigPin && onPinStateChange) {
+        const numMatch = potSigPin.id.match(/\d+/);
+        const pinKey = numMatch ? numMatch[0] : potSigPin.id;
+        const currentVal = id === 'pot' ? potValue : (extraPotValues[id] ?? potValue);
+        const analogVal = Math.round(currentVal * 1023 / 100);
+        onPinStateChange(pinKey, analogVal);
+        onPinStateChange(potSigPin.id, analogVal);
+      }
+    });
+  }, [potValue, extraPotValues, potComponents, wires, board, onPinStateChange, isRunning]);
 
   useEffect(() => {
-    const btnSigPin = getConnectedMcuPin('BTN_SIG');
-    if (btnSigPin && onPinStateChange) {
-      const numMatch = btnSigPin.id.match(/\d+/);
-      const pinKey = numMatch ? numMatch[0] : btnSigPin.id;
-      const state = buttonPressed ? 'HIGH' : 'LOW';
-      onPinStateChange(pinKey, state);
-      onPinStateChange(btnSigPin.id, state);
-    }
-  }, [buttonPressed, wires, board, onPinStateChange, isRunning]);
+    buttonComponents.forEach(id => {
+      const pinSig = getInstancePinId(id, 'BTN_SIG');
+      const btnSigPin = getConnectedMcuPin(pinSig);
+      if (btnSigPin && onPinStateChange) {
+        const numMatch = btnSigPin.id.match(/\d+/);
+        const pinKey = numMatch ? numMatch[0] : btnSigPin.id;
+        const isPressed = id === 'button' ? buttonPressed : (pressedButtons[id] || false);
+        const state = isPressed ? 'HIGH' : 'LOW';
+        onPinStateChange(pinKey, state);
+        onPinStateChange(btnSigPin.id, state);
+      }
+    });
+  }, [buttonPressed, pressedButtons, buttonComponents, wires, board, onPinStateChange, isRunning]);
 
   const powerPins = [
     '5V', '3V3', '3V', 'VIN', 'VIN_L', 'VIN_R', 'PAD_3V', '5V_M', 'V_M', '3V3_L', '3V3_R', '3V3_R2',
@@ -1267,10 +1333,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const servoVccPin = getConnectedMcuPin('SERVO_VCC');
   const servoGndPin = getConnectedMcuPin('SERVO_GND');
 
-  const checkServoPinMatch = (): boolean => {
-    if (!servoSigPin) return false;
+  const checkServoPinMatch = (targetSigPin: Pin | null = servoSigPin): boolean => {
+    if (!targetSigPin) return false;
     if (!programPins.servoPin) return true;
-    const mcuPinNum = servoSigPin.id.match(/\d+/)?.[0] || servoSigPin.id;
+    const mcuPinNum = targetSigPin.id.match(/\d+/)?.[0] || targetSigPin.id;
     return mcuPinNum === programPins.servoPin;
   };
 
@@ -1281,30 +1347,26 @@ export const Simulator: React.FC<SimulatorProps> = ({
                        powerPins.includes(servoVccPin.id) &&
                        checkServoPinMatch();
 
-  const getServoAngle = (): number => {
-    if (!isServoWired || !isRunning) return 90;
+  const getServoAngle = (targetSigPin: Pin | null = servoSigPin, wired: boolean = isServoWired): number => {
+    if (!wired || !isRunning || !targetSigPin) return 90;
     
     const resolveAngle = (rawVal: number): number => {
       // BBC micro:bit: maps duty cycle values (30 to 120) back to degrees (0 to 180)
       if (board === 'BBC micro:bit') {
-        // duty = 30 + (angle * 90) / 180
-        // (duty - 30) * 2 = angle
         const mappedAngle = (rawVal - 30) * 2;
         const res = Math.max(0, Math.min(180, mappedAngle));
-        console.log(`ROBOLAB SIMULATOR: Microbit Servo angle resolved: ${res}° from raw PWM: ${rawVal}`);
         return res;
       }
-      console.log(`ROBOLAB SIMULATOR: Standard Servo angle resolved: ${rawVal}°`);
-      return rawVal;
+      return Math.max(0, Math.min(180, rawVal));
     };
 
-    if (servoSigPin && pinStates) {
-      const exactState = pinStates[servoSigPin.id];
+    if (targetSigPin && pinStates) {
+      const exactState = pinStates[targetSigPin.id];
       if (exactState !== undefined) {
         const parsed = Number(exactState);
         if (!isNaN(parsed)) return resolveAngle(parsed);
       }
-      const numPart = servoSigPin.id.match(/\d+/);
+      const numPart = targetSigPin.id.match(/\d+/);
       if (numPart) {
         const numState = pinStates[numPart[0]];
         if (numState !== undefined) {
@@ -1459,10 +1521,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
     const ctm = svg.getScreenCTM();
     if (ctm) {
       const transformedPoint = point.matrixTransform(ctm.inverse());
+      const baseType = getBaseComponentType(elementId);
+      const defaultPos = DEFAULT_COMPONENT_POSITIONS[baseType] || { x: 50, y: 400 };
+      const posX = positions[elementId]?.x ?? (positions[baseType]?.x ?? defaultPos.x);
+      const posY = positions[elementId]?.y ?? (positions[baseType]?.y ?? defaultPos.y);
       setDraggedElement(elementId);
       setDragStart({
-        x: transformedPoint.x - positions[elementId].x,
-        y: transformedPoint.y - positions[elementId].y
+        x: transformedPoint.x - posX,
+        y: transformedPoint.y - posY
       });
     }
   };
@@ -1728,17 +1794,44 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const currentDistance = isUltrasonicWired ? Math.round(sensorData.distance ?? 42) : 0;
   const currentTemp = isPotWired || isDhtWired ? parseFloat((sensorData.temp ?? 28.4).toFixed(1)) : 0;
 
-  // Add component handler
+  // Add component handler (supports adding the same component multiple times)
   const handleAddComponent = (compType: string) => {
-    if (compType && !activeComponents.includes(compType)) {
-      setActiveComponents(prev => [...prev, compType]);
+    if (!compType) return;
+    const baseType = getBaseComponentType(compType);
+    let newId = baseType;
+    if (activeComponents.includes(newId)) {
+      let idx = 2;
+      while (activeComponents.includes(`${baseType}_${idx}`)) {
+        idx++;
+      }
+      newId = `${baseType}_${idx}`;
     }
+
+    // Offset position for new instance
+    const count = activeComponents.filter(c => getBaseComponentType(c) === baseType).length;
+    const defaultPos = DEFAULT_COMPONENT_POSITIONS[baseType] || { x: 50, y: 420 };
+    const basePos = positions[baseType] || defaultPos;
+    const offset = count * 60;
+    const newPos = {
+      x: Math.min(basePos.x + offset, 440),
+      y: basePos.y + (basePos.x + offset > 440 ? 40 * Math.floor((basePos.x + offset) / 440) : 0)
+    };
+
+    setPositions(prev => ({
+      ...prev,
+      [newId]: newPos
+    }));
+    setRotations(prev => ({
+      ...prev,
+      [newId]: 0
+    }));
+    setActiveComponents(prev => [...prev, newId]);
   };
 
-  const handleRemoveComponent = (compType: string) => {
-    const typesToRemove = compType === 'ultrasonic' ? ['ultrasonic', 'hcsr', 'hcsr04'] : (compType === 'dht11' ? ['dht11', 'dht'] : (compType === 'rfid' ? ['rfid', 'mfrc522', 'rc522'] : [compType]));
-    setActiveComponents(prev => prev.filter(c => !typesToRemove.includes(c)));
+  const handleRemoveComponent = (instanceId: string) => {
+    setActiveComponents(prev => prev.filter(c => c !== instanceId));
     
+    const baseType = getBaseComponentType(instanceId);
     const pinPrefixes = {
       led: ['LED_'],
       servo: ['SERVO_'],
@@ -1750,16 +1843,24 @@ export const Simulator: React.FC<SimulatorProps> = ({
       dht11: ['DHT11_'],
       dht: ['DHT11_'],
       lcd: ['LCD_'],
+      motor: ['MOTOR_'],
       rfid: ['RFID_'],
       mfrc522: ['RFID_'],
       rc522: ['RFID_']
-    }[compType] || [compType.toUpperCase() + '_'];
+    }[baseType] || [baseType.toUpperCase() + '_'];
 
-    const compPinIds = pins
-      .filter(p => p.type === 'component' && pinPrefixes.some(pref => p.id.startsWith(pref)))
-      .map(p => p.id);
+    const isTargetPin = (pinId: string) => {
+      const matchPrefix = pinPrefixes.some(pref => pinId.startsWith(pref));
+      if (!matchPrefix) return false;
+      if (instanceId.includes('_')) {
+        const suffix = instanceId.split('_').slice(1).join('_');
+        return pinId.endsWith(`_${suffix}`);
+      } else {
+        return !/_\d+$/.test(pinId);
+      }
+    };
 
-    setWires(prev => prev.filter(w => !compPinIds.includes(w.from) && !compPinIds.includes(w.to)));
+    setWires(prev => prev.filter(w => !isTargetPin(w.from) && !isTargetPin(w.to)));
   };
 
   const renderMicrobitLeds = () => {
@@ -2257,622 +2358,750 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
           {/* ==================== ACTUATORS & COMPONENTS LAYER — 3D SVG ==================== */}
 
-          {/* A. RED LED — WP7113ID 5mm Through-hole LED
-               WP7113ID.mod: outer flange r=2.95mm, dome r=2.5mm, courtyard r=3.6mm
-               Pad A (anode, round): x=+1.27mm | Pad K (cathode, square): x=-1.27mm
-               Cathode flat-side marker: from DC -2.9,-1.6 to -2.773,-1.6
-               Scale: 1mm → 10px | LED body center at svg (35,45) */}
-          {/* A. RED LED — PNG Image */}
-          {hasLed && (
-            <g
-              transform={`translate(${positions.led.x}, ${positions.led.y}) rotate(${rotations.led || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('led', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('led');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* LED Glow Halo */}
-              {ledBrightness > 0 && (
-                <ellipse cx="100" cy="85" rx={35 + ledBrightness * 18} ry={35 + ledBrightness * 18}
-                  fill={`rgba(239,68,68,${ledBrightness * 0.4})`} className="animate-pulse"/>
-              )}
+          {/* A. RED LED — Multi-instance support */}
+          {ledComponents.map(id => {
+            const pos = positions[id] || (positions.led ?? DEFAULT_COMPONENT_POSITIONS.led);
+            const rot = rotations[id] || (rotations.led ?? 0);
+            const pinA = getInstancePinId(id, 'LED_A');
+            const pinK = getInstancePinId(id, 'LED_K');
+            const anode = getConnectedMcuPin(pinA);
+            const cathode = getConnectedMcuPin(pinK);
+            const isActHigh = anode !== null && cathode !== null && gndPins.includes(cathode.id) && checkLedPinMatch(anode);
+            const isActLow = anode !== null && cathode !== null && powerPins.includes(anode.id) && !gndPins.includes(cathode.id) && checkLedPinMatch(cathode);
+            const isWired = isActHigh || isActLow;
+            const targetLed = isActLow ? cathode : anode;
+            const brightness = isRunning && isWired && targetLed ? getPinBrightness(targetLed, isActLow) : 0.0;
+            const label = id.includes('_') ? `LED #${id.split('_')[1]}` : 'LED';
 
-              {/* PNG Image */}
-              <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
-
-              {/* Pin indicator dots */}
-              <circle cx="80" cy="185" r="3.5" fill={isLedWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="120" cy="185" r="3.5" fill={isLedWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="80" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">A (+)</text>
-              <text x="120" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">K (−)</text>
-
-              {/* Badge label */}
-              <rect x="55" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isLedWired ? '#34d399' : '#6366f1'} strokeWidth="1.2"/>
-              <text x="100" y="26" fontSize="8" fill={isLedWired ? '#34d399' : '#a5b4fc'} fontWeight="bold" textAnchor="middle">
-                {isLedWired ? '✔ LED' : 'LED'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('led')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('led')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* B. SG90 SERVO MOTOR — PNG Image */}
-          {hasServo && (
-            <g
-              transform={`translate(${positions.servo.x}, ${positions.servo.y}) rotate(${rotations.servo || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('servo', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('servo');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* Servo PNG Image */}
-              <image href="./servo.png" xlinkHref="./servo.png" x="0" y="0" width="200" height="200" />
-
-              {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
-              <g transform={`translate(100, 95) rotate(${servoAngle - 90}) translate(-100, -95)`}>
-                <rect x="75" y="91" width="50" height="8" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                <circle cx="100" cy="95" r="5" fill="#38bdf8" />
-                <circle cx="120" cy="95" r="2.5" fill="#ef4444" />
-              </g>
-
-              {/* Pin indicator dots directly over cable header plug (GND left:85, VCC center:100, SIG right:115) */}
-              <circle cx="85" cy="20" r="3.5" fill={isServoWired ? "#1e293b" : "#64748b"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="100" cy="20" r="3.5" fill={isServoWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="115" cy="20" r="3.5" fill={isServoWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="85" y="34" fontSize="6.5" fill="#94a3b8" fontWeight="bold" textAnchor="middle">GND</text>
-              <text x="100" y="34" fontSize="6.5" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
-              <text x="115" y="34" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">SIG</text>
-
-              {/* Badge label at BOTTOM */}
-              <rect x="55" y="170" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isServoWired ? '#34d399' : '#0284c7'} strokeWidth="1.2"/>
-              <text x="100" y="181" fontSize="8" fill={isServoWired ? '#34d399' : '#38bdf8'} fontWeight="bold" textAnchor="middle">
-                {isServoWired ? '✔ Servo SG90' : 'Servo SG90'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('servo')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="25" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 22.5 23 A 3 3 0 1 1 25 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 25 24 L 25 26 L 27 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('servo')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="42" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="39" y1="20" x2="45" y2="26" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="45" y1="20" x2="39" y2="26" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* C. HC-SR04 ULTRASONIC — PNG Image Component */}
-          {hasUltrasonic && (
-            <g
-              transform={`translate(${positions.ultrasonic.x}, ${positions.ultrasonic.y}) rotate(${rotations.ultrasonic || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('ultrasonic', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('ultrasonic');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* Ultrasonic PNG Image */}
-              <image
-                href="./sensorUltrasonicDistance4Pin.png"
-                xlinkHref="./sensorUltrasonicDistance4Pin.png"
-                x="0"
-                y="0"
-                width="200"
-                height="200"
-              />
-
-              {/* Pin indicator dots & highlights */}
-              <circle cx="84" cy="157" r="3.5" fill={isUltrasonicWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="94" cy="157" r="3.5" fill={isUltrasonicWired ? "#10b981" : "#6ee7b7"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="105" cy="157" r="3.5" fill={isUltrasonicWired ? "#f59e0b" : "#fcd34d"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="115" cy="157" r="3.5" fill={isUltrasonicWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="84" y="174" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
-              <text x="94" y="174" fontSize="7" fill="#10b981" fontWeight="bold" textAnchor="middle">TRIG</text>
-              <text x="105" y="174" fontSize="7" fill="#f59e0b" fontWeight="bold" textAnchor="middle">ECHO</text>
-              <text x="115" y="174" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
-
-              {/* Component Label */}
-              <rect x="55" y="32" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isUltrasonicWired ? '#34d399' : '#3b82f6'} strokeWidth="1.2"/>
-              <text x="100" y="43" fontSize="8.5" fill={isUltrasonicWired ? '#34d399' : '#93c5fd'} fontWeight="bold" textAnchor="middle">
-                {isUltrasonicWired ? '✔ HC-SR04' : 'HC-SR04'}
-              </text>
-
-              {/* Rotate button */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('ultrasonic')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="165" cy="45" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 162.5 45 A 3 3 0 1 1 165 48" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 165 46 L 165 48 L 167 48" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-
-              {/* Delete button */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('ultrasonic')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="182" cy="45" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="179" y1="42" x2="185" y2="48" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="185" y1="42" x2="179" y2="48" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* D. ROTARY POTENTIOMETER — PNG Image */}
-          {hasPot && (
-            <g
-              transform={`translate(${positions.pot.x}, ${positions.pot.y}) rotate(${rotations.pot || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('pot', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('pot');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* Potentiometer PNG Image */}
-              <image href="./potentiometer.png" xlinkHref="./potentiometer.png" x="0" y="0" width="200" height="200" />
-
-              {/* Pin indicator dots at bottom */}
-              <circle cx="50" cy="150" r="3.5" fill={isPotWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="100" cy="150" r="3.5" fill={isPotWired ? "#a78bfa" : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="150" cy="150" r="3.5" fill={isPotWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="50" y="165" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
-              <text x="100" y="165" fontSize="7" fill="#a78bfa" fontWeight="bold" textAnchor="middle">SIG</text>
-              <text x="150" y="165" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
-
-              {/* Knob indicator dot rotating over center (100, 80) */}
-              <line
-                x1="100" y1="80"
-                x2={100 + Math.cos(((potValue - 50) * 2.6 - 90) * Math.PI / 180) * 14}
-                y2={80 + Math.sin(((potValue - 50) * 2.6 - 90) * Math.PI / 180) * 14}
-                stroke="#10b981" strokeWidth="3" strokeLinecap="round"
-              />
-
-              {/* Value display */}
-              <rect x="75" y="170" width="50" height="14" rx="3" fill="rgba(15, 23, 42, 0.9)" stroke="#22c55e" strokeWidth="1"/>
-              <text x="100" y="180" fontSize="7.5" fill="#34d399" textAnchor="middle" fontWeight="bold">{potValue}%</text>
-
-              {/* Slider */}
-              <foreignObject x="35" y="186" width="130" height="14" onMouseDown={e => e.stopPropagation()}>
-                <input
-                  type="range" min="0" max="100" value={potValue}
-                  onChange={(e) => setPotValue(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                />
-              </foreignObject>
-
-              {/* Badge label */}
-              <rect x="55" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isPotWired ? '#34d399' : '#22c55e'} strokeWidth="1.2"/>
-              <text x="100" y="26" fontSize="8" fill={isPotWired ? '#34d399' : '#86efac'} fontWeight="bold" textAnchor="middle">
-                {isPotWired ? '✔ Potentiometer' : 'Potentiometer'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('pot')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('pot')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* E. TACTILE PUSH BUTTON — PNG Image */}
-          {hasButton && (
-            <g
-              transform={`translate(${positions.button.x}, ${positions.button.y}) rotate(${rotations.button || 0}, 60, 60)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('button', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('button');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* Push Button PNG Image */}
-              <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />
-
-              {/* Pin indicator dots */}
-              <circle cx="35" cy="95" r="3" fill={isButtonWired ? "#eab308" : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="85" cy="95" r="3" fill={isButtonWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="35" y="108" fontSize="6.5" fill="#eab308" fontWeight="bold" textAnchor="middle">SIG</text>
-              <text x="85" y="108" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
-
-              {/* Clickable button cap trigger overlay */}
-              <circle
-                cx="60" cy="55" r="18"
-                fill={buttonPressed ? "rgba(239,68,68,0.4)" : "transparent"}
-                stroke={buttonPressed ? "#ef4444" : "none"}
-                strokeWidth="2"
-                className="cursor-pointer"
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                  setButtonPressed(true);
-                  const btnSigPin = getConnectedMcuPin('BTN_SIG');
-                  if (btnSigPin && onPinStateChange) {
-                    const numMatch = btnSigPin.id.match(/\d+/);
-                    const pinKey = numMatch ? numMatch[0] : btnSigPin.id;
-                    onPinStateChange(pinKey, 'HIGH');
-                    onPinStateChange(btnSigPin.id, 'HIGH');
-                  }
-                }}
-                onMouseUp={(e) => {
-                  e.stopPropagation();
-                  setButtonPressed(false);
-                  const btnSigPin = getConnectedMcuPin('BTN_SIG');
-                  if (btnSigPin && onPinStateChange) {
-                    const numMatch = btnSigPin.id.match(/\d+/);
-                    const pinKey = numMatch ? numMatch[0] : btnSigPin.id;
-                    onPinStateChange(pinKey, 'LOW');
-                    onPinStateChange(btnSigPin.id, 'LOW');
-                  }
-                }}
-              />
-
-              {/* Badge label */}
-              <rect x="20" y="8" width="80" height="14" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={isButtonWired ? '#34d399' : '#475569'} strokeWidth="1"/>
-              <text x="60" y="18" fontSize="7" fill={isButtonWired ? '#34d399' : '#94a3b8'} fontWeight="bold" textAnchor="middle">
-                {isButtonWired ? '✔ Button' : 'Button'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('button')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="102" cy="15" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
-                <path d="M 100 15 A 2 2 0 1 1 102 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
-                <path d="M 102 15.5 L 102 17 L 103.5 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('button')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="114" cy="15" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
-                <line x1="112" y1="13" x2="116" y2="17" stroke="#fff" strokeWidth="1"/>
-                <line x1="116" y1="13" x2="112" y2="17" stroke="#fff" strokeWidth="1"/>
-              </g>
-            </g>
-          )}
-
-          {/* F. LCD DISPLAY 16x2 I2C — PNG Image */}
-          {hasLcd && (
-            <g
-              transform={`translate(${positions.lcd.x}, ${positions.lcd.y}) rotate(${rotations.lcd || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('lcd', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('lcd');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* LCD PNG Image */}
-              <image href="./displayLCD16x2I2C.png" xlinkHref="./displayLCD16x2I2C.png" x="0" y="0" width="200" height="200" />
-
-              {/* Dynamic LCD Screen Content Overlay */}
-              <rect x="52" y="80" width="96" height="34" rx="2" fill="#0f172a" opacity="0.9" />
-              <text x="56" y="93" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
-                {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `TEMP: ${currentTemp}C` : 'NO WIRES!') : 'SYSTEM IDLE'}
-              </text>
-              <text x="56" y="107" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
-                {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `DIST: ${currentDistance}CM` : 'CONNECT PINS') : 'READY TO WIRE'}
-              </text>
-              {isRunning && <rect x="16" y="53" width="4" height="6" fill="#60a5fa" opacity="0.7" className="animate-pulse"/>}
-
-              {/* Pin indicator dots on I2C module (left side) */}
-              <circle cx="22" cy="68" r="3" fill={isLcdWired ? "#10b981" : "#6ee7b7"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="22" cy="82" r="3" fill={isLcdWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="22" cy="96" r="3" fill={isLcdWired ? "#a78bfa" : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="22" cy="110" r="3" fill={isLcdWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="12" y="70" fontSize="5.5" fill="#10b981" fontWeight="bold" textAnchor="end">GND</text>
-              <text x="12" y="84" fontSize="5.5" fill="#ef4444" fontWeight="bold" textAnchor="end">VCC</text>
-              <text x="12" y="98" fontSize="5.5" fill="#a78bfa" fontWeight="bold" textAnchor="end">SDA</text>
-              <text x="12" y="112" fontSize="5.5" fill="#3b82f6" fontWeight="bold" textAnchor="end">SCL</text>
-
-              {/* Badge label */}
-              <rect x="55" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isLcdWired ? '#34d399' : '#047857'} strokeWidth="1.2"/>
-              <text x="100" y="26" fontSize="8" fill={isLcdWired ? '#34d399' : '#a7f3d0'} fontWeight="bold" textAnchor="middle">
-                {isLcdWired ? '✔ LCD 16x2 I2C' : 'LCD 16x2 I2C'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('lcd')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('lcd')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* G. DHT11 TEMP/HUMIDITY SENSOR — 3D */}
-          {hasDht11 && positions.dht11 && (
-            <g
-              transform={`translate(${positions.dht11.x}, ${positions.dht11.y}) rotate(${rotations.dht11 || 0}, 45, 60)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('dht11', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('dht11');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* 3D board depth — bottom face */}
-              <polygon points="0,120 90,120 96,126 6,126" fill="#011b2e" opacity="0.9"/>
-              {/* 3D board depth — right face */}
-              <polygon points="90,0 96,6 96,126 90,120" fill="#012b4a" opacity="0.9"/>
-              {/* Main PCB face */}
-              <rect x="0" y="0" width="90" height="120" rx="5" fill="url(#pcbBlueGrad)" stroke={isDhtWired ? '#34d399' : '#0284c7'} strokeWidth="1.5"/>
-              {/* PCB surface highlight */}
-              <rect x="2" y="2" width="86" height="18" rx="3" fill="rgba(255,255,255,0.06)"/>
-              {/* Label */}
-              <text x="8" y="13" fontSize="7.5" fill={isDhtWired ? '#34d399' : '#38bdf8'} fontWeight="bold">
-                {isDhtWired ? '✔ DHT11 Sensor' : 'DHT11 Temp'}
-              </text>
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('dht11')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="71" cy="8" r="5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
-                <path d="M 69 8 A 2 2 0 1 1 71 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
-                <path d="M 71 8.5 L 71 10 L 72.5 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete button */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('dht11')} onMouseDown={e => e.stopPropagation()}>
-                <circle cx="83" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
-                <line x1="81" y1="6" x2="85" y2="10" stroke="#fff" strokeWidth="1.2"/>
-                <line x1="85" y1="6" x2="81" y2="10" stroke="#fff" strokeWidth="1.2"/>
-              </g>
-
-              {/* === DHT11 Sensor body - based on SENSOR-DHT11.mod ===
-                   Body outline: x=-6 to +6 (12mm), y=-2.25 to +2.25 (4.5mm)
-                   4 pads: x=-3.81,-1.27,+1.27,+3.81 all at y=0
-                   Scale: 1mm = 8px, centered at component center (45,55) */}
-              {/* Sensor Case - Blue plastic 96px wide x 80px tall (12mm x 10mm visual) */}
-              <rect x="5" y="22" width="80" height="72" rx="5" fill="url(#bodyBlueGrad)" stroke="#0369a1" strokeWidth="1.5"/>
-              {/* Case top highlight */}
-              <rect x="7" y="24" width="76" height="8" rx="3" fill="rgba(255,255,255,0.15)"/>
-              {/* Vent grille area (upper 60% of case) */}
-              <rect x="12" y="34" width="66" height="44" rx="3" fill="#082f49" stroke="#0369a1" strokeWidth="1"/>
-              {/* Horizontal grille slots */}
-              <rect x="15" y="38" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-              <rect x="15" y="46" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-              <rect x="15" y="54" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-              <rect x="15" y="62" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-              <rect x="15" y="70" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
-              {/* Vertical dividers */}
-              <line x1="33" y1="34" x2="33" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
-              <line x1="57" y1="34" x2="57" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
-              {/* Branding */}
-              <text x="45" y="92" fontSize="9" fill="#ffffff" textAnchor="middle" fontWeight="bold">DHT11</text>
-              {/* 4 pins - 2.54mm pitch = ~20px, at y=22 (bottom of PCB) */}
-              {/* P1=VCC at x=45-30=15, P2=DATA at x=15+20=35, P3=NC at x=55, P4=GND at x=75 */}
-              <rect x="13" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
-              <rect x="33" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
-              <rect x="53" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
-              <rect x="73" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
-              {/* Pin labels */}
-              <text x="9" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">VCC</text>
-              <text x="29" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">DAT</text>
-              <text x="50" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">NC</text>
-              <text x="69" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">GND</text>
-            </g>
-          )}
-
-          {/* G. DC MOTOR — PNG Image Component */}
-          {hasMotor && positions.motor && (
-            <g
-              transform={`translate(${positions.motor.x}, ${positions.motor.y}) rotate(${rotations.motor || 0}, 100, 100)`}
-              className="cursor-move"
-              onMouseDown={(e) => startDrag('motor', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('motor');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* DC Motor PNG Image */}
-              <image href="./motorDC.png" xlinkHref="./motorDC.png" x="0" y="0" width="200" height="200" />
-
-              {/* Spinning Propeller Fan Overlay when Motor is Running */}
-              {isRunning && isMotorWired && (
-                <g transform="translate(100, 45)" className="animate-spin" style={{ transformOrigin: '100px 45px', animationDuration: '0.3s' }}>
-                  <circle cx="100" cy="45" r="6" fill="#ca8a04" />
-                  <ellipse cx="100" cy="30" rx="4" ry="15" fill="#eab308" opacity="0.8" />
-                  <ellipse cx="100" cy="60" rx="4" ry="15" fill="#eab308" opacity="0.8" />
-                  <ellipse cx="85" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
-                  <ellipse cx="115" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
-                </g>
-              )}
-
-              {/* Pin indicator dots at bottom terminals */}
-              <circle cx="78" cy="185" r="3.5" fill={isMotorWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
-              <circle cx="122" cy="185" r="3.5" fill={isMotorWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
-
-              {/* Pin labels */}
-              <text x="78" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">POS (+)</text>
-              <text x="122" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">NEG (−)</text>
-
-              {/* Badge label */}
-              <rect x="55" y="15" width="90" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isMotorWired ? '#34d399' : '#eab308'} strokeWidth="1.2"/>
-              <text x="100" y="26" fontSize="8" fill={isMotorWired ? '#34d399' : '#fef08a'} fontWeight="bold" textAnchor="middle">
-                {isMotorWired ? '✔ DC Motor' : 'DC Motor'}
-              </text>
-
-              {/* Rotate */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('motor')} onMouseDown={e => e.stopPropagation()}>
-                <title>Rotate Component</title>
-                <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
-                <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
-                <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-              </g>
-              {/* Delete */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('motor')} onMouseDown={e => e.stopPropagation()}>
-                <title>Remove Component</title>
-                <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
-                <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
-                <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
-              </g>
-            </g>
-          )}
-
-          {/* H. RC522 RFID READER — 3D Board & Interactive RFID Tag */}
-          {hasRfid && positions.rfid && (
-            <g
-              transform={`translate(${positions.rfid.x}, ${positions.rfid.y}) rotate(${rotations.rfid || 0}, 55, 80)`}
-              className="cursor-move select-none"
-              onMouseDown={(e) => startDrag('rfid', e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                handleRotateComponent('rfid');
-              }}
-              filter="url(#shadow3d)"
-            >
-              {/* Rotate Button */}
-              <g className="cursor-pointer" onClick={() => handleRotateComponent('rfid')} onMouseDown={e => e.stopPropagation()}>
-                <circle cx="8" cy="8" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
-                <path d="M6 8a2 2 0 1 1 2 2M6 8l1.5-1M6 8l1.5 1" stroke="#fff" strokeWidth="0.9" fill="none"/>
-              </g>
-              {/* Delete button */}
-              <g className="cursor-pointer" onClick={() => handleRemoveComponent('rfid')} onMouseDown={e => e.stopPropagation()}>
-                <circle cx="102" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
-                <line x1="100" y1="6" x2="104" y2="10" stroke="#fff" strokeWidth="1.2"/>
-                <line x1="104" y1="6" x2="100" y2="10" stroke="#fff" strokeWidth="1.2"/>
-              </g>
-
-              {/* PCB Base: Classic blue FR-4 (110x150, rx=6) */}
-              <rect x="0" y="16" width="110" height="136" rx="6" fill="#1e3a8a" stroke="#172554" strokeWidth="1.5"/>
-              <rect x="2" y="18" width="106" height="132" rx="5" fill="none" stroke="#2563eb" strokeWidth="0.8" opacity="0.6"/>
-
-              {/* Top Antenna Area (Coil traces in silkscreen gold) */}
-              <rect x="8" y="24" width="94" height="64" rx="4" fill="#172554" stroke="#d97706" strokeWidth="1.2"/>
-              <rect x="12" y="28" width="86" height="56" rx="3" fill="none" stroke="#f59e0b" strokeWidth="0.8" opacity="0.8"/>
-              <rect x="16" y="32" width="78" height="48" rx="2" fill="none" stroke="#d97706" strokeWidth="0.6" opacity="0.7"/>
-              <rect x="20" y="36" width="70" height="40" rx="2" fill="none" stroke="#f59e0b" strokeWidth="0.5" opacity="0.6"/>
-
-              {/* Antenna Icon & Text */}
-              <text x="55" y="49" fontSize="7" fill="#fde68a" textAnchor="middle" fontWeight="bold" fontFamily="monospace">RFID-RC522</text>
-              <path d="M49 57a7 7 0 0 1 12 0 M46 54a11 11 0 0 1 18 0 M43 51a15 15 0 0 1 24 0" stroke="#fbbf24" strokeWidth="1" fill="none" strokeLinecap="round"/>
-              <circle cx="55" cy="59" r="1.5" fill="#f59e0b"/>
-
-              {/* Interactive Tap RFID Card Button / Tag directly on Antenna */}
+            return (
               <g
-                className="cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newPresent = !sensorData.rfidCardPresent;
-                  if (onSensorDataChange) {
-                    onSensorDataChange({ rfidCardPresent: newPresent, rfidUid: sensorData.rfidUid || '53 7A 92 1F' });
-                  }
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
                 }}
-                onMouseDown={(e) => e.stopPropagation()}
+                filter="url(#shadow3d)"
               >
-                <rect
-                  x="14"
-                  y="67"
-                  width="82"
-                  height="17"
-                  rx="4"
-                  fill={sensorData.rfidCardPresent ? '#15803d' : '#0284c7'}
-                  stroke="#ffffff"
-                  strokeWidth="0.9"
-                />
-                <text x="55" y="78.5" fontSize="6.5" fill="#ffffff" textAnchor="middle" fontWeight="bold">
-                  {sensorData.rfidCardPresent ? '✓ KARTU MENEMPEL' : '🏷️ TEMPEL KARTU'}
+                {/* LED Glow Halo */}
+                {brightness > 0 && (
+                  <ellipse cx="100" cy="85" rx={35 + brightness * 18} ry={35 + brightness * 18}
+                    fill={`rgba(239,68,68,${brightness * 0.4})`} className="animate-pulse"/>
+                )}
+
+                {/* PNG Image */}
+                <image href="./led.png" xlinkHref="./led.png" x="0" y="0" width="200" height="200" />
+
+                {/* Pin indicator dots */}
+                <circle cx="80" cy="185" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="120" cy="185" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="80" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">A (+)</text>
+                <text x="120" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">K (−)</text>
+
+                {/* Badge label */}
+                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#6366f1'} strokeWidth="1.2"/>
+                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#a5b4fc'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
                 </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                </g>
               </g>
+            );
+          })}
 
-              {/* Middle Circuit: IC MFRC522 (QFN32 black chip with pins) */}
-              <rect x="42" y="93" width="26" height="26" rx="1.5" fill="#0f172a" stroke="#334155" strokeWidth="0.8"/>
-              <circle cx="45" cy="96" r="1" fill="#94a3b8"/>
-              <text x="55" y="108" fontSize="5.5" fill="#cbd5e1" textAnchor="middle" fontFamily="monospace" fontWeight="bold">RC522</text>
-              {/* SMD Crystal Oscillator (27.12 MHz) */}
-              <rect x="15" y="98" width="18" height="10" rx="2" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8"/>
-              <text x="24" y="105" fontSize="4.5" fill="#0f172a" textAnchor="middle" fontWeight="bold">27.12M</text>
+          {/* B. SG90 SERVO MOTOR — Multi-instance support */}
+          {servoComponents.map(id => {
+            const pos = positions[id] || (positions.servo ?? DEFAULT_COMPONENT_POSITIONS.servo);
+            const rot = rotations[id] || (rotations.servo ?? 0);
+            const pinSig = getInstancePinId(id, 'SERVO_SIG');
+            const pinVcc = getInstancePinId(id, 'SERVO_VCC');
+            const pinGnd = getInstancePinId(id, 'SERVO_GND');
+            const sigPin = getConnectedMcuPin(pinSig);
+            const vccPin = getConnectedMcuPin(pinVcc);
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const isWired = sigPin !== null && 
+                            vccPin !== null && 
+                            gndPin !== null && 
+                            gndPins.includes(gndPin.id) &&
+                            powerPins.includes(vccPin.id) &&
+                            checkServoPinMatch(sigPin);
+            const angle = getServoAngle(sigPin, isWired);
+            const label = id.includes('_') ? `Servo #${id.split('_')[1]}` : 'Servo SG90';
 
-              {/* Power LED & Status Indicator LED */}
-              <rect x="80" y="96" width="6" height="8" rx="0.5" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
-              <circle cx="83" cy="100" r="2" fill="#ef4444"/>
-              <text x="83" y="110" fontSize="4.5" fill="#94a3b8" textAnchor="middle">PWR</text>
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* Servo PNG Image */}
+                <image href="./servo.png" xlinkHref="./servo.png" x="0" y="0" width="200" height="200" />
 
-              {/* Card Detected Status Glow */}
-              {sensorData.rfidCardPresent && (
-                <g>
-                  <circle cx="55" cy="56" r="28" fill="#22c55e" opacity="0.2"/>
-                  <text x="55" y="123" fontSize="5.5" fill="#86efac" textAnchor="middle" fontWeight="bold">UID: {sensorData.rfidUid || '53 7A 92 1F'}</text>
+                {/* Animated Rotating Horn overlay over shaft center (100, 95) */}
+                <g transform={`translate(100, 95) rotate(${angle - 90}) translate(-100, -95)`}>
+                  <rect x="75" y="91" width="50" height="8" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+                  <circle cx="100" cy="95" r="5" fill="#38bdf8" />
+                  <circle cx="120" cy="95" r="2.5" fill="#ef4444" />
                 </g>
-              )}
-              {!sensorData.rfidCardPresent && (
-                <text x="55" y="124" fontSize="5.5" fill="#93c5fd" textAnchor="middle" fontWeight="bold">3.3V SPI READER</text>
-              )}
 
-              {/* Bottom 8-Pin Header (Pins: SDA, SCK, MOSI, MISO, IRQ, GND, RST, 3.3V) */}
-              <rect x="10" y="132" width="90" height="8" rx="1" fill="#09090b" stroke="#27272a" strokeWidth="0.5"/>
-              {/* Metal pin leads extending down to y=162 */}
-              {[16, 27, 38, 49, 60, 71, 82, 93].map((px, i) => (
-                <g key={i}>
-                  <rect x={px - 1.5} y="136" width="3" height="26" rx="0.5" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.4"/>
-                  <circle cx={px} cy="138" r="1.5" fill="#cbd5e1"/>
+                {/* Pin indicator dots directly over cable header plug (GND left:85, VCC center:100, SIG right:115) */}
+                <circle cx="85" cy="20" r="3.5" fill={isWired ? "#1e293b" : "#64748b"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="100" cy="20" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="115" cy="20" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="85" y="34" fontSize="6.5" fill="#94a3b8" fontWeight="bold" textAnchor="middle">GND</text>
+                <text x="100" y="34" fontSize="6.5" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
+                <text x="115" y="34" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">SIG</text>
+
+                {/* Badge label at BOTTOM */}
+                <rect x="50" y="170" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#0284c7'} strokeWidth="1.2"/>
+                <text x="100" y="181" fontSize="8" fill={isWired ? '#34d399' : '#38bdf8'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="25" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 22.5 23 A 3 3 0 1 1 25 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 25 24 L 25 26 L 27 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
                 </g>
-              ))}
-              {/* Pin Labels */}
-              <text x="16" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SDA</text>
-              <text x="27" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SCK</text>
-              <text x="38" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MOSI</text>
-              <text x="49" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MISO</text>
-              <text x="60" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">IRQ</text>
-              <text x="71" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">GND</text>
-              <text x="82" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">RST</text>
-              <text x="93" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">3V3</text>
-            </g>
-          )}
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="42" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="39" y1="20" x2="45" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="45" y1="20" x2="39" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* C. HC-SR04 ULTRASONIC — Multi-instance support */}
+          {ultrasonicComponents.map(id => {
+            const pos = positions[id] || (positions.ultrasonic ?? DEFAULT_COMPONENT_POSITIONS.ultrasonic);
+            const rot = rotations[id] || (rotations.ultrasonic ?? 0);
+            const pinVcc = getInstancePinId(id, 'SR04_VCC');
+            const pinTrig = getInstancePinId(id, 'SR04_TRIG');
+            const pinEcho = getInstancePinId(id, 'SR04_ECHO');
+            const pinGnd = getInstancePinId(id, 'SR04_GND');
+            const trigPin = getConnectedMcuPin(pinTrig);
+            const echoPin = getConnectedMcuPin(pinEcho);
+            const vccPin = getConnectedMcuPin(pinVcc);
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const isPowerOk = vccPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
+            const isWired = isPowerOk && !!trigPin && !!echoPin;
+            const label = id.includes('_') ? `HC-SR04 #${id.split('_')[1]}` : 'HC-SR04';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* Ultrasonic PNG Image */}
+                <image
+                  href="./sensorUltrasonicDistance4Pin.png"
+                  xlinkHref="./sensorUltrasonicDistance4Pin.png"
+                  x="0"
+                  y="0"
+                  width="200"
+                  height="200"
+                />
+
+                {/* Pin indicator dots & highlights */}
+                <circle cx="84" cy="157" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="94" cy="157" r="3.5" fill={isWired ? "#10b981" : "#6ee7b7"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="105" cy="157" r="3.5" fill={isWired ? "#f59e0b" : "#fcd34d"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="115" cy="157" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="84" y="174" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
+                <text x="94" y="174" fontSize="7" fill="#10b981" fontWeight="bold" textAnchor="middle">TRIG</text>
+                <text x="105" y="174" fontSize="7" fill="#f59e0b" fontWeight="bold" textAnchor="middle">ECHO</text>
+                <text x="115" y="174" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
+
+                {/* Component Label */}
+                <rect x="50" y="32" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#3b82f6'} strokeWidth="1.2"/>
+                <text x="100" y="43" fontSize="8.5" fill={isWired ? '#34d399' : '#93c5fd'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate button */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="165" cy="45" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 162.5 45 A 3 3 0 1 1 165 48" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 165 46 L 165 48 L 167 48" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+
+                {/* Delete button */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="182" cy="45" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="179" y1="42" x2="185" y2="48" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="185" y1="42" x2="179" y2="48" stroke="#fff" strokeWidth="1.5"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* D. ROTARY POTENTIOMETER — Multi-instance support */}
+          {potComponents.map(id => {
+            const pos = positions[id] || (positions.pot ?? DEFAULT_COMPONENT_POSITIONS.pot);
+            const rot = rotations[id] || (rotations.pot ?? 0);
+            const pinVcc = getInstancePinId(id, 'POT_VCC');
+            const pinSig = getInstancePinId(id, 'POT_SIG');
+            const pinGnd = getInstancePinId(id, 'POT_GND');
+            const sigPin = getConnectedMcuPin(pinSig);
+            const vccPin = getConnectedMcuPin(pinVcc);
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const isWired = sigPin !== null && 
+                            vccPin !== null && 
+                            gndPin !== null && 
+                            gndPins.includes(gndPin.id) && 
+                            powerPins.includes(vccPin.id);
+            const currentVal = id === 'pot' ? potValue : (extraPotValues[id] ?? potValue);
+            const label = id.includes('_') ? `Potentiometer #${id.split('_')[1]}` : 'Potentiometer';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* Potentiometer PNG Image */}
+                <image href="./potentiometer.png" xlinkHref="./potentiometer.png" x="0" y="0" width="200" height="200" />
+
+                {/* Pin indicator dots at bottom */}
+                <circle cx="50" cy="150" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="100" cy="150" r="3.5" fill={isWired ? "#a78bfa" : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="150" cy="150" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="50" y="165" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
+                <text x="100" y="165" fontSize="7" fill="#a78bfa" fontWeight="bold" textAnchor="middle">SIG</text>
+                <text x="150" y="165" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">VCC</text>
+
+                {/* Knob indicator dot rotating over center (100, 80) */}
+                <line
+                  x1="100" y1="80"
+                  x2={100 + Math.cos(((currentVal - 50) * 2.6 - 90) * Math.PI / 180) * 14}
+                  y2={80 + Math.sin(((currentVal - 50) * 2.6 - 90) * Math.PI / 180) * 14}
+                  stroke="#10b981" strokeWidth="3" strokeLinecap="round"
+                />
+
+                {/* Value display */}
+                <rect x="75" y="170" width="50" height="14" rx="3" fill="rgba(15, 23, 42, 0.9)" stroke="#22c55e" strokeWidth="1"/>
+                <text x="100" y="180" fontSize="7.5" fill="#34d399" textAnchor="middle" fontWeight="bold">{currentVal}%</text>
+
+                {/* Slider */}
+                <foreignObject x="35" y="186" width="130" height="14" onMouseDown={e => e.stopPropagation()}>
+                  <input
+                    type="range" min="0" max="100" value={currentVal}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (id === 'pot') {
+                        setPotValue(v);
+                      } else {
+                        setExtraPotValues(prev => ({ ...prev, [id]: v }));
+                      }
+                    }}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                </foreignObject>
+
+                {/* Badge label */}
+                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#22c55e'} strokeWidth="1.2"/>
+                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#86efac'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* E. TACTILE PUSH BUTTON — Multi-instance support */}
+          {buttonComponents.map(id => {
+            const pos = positions[id] || (positions.button ?? DEFAULT_COMPONENT_POSITIONS.button);
+            const rot = rotations[id] || (rotations.button ?? 0);
+            const pinSig = getInstancePinId(id, 'BTN_SIG');
+            const pinGnd = getInstancePinId(id, 'BTN_GND');
+            const sigPin = getConnectedMcuPin(pinSig);
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const isWired = sigPin !== null && gndPin !== null && gndPins.includes(gndPin.id);
+            const isPressed = id === 'button' ? buttonPressed : (pressedButtons[id] || false);
+            const label = id.includes('_') ? `Button #${id.split('_')[1]}` : 'Button';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 60, 60)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* Push Button PNG Image */}
+                <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />
+
+                {/* Pin indicator dots */}
+                <circle cx="35" cy="95" r="3" fill={isWired ? "#eab308" : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="85" cy="95" r="3" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="35" y="108" fontSize="6.5" fill="#eab308" fontWeight="bold" textAnchor="middle">SIG</text>
+                <text x="85" y="108" fontSize="6.5" fill="#3b82f6" fontWeight="bold" textAnchor="middle">GND</text>
+
+                {/* Clickable button cap trigger overlay */}
+                <circle
+                  cx="60" cy="55" r="18"
+                  fill={isPressed ? "rgba(239,68,68,0.4)" : "transparent"}
+                  stroke={isPressed ? "#ef4444" : "none"}
+                  strokeWidth="2"
+                  className="cursor-pointer"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    if (id === 'button') {
+                      setButtonPressed(true);
+                    } else {
+                      setPressedButtons(prev => ({ ...prev, [id]: true }));
+                    }
+                    const btnPin = getConnectedMcuPin(pinSig);
+                    if (btnPin && onPinStateChange) {
+                      const numMatch = btnPin.id.match(/\d+/);
+                      const pinKey = numMatch ? numMatch[0] : btnPin.id;
+                      onPinStateChange(pinKey, 'HIGH');
+                      onPinStateChange(btnPin.id, 'HIGH');
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.stopPropagation();
+                    if (id === 'button') {
+                      setButtonPressed(false);
+                    } else {
+                      setPressedButtons(prev => ({ ...prev, [id]: false }));
+                    }
+                    const btnPin = getConnectedMcuPin(pinSig);
+                    if (btnPin && onPinStateChange) {
+                      const numMatch = btnPin.id.match(/\d+/);
+                      const pinKey = numMatch ? numMatch[0] : btnPin.id;
+                      onPinStateChange(pinKey, 'LOW');
+                      onPinStateChange(btnPin.id, 'LOW');
+                    }
+                  }}
+                />
+
+                {/* Badge label */}
+                <rect x="15" y="8" width="90" height="14" rx="3" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#475569'} strokeWidth="1"/>
+                <text x="60" y="18" fontSize="7" fill={isWired ? '#34d399' : '#94a3b8'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="102" cy="15" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
+                  <path d="M 100 15 A 2 2 0 1 1 102 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
+                  <path d="M 102 15.5 L 102 17 L 103.5 17" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="114" cy="15" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
+                  <line x1="112" y1="13" x2="116" y2="17" stroke="#fff" strokeWidth="1"/>
+                  <line x1="116" y1="13" x2="112" y2="17" stroke="#fff" strokeWidth="1"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* F. LCD DISPLAY 16x2 I2C — Multi-instance support */}
+          {lcdComponents.map(id => {
+            const pos = positions[id] || (positions.lcd ?? DEFAULT_COMPONENT_POSITIONS.lcd);
+            const rot = rotations[id] || (rotations.lcd ?? 0);
+            const pinGnd = getInstancePinId(id, 'LCD_GND');
+            const pinVcc = getInstancePinId(id, 'LCD_VCC');
+            const pinSda = getInstancePinId(id, 'LCD_SDA');
+            const pinScl = getInstancePinId(id, 'LCD_SCL');
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const vccPin = getConnectedMcuPin(pinVcc);
+            const sdaPin = getConnectedMcuPin(pinSda);
+            const sclPin = getConnectedMcuPin(pinScl);
+            const isWired = !!gndPin && !!vccPin && !!sdaPin && !!sclPin && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
+            const label = id.includes('_') ? `LCD #${id.split('_')[1]}` : 'LCD 16x2 I2C';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* LCD PNG Image */}
+                <image href="./displayLCD16x2I2C.png" xlinkHref="./displayLCD16x2I2C.png" x="0" y="0" width="200" height="200" />
+
+                {/* Dynamic LCD Screen Content Overlay */}
+                <rect x="52" y="80" width="96" height="34" rx="2" fill="#0f172a" opacity="0.9" />
+                <text x="56" y="93" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
+                  {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `TEMP: ${currentTemp}C` : 'NO WIRES!') : 'SYSTEM IDLE'}
+                </text>
+                <text x="56" y="107" fontSize="6.5" fill="#93c5fd" fontWeight="bold" fontFamily="monospace">
+                  {isRunning ? (isUltrasonicWired || isPotWired || isDhtWired ? `DIST: ${currentDistance}CM` : 'CONNECT PINS') : 'READY TO WIRE'}
+                </text>
+                {isRunning && <rect x="16" y="53" width="4" height="6" fill="#60a5fa" opacity="0.7" className="animate-pulse"/>}
+
+                {/* Pin indicator dots on I2C module (left side) */}
+                <circle cx="22" cy="68" r="3" fill={isWired ? "#10b981" : "#6ee7b7"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="22" cy="82" r="3" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="22" cy="96" r="3" fill={isWired ? "#a78bfa" : "#c4b5fd"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="22" cy="110" r="3" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="12" y="70" fontSize="5.5" fill="#10b981" fontWeight="bold" textAnchor="end">GND</text>
+                <text x="12" y="84" fontSize="5.5" fill="#ef4444" fontWeight="bold" textAnchor="end">VCC</text>
+                <text x="12" y="98" fontSize="5.5" fill="#a78bfa" fontWeight="bold" textAnchor="end">SDA</text>
+                <text x="12" y="112" fontSize="5.5" fill="#3b82f6" fontWeight="bold" textAnchor="end">SCL</text>
+
+                {/* Badge label */}
+                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#047857'} strokeWidth="1.2"/>
+                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#a7f3d0'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* G. DHT11 TEMP/HUMIDITY SENSOR — Multi-instance support */}
+          {dht11Components.map(id => {
+            const pos = positions[id] || (positions.dht11 ?? DEFAULT_COMPONENT_POSITIONS.dht11);
+            const rot = rotations[id] || (rotations.dht11 ?? 0);
+            const pinData = getInstancePinId(id, 'DHT11_DATA');
+            const pinVcc = getInstancePinId(id, 'DHT11_VCC');
+            const pinGnd = getInstancePinId(id, 'DHT11_GND');
+            const dataPin = getConnectedMcuPin(pinData);
+            const vccPin = getConnectedMcuPin(pinVcc);
+            const gndPin = getConnectedMcuPin(pinGnd);
+            const isWired = !!dataPin && !!vccPin && !!gndPin && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
+            const label = id.includes('_') ? `DHT11 #${id.split('_')[1]}` : 'DHT11 Sensor';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 45, 60)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* 3D board depth — bottom face */}
+                <polygon points="0,120 90,120 96,126 6,126" fill="#011b2e" opacity="0.9"/>
+                {/* 3D board depth — right face */}
+                <polygon points="90,0 96,6 96,126 90,120" fill="#012b4a" opacity="0.9"/>
+                {/* Main PCB face */}
+                <rect x="0" y="0" width="90" height="120" rx="5" fill="url(#pcbBlueGrad)" stroke={isWired ? '#34d399' : '#0284c7'} strokeWidth="1.5"/>
+                {/* PCB surface highlight */}
+                <rect x="2" y="2" width="86" height="18" rx="3" fill="rgba(255,255,255,0.06)"/>
+                {/* Label */}
+                <text x="8" y="13" fontSize="7.5" fill={isWired ? '#34d399' : '#38bdf8'} fontWeight="bold">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="71" cy="8" r="5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
+                  <path d="M 69 8 A 2 2 0 1 1 71 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round"/>
+                  <path d="M 71 8.5 L 71 10 L 72.5 10" fill="none" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete button */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <circle cx="83" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
+                  <line x1="81" y1="6" x2="85" y2="10" stroke="#fff" strokeWidth="1.2"/>
+                  <line x1="85" y1="6" x2="81" y2="10" stroke="#fff" strokeWidth="1.2"/>
+                </g>
+
+                {/* Sensor Case */}
+                <rect x="5" y="22" width="80" height="72" rx="5" fill="url(#bodyBlueGrad)" stroke="#0369a1" strokeWidth="1.5"/>
+                <rect x="7" y="24" width="76" height="8" rx="3" fill="rgba(255,255,255,0.15)"/>
+                <rect x="12" y="34" width="66" height="44" rx="3" fill="#082f49" stroke="#0369a1" strokeWidth="1"/>
+                <rect x="15" y="38" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
+                <rect x="15" y="46" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
+                <rect x="15" y="54" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
+                <rect x="15" y="62" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
+                <rect x="15" y="70" width="60" height="4" rx="1" fill="#0369a1" opacity="0.5"/>
+                <line x1="33" y1="34" x2="33" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
+                <line x1="57" y1="34" x2="57" y2="78" stroke="#0284c7" strokeWidth="0.8" opacity="0.5"/>
+                <text x="45" y="92" fontSize="9" fill="#ffffff" textAnchor="middle" fontWeight="bold">DHT11</text>
+                <rect x="13" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
+                <rect x="33" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
+                <rect x="53" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
+                <rect x="73" y="94" width="4" height="14" rx="1" fill="#e2e8f0"/>
+                <text x="9" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">VCC</text>
+                <text x="29" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">DAT</text>
+                <text x="50" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">NC</text>
+                <text x="69" y="114" fontSize="6.5" fill="#38bdf8" fontWeight="bold">GND</text>
+              </g>
+            );
+          })}
+
+          {/* H. DC MOTOR — Multi-instance support */}
+          {motorComponents.map(id => {
+            const pos = positions[id] || (positions.motor ?? DEFAULT_COMPONENT_POSITIONS.motor);
+            const rot = rotations[id] || (rotations.motor ?? 0);
+            const isWired = checkMotorWiring(id);
+            const label = id.includes('_') ? `DC Motor #${id.split('_')[1]}` : 'DC Motor';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 100, 100)`}
+                className="cursor-move"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* DC Motor PNG Image */}
+                <image href="./motorDC.png" xlinkHref="./motorDC.png" x="0" y="0" width="200" height="200" />
+
+                {/* Spinning Propeller Fan Overlay when Motor is Running */}
+                {isRunning && isWired && (
+                  <g transform="translate(100, 45)" className="animate-spin" style={{ transformOrigin: '100px 45px', animationDuration: '0.3s' }}>
+                    <circle cx="100" cy="45" r="6" fill="#ca8a04" />
+                    <ellipse cx="100" cy="30" rx="4" ry="15" fill="#eab308" opacity="0.8" />
+                    <ellipse cx="100" cy="60" rx="4" ry="15" fill="#eab308" opacity="0.8" />
+                    <ellipse cx="85" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
+                    <ellipse cx="115" cy="45" rx="15" ry="4" fill="#eab308" opacity="0.8" />
+                  </g>
+                )}
+
+                {/* Pin indicator dots at bottom terminals */}
+                <circle cx="78" cy="185" r="3.5" fill={isWired ? "#ef4444" : "#fca5a5"} stroke="#ffffff" strokeWidth="1" />
+                <circle cx="122" cy="185" r="3.5" fill={isWired ? "#3b82f6" : "#93c5fd"} stroke="#ffffff" strokeWidth="1" />
+
+                {/* Pin labels */}
+                <text x="78" y="198" fontSize="7" fill="#ef4444" fontWeight="bold" textAnchor="middle">POS (+)</text>
+                <text x="122" y="198" fontSize="7" fill="#3b82f6" fontWeight="bold" textAnchor="middle">NEG (−)</text>
+
+                {/* Badge label */}
+                <rect x="50" y="15" width="100" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke={isWired ? '#34d399' : '#eab308'} strokeWidth="1.2"/>
+                <text x="100" y="26" fontSize="8" fill={isWired ? '#34d399' : '#fef08a'} fontWeight="bold" textAnchor="middle">
+                  {isWired ? `✔ ${label}` : label}
+                </text>
+
+                {/* Rotate */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Rotate Component</title>
+                  <circle cx="165" cy="23" r="7" fill="#3b82f6" stroke="#93c5fd" strokeWidth="1"/>
+                  <path d="M 162.5 23 A 3 3 0 1 1 165 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round"/>
+                  <path d="M 165 24 L 165 26 L 167 26" fill="none" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </g>
+                {/* Delete */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <title>Remove Component</title>
+                  <circle cx="182" cy="23" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1"/>
+                  <line x1="179" y1="20" x2="185" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                  <line x1="185" y1="20" x2="179" y2="26" stroke="#fff" strokeWidth="1.5"/>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* I. RC522 RFID READER — Multi-instance support */}
+          {rfidComponents.map(id => {
+            const pos = positions[id] || (positions.rfid ?? DEFAULT_COMPONENT_POSITIONS.rfid);
+            const rot = rotations[id] || (rotations.rfid ?? 0);
+            const label = id.includes('_') ? `RFID #${id.split('_')[1]}` : 'RFID-RC522';
+
+            return (
+              <g
+                key={id}
+                transform={`translate(${pos.x}, ${pos.y}) rotate(${rot}, 55, 80)`}
+                className="cursor-move select-none"
+                onMouseDown={(e) => startDrag(id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleRotateComponent(id);
+                }}
+                filter="url(#shadow3d)"
+              >
+                {/* Rotate Button */}
+                <g className="cursor-pointer" onClick={() => handleRotateComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <circle cx="8" cy="8" r="5.5" fill="#3b82f6" stroke="#93c5fd" strokeWidth="0.8"/>
+                  <path d="M6 8a2 2 0 1 1 2 2M6 8l1.5-1M6 8l1.5 1" stroke="#fff" strokeWidth="0.9" fill="none"/>
+                </g>
+                {/* Delete button */}
+                <g className="cursor-pointer" onClick={() => handleRemoveComponent(id)} onMouseDown={e => e.stopPropagation()}>
+                  <circle cx="102" cy="8" r="5.5" fill="#ef4444" stroke="#fca5a5" strokeWidth="0.8"/>
+                  <line x1="100" y1="6" x2="104" y2="10" stroke="#fff" strokeWidth="1.2"/>
+                  <line x1="104" y1="6" x2="100" y2="10" stroke="#fff" strokeWidth="1.2"/>
+                </g>
+
+                {/* PCB Base: Classic blue FR-4 (110x150, rx=6) */}
+                <rect x="0" y="16" width="110" height="136" rx="6" fill="#1e3a8a" stroke="#172554" strokeWidth="1.5"/>
+                <rect x="2" y="18" width="106" height="132" rx="5" fill="none" stroke="#2563eb" strokeWidth="0.8" opacity="0.6"/>
+
+                {/* Top Antenna Area (Coil traces in silkscreen gold) */}
+                <rect x="8" y="24" width="94" height="64" rx="4" fill="#172554" stroke="#d97706" strokeWidth="1.2"/>
+                <rect x="12" y="28" width="86" height="56" rx="3" fill="none" stroke="#f59e0b" strokeWidth="0.8" opacity="0.8"/>
+                <rect x="16" y="32" width="78" height="48" rx="2" fill="none" stroke="#d97706" strokeWidth="0.6" opacity="0.7"/>
+                <rect x="20" y="36" width="70" height="40" rx="2" fill="none" stroke="#f59e0b" strokeWidth="0.5" opacity="0.6"/>
+
+                {/* Antenna Icon & Text */}
+                <text x="55" y="49" fontSize="7" fill="#fde68a" textAnchor="middle" fontWeight="bold" fontFamily="monospace">{label}</text>
+                <path d="M49 57a7 7 0 0 1 12 0 M46 54a11 11 0 0 1 18 0 M43 51a15 15 0 0 1 24 0" stroke="#fbbf24" strokeWidth="1" fill="none" strokeLinecap="round"/>
+                <circle cx="55" cy="59" r="1.5" fill="#f59e0b"/>
+
+                {/* Interactive Tap RFID Card Button / Tag directly on Antenna */}
+                <g
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newPresent = !sensorData.rfidCardPresent;
+                    if (onSensorDataChange) {
+                      onSensorDataChange({ rfidCardPresent: newPresent, rfidUid: sensorData.rfidUid || '53 7A 92 1F' });
+                    }
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <rect
+                    x="14"
+                    y="67"
+                    width="82"
+                    height="17"
+                    rx="4"
+                    fill={sensorData.rfidCardPresent ? '#15803d' : '#0284c7'}
+                    stroke="#ffffff"
+                    strokeWidth="0.9"
+                  />
+                  <text x="55" y="78.5" fontSize="6.5" fill="#ffffff" textAnchor="middle" fontWeight="bold">
+                    {sensorData.rfidCardPresent ? '✓ KARTU MENEMPEL' : '🏷️ TEMPEL KARTU'}
+                  </text>
+                </g>
+
+                {/* Middle Circuit: IC MFRC522 (QFN32 black chip with pins) */}
+                <rect x="42" y="93" width="26" height="26" rx="1.5" fill="#0f172a" stroke="#334155" strokeWidth="0.8"/>
+                <circle cx="45" cy="96" r="1" fill="#94a3b8"/>
+                <text x="55" y="108" fontSize="5.5" fill="#cbd5e1" textAnchor="middle" fontFamily="monospace" fontWeight="bold">RC522</text>
+                {/* SMD Crystal Oscillator (27.12 MHz) */}
+                <rect x="15" y="98" width="18" height="10" rx="2" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8"/>
+                <text x="24" y="105" fontSize="4.5" fill="#0f172a" textAnchor="middle" fontWeight="bold">27.12M</text>
+
+                {/* Power LED & Status Indicator LED */}
+                <rect x="80" y="96" width="6" height="8" rx="0.5" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
+                <circle cx="83" cy="100" r="2" fill="#ef4444"/>
+                <text x="83" y="110" fontSize="4.5" fill="#94a3b8" textAnchor="middle">PWR</text>
+
+                {/* Card Detected Status Glow */}
+                {sensorData.rfidCardPresent && (
+                  <g>
+                    <circle cx="55" cy="56" r="28" fill="#22c55e" opacity="0.2"/>
+                    <text x="55" y="123" fontSize="5.5" fill="#86efac" textAnchor="middle" fontWeight="bold">UID: {sensorData.rfidUid || '53 7A 92 1F'}</text>
+                  </g>
+                )}
+                {!sensorData.rfidCardPresent && (
+                  <text x="55" y="124" fontSize="5.5" fill="#93c5fd" textAnchor="middle" fontWeight="bold">3.3V SPI READER</text>
+                )}
+
+                {/* Bottom 8-Pin Header (Pins: SDA, SCK, MOSI, MISO, IRQ, GND, RST, 3.3V) */}
+                <rect x="10" y="132" width="90" height="8" rx="1" fill="#09090b" stroke="#27272a" strokeWidth="0.5"/>
+                {/* Metal pin leads extending down to y=162 */}
+                {[16, 27, 38, 49, 60, 71, 82, 93].map((px, i) => (
+                  <g key={i}>
+                    <rect x={px - 1.5} y="136" width="3" height="26" rx="0.5" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="0.4"/>
+                    <circle cx={px} cy="138" r="1.5" fill="#cbd5e1"/>
+                  </g>
+                ))}
+                {/* Pin Labels */}
+                <text x="16" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SDA</text>
+                <text x="27" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">SCK</text>
+                <text x="38" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MOSI</text>
+                <text x="49" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">MISO</text>
+                <text x="60" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">IRQ</text>
+                <text x="71" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">GND</text>
+                <text x="82" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">RST</text>
+                <text x="93" y="130" fontSize="5" fill="#38bdf8" textAnchor="middle" fontWeight="bold">3V3</text>
+              </g>
+            );
+          })}
 
           {/* ==================== INTERACTIVE PINS TERMINAL CIRCLES (SCALED UP FOR HIT-TEST ACCURACY) ==================== */}
           {pins.map(pin => {
@@ -3025,18 +3254,21 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
         {/* ── SENSOR DYNAMIC SIMULATOR POPUP OVERLAY ── */}
         {activePopup && (() => {
-          const isUltrasonicPopup = activePopup === 'ultrasonic' || activePopup === 'hcsr' || activePopup === 'hcsr04';
-          const isDhtPopup = activePopup === 'dht11' || activePopup === 'dht';
-          const isPotPopup = activePopup === 'pot';
-          const isRfidPopup = activePopup === 'rfid' || activePopup === 'mfrc522' || activePopup === 'rc522';
+          const basePopup = getBaseComponentType(activePopup);
+          const isUltrasonicPopup = basePopup === 'ultrasonic' || basePopup === 'hcsr' || basePopup === 'hcsr04';
+          const isDhtPopup = basePopup === 'dht11' || basePopup === 'dht';
+          const isPotPopup = basePopup === 'pot';
+          const isRfidPopup = basePopup === 'rfid' || basePopup === 'mfrc522' || basePopup === 'rc522';
           
           if (!isUltrasonicPopup && !isDhtPopup && !isPotPopup && !isRfidPopup) return null;
           
+          const instanceSuffix = activePopup !== basePopup ? ` #${activePopup.split('_')[1]}` : '';
+
           return (
             <div className="absolute top-2 left-2 z-40 bg-slate-900/95 border border-slate-750 p-3 rounded-xl shadow-2xl w-44 text-white select-none animate-in fade-in zoom-in-95 duration-100">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider">
-                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ PN532 / RFID' : '🎛️ Potentiometer'}
+                  {isUltrasonicPopup ? '🔊 HC-SR04' : isDhtPopup ? '🌡️ DHT11' : isRfidPopup ? '🏷️ PN532 / RFID' : '🎛️ Potentiometer'}{instanceSuffix}
                 </span>
                 <button 
                   onClick={() => setActivePopup(null)}
@@ -3106,27 +3338,34 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 </div>
               )}
 
-              {isPotPopup && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
-                    <span>Analog In:</span>
-                    <span className="font-mono text-cyan-400">{Math.round((potValue / 100) * 1023)}</span>
+              {isPotPopup && (() => {
+                const curPotVal = extraPotValues[activePopup] ?? potValue;
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
+                      <span>Analog In:</span>
+                      <span className="font-mono text-cyan-400">{Math.round((curPotVal / 100) * 1023)}</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={curPotVal}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (activePopup === 'pot' && onPotValueChange) {
+                          onPotValueChange(val);
+                        }
+                        setExtraPotValues(prev => ({ ...prev, [activePopup]: val }));
+                      }}
+                      className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                    />
+                    <div className="text-[7px] text-slate-500 text-center font-mono">
+                      Percentage: {curPotVal}%
+                    </div>
                   </div>
-                  <input 
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={potValue}
-                    onChange={(e) => {
-                      if (onPotValueChange) onPotValueChange(parseInt(e.target.value));
-                    }}
-                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
-                  />
-                  <div className="text-[7px] text-slate-500 text-center font-mono">
-                    Percentage: {potValue}%
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {isRfidPopup && (
                 <div className="space-y-2">

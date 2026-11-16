@@ -3704,12 +3704,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return { hw, plans: plansWithBlockIds, xml, ino, py };
   }, []);
 
-  const DEFAULT_SIM_FILES: { [filename: string]: string } = {
-    'firmware/main.ino': initialRobotSetup.ino,
-    'python/main.py': initialRobotSetup.py,
+  const BLANK_SIM_XML = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
+  const BLANK_SIM_FILES: { [filename: string]: string } = {
+    'firmware/main.ino': 'void setup() {\n  \n}\n\nvoid loop() {\n  \n}\n',
+    'python/main.py': '# Python RoboLab\ndef setup():\n    pass\n\ndef loop():\n    pass\n\nif __name__ == "__main__":\n    setup()\n    while True:\n        loop()\n',
   };
 
-  const [simulatorMode, setSimulatorMode] = useState<'robot' | 'circuit'>('robot');
+  const [simulatorMode, setSimulatorMode] = useState<'robot' | 'circuit'>('circuit');
   const [robotHardwareConfig, setRobotHardwareConfig] = useState<RobotHardwareConfig>(() => initialRobotSetup.hw);
   const [robotPlans, setRobotPlans] = useState<RobotPlan[]>(() => initialRobotSetup.plans);
   const [activeRobotPlanId, setActiveRobotPlanId] = useState<number>(1);
@@ -3719,14 +3720,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return localStorage.getItem('robolab_sim_board') || 'ESP32 DevKit V1';
   });
   const [simFiles, setSimFiles] = useState<{ [filename: string]: string }>(() => {
-    try {
-      const saved = localStorage.getItem('robolab_sim_files_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed['firmware/main.ino']) return parsed;
-      }
-    } catch (e) {}
-    return DEFAULT_SIM_FILES;
+    return BLANK_SIM_FILES;
   });
   const [simActiveFile, setSimActiveFile] = useState<string>(() => {
     const saved = localStorage.getItem('robolab_sim_activeFile');
@@ -3738,28 +3732,46 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     'python/main.py': true
   });
   const [simWorkspaceXmls, setSimWorkspaceXmls] = useState<{ [filename: string]: string }>(() => {
-    try {
-      const saved = localStorage.getItem('robolab_sim_workspaceXmls_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const sharedXml = parsed?.['firmware/main.ino'] || parsed?.['python/main.py'];
-        if (sharedXml && sharedXml.includes('arduino_setup')) {
-          return {
-            ...parsed,
-            'firmware/main.ino': sharedXml,
-            'python/main.py': sharedXml,
-          };
-        }
-      }
-    } catch (e) {}
     return {
-      'firmware/main.ino': initialRobotSetup.xml,
-      'python/main.py': initialRobotSetup.xml,
+      'firmware/main.ino': BLANK_SIM_XML,
+      'python/main.py': BLANK_SIM_XML,
     };
   });
   const [simViewMode, setSimViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
   const [simShowConsole, setSimShowConsole] = useState<boolean>(false);
   const [simResetKey, setSimResetKey] = useState<number>(0);
+
+  const clearSimulatorBlockWorkspace = useCallback(() => {
+    setSimWorkspaceXmls({
+      'firmware/main.ino': BLANK_SIM_XML,
+      'python/main.py': BLANK_SIM_XML,
+    });
+    setSimFiles({
+      'firmware/main.ino': 'void setup() {\n  \n}\n\nvoid loop() {\n  \n}\n',
+      'python/main.py': '# Python RoboLab\ndef setup():\n    pass\n\ndef loop():\n    pass\n\nif __name__ == "__main__":\n    setup()\n    while True:\n        loop()\n',
+    });
+    setSimSyncStatuses({
+      'firmware/main.ino': true,
+      'python/main.py': true,
+    });
+    setSimResetKey((prev) => prev + 1);
+  }, []);
+
+  const handleSimulatorModeChange = useCallback(
+    (nextMode: 'robot' | 'circuit') => {
+      setSimulatorMode(nextMode);
+      clearSimulatorBlockWorkspace();
+    },
+    [clearSimulatorBlockWorkspace]
+  );
+
+  const prevSimTabRef = useRef(currentTab);
+  useEffect(() => {
+    if (prevSimTabRef.current !== 'simulator' && currentTab === 'simulator') {
+      clearSimulatorBlockWorkspace();
+    }
+    prevSimTabRef.current = currentTab;
+  }, [currentTab, clearSimulatorBlockWorkspace]);
 
   const syncRobotToSimulatorWorkspace = useCallback(
     (
@@ -4224,17 +4236,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setPackages((prev: any) => {
       let updated = false;
       const newArduino = prev.arduino.map((p: any) => {
-        const wantsDht = simulatorActiveComponents.includes('dht11') || simulatorActiveComponents.includes('dht');
+        const wantsDht = simulatorActiveComponents.some(c => c.startsWith('dht'));
         if (p.name === 'DHT sensor library' && wantsDht && !p.installed) {
           updated = true;
           return { ...p, installed: true };
         }
-        const wantsUltrasonic = simulatorActiveComponents.includes('ultrasonic') || simulatorActiveComponents.includes('hcsr') || simulatorActiveComponents.includes('hcsr04');
+        const wantsUltrasonic = simulatorActiveComponents.some(c => c.startsWith('ultrasonic') || c.startsWith('hcsr'));
         if (p.name === 'Ultrasonic' && wantsUltrasonic && !p.installed) {
           updated = true;
           return { ...p, installed: true };
         }
-        const wantsServo = simulatorActiveComponents.includes('servo');
+        const wantsServo = simulatorActiveComponents.some(c => c.startsWith('servo'));
         if (p.name === 'Servo' && wantsServo && !p.installed) {
           updated = true;
           return { ...p, installed: true };
@@ -5964,6 +5976,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           continue;
         }
 
+        // 2b. Serial Write / Binary byte write
+        const cppWriteMatch = trimmed.match(/Serial\.write\(\s*(.*?)\s*\)/);
+        const pythonWriteMatch = trimmed.match(/(?:robot\.serial_write|sys\.stdout\.buffer\.write|sys\.stdout\.write)\(\s*(.*?)\s*\)/);
+        if (cppWriteMatch) {
+          queue.push({ type: 'write', value: { expr: cppWriteMatch[1].trim() } });
+          continue;
+        }
+        if (pythonWriteMatch) {
+          queue.push({ type: 'write', value: { expr: pythonWriteMatch[1].trim() } });
+          continue;
+        }
+
         // RFID / PN532 specific helpers in serial / debug
         if (trimmed.includes('MFRC522Debug::PCD_DumpVersionToSerial')) {
           queue.push({ type: 'print', value: { expr: '"Firmware Version: 0x92 = v2.0"', newline: true } });
@@ -6638,6 +6662,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const { expr, newline } = item.value as { expr: string, newline: boolean };
         const resolvedExpr = resolveSensorReads(expr);
         const evaluated = evalPrintArgs(resolvedExpr, executionVars, sensorDataRef.current, (executionVars as any).__wifiSim);
+
+        // Stream raw output to Serial Monitor in real time
+        const rawChunk = evaluated + (newline ? '\r\n' : '');
+        setSerialRawOutput(prev => (prev + rawChunk).slice(-50000));
+
         if (newline === false) {
           if (hasOpenLine) {
             setTerminalLogs(prev => {
@@ -6675,6 +6704,94 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             });
             hasOpenLine = false;
           } else {
+            setTerminalLogs(prev => [
+              ...prev, 
+              { text: evaluated, type: 'stdout' }
+            ]);
+            setInteractiveTerminalLogs(prev => [
+              ...prev,
+              { text: evaluated, type: 'output' }
+            ]);
+          }
+        }
+        next();
+      } else if (item.type === 'write') {
+        const { expr } = item.value as { expr: string };
+        const resolvedExpr = resolveSensorReads(expr);
+        let evaluated = '';
+        const trimmedExpr = resolvedExpr.trim();
+
+        // 1. Literal string check (e.g. "A", "Hello\n", 'X')
+        if ((trimmedExpr.startsWith('"') && trimmedExpr.endsWith('"')) || (trimmedExpr.startsWith("'") && trimmedExpr.endsWith("'"))) {
+          evaluated = trimmedExpr.slice(1, -1);
+        } else {
+          // 2. Try math / variable expression evaluation
+          const evalRes = evalExpr(resolvedExpr, executionVars);
+          if (typeof evalRes === 'number') {
+            evaluated = String.fromCharCode(evalRes >= 0 && evalRes <= 255 ? evalRes : (evalRes & 0xFF));
+          } else if (evalRes !== undefined && evalRes !== null && evalRes !== '') {
+            const num = Number(evalRes);
+            if (!isNaN(num) && Number.isInteger(num)) {
+              evaluated = String.fromCharCode(num & 0xFF);
+            } else {
+              evaluated = String(evalRes);
+            }
+          } else {
+            const printVal = evalPrintArgs(resolvedExpr, executionVars, sensorDataRef.current, (executionVars as any).__wifiSim);
+            const num = Number(printVal);
+            if (!isNaN(num) && printVal.trim() !== '') {
+              evaluated = String.fromCharCode(num & 0xFF);
+            } else {
+              evaluated = printVal;
+            }
+          }
+        }
+
+        // Stream raw byte/character to Serial Monitor
+        setSerialRawOutput(prev => (prev + evaluated).slice(-50000));
+
+        // Stream to terminal logs (respecting embedded newlines without auto-adding newline)
+        if (evaluated.includes('\n')) {
+          const lines = evaluated.split('\n');
+          for (let li = 0; li < lines.length; li++) {
+            const linePart = lines[li];
+            const isLast = li === lines.length - 1;
+            if (li === 0) {
+              if (hasOpenLine) {
+                setTerminalLogs(prev => {
+                  if (prev.length === 0) return [{ text: linePart, type: 'stdout' as const }];
+                  const last = prev[prev.length - 1];
+                  return [...prev.slice(0, -1), { ...last, text: last.text + linePart }];
+                });
+                setInteractiveTerminalLogs(prev => {
+                  if (prev.length === 0) return [{ text: linePart, type: 'output' as const }];
+                  const last = prev[prev.length - 1];
+                  return [...prev.slice(0, -1), { ...last, text: last.text + linePart }];
+                });
+              } else {
+                setTerminalLogs(prev => [...prev, { text: linePart, type: 'stdout' }]);
+                setInteractiveTerminalLogs(prev => [...prev, { text: linePart, type: 'output' }]);
+              }
+            } else {
+              setTerminalLogs(prev => [...prev, { text: linePart, type: 'stdout' }]);
+              setInteractiveTerminalLogs(prev => [...prev, { text: linePart, type: 'output' }]);
+            }
+            hasOpenLine = !isLast || (linePart.length > 0 && !evaluated.endsWith('\n'));
+          }
+        } else {
+          if (hasOpenLine) {
+            setTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'stdout' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+            setInteractiveTerminalLogs(prev => {
+              if (prev.length === 0) return [{ text: evaluated, type: 'output' as const }];
+              const last = prev[prev.length - 1];
+              return [...prev.slice(0, -1), { ...last, text: last.text + evaluated }];
+            });
+          } else {
+            hasOpenLine = true;
             setTerminalLogs(prev => [
               ...prev, 
               { text: evaluated, type: 'stdout' }
@@ -9448,7 +9565,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   <div className={`flex items-center p-1 rounded-xl border shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-300' : 'bg-slate-900/95 border-slate-700/80'}`}>
                     <button
                       type="button"
-                      onClick={() => setSimulatorMode('robot')}
+                      onClick={() => handleSimulatorModeChange('robot')}
                       className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                         simulatorMode === 'robot'
                           ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/30'
@@ -9464,7 +9581,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSimulatorMode('circuit')}
+                      onClick={() => handleSimulatorModeChange('circuit')}
                       className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                         simulatorMode === 'circuit'
                           ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30'
@@ -9602,12 +9719,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     onClick={() => {
                       handleStopCode();
                       setActiveRobotHighlight(null);
-                      syncRobotToSimulatorWorkspace(
-                        initialRobotSetup.hw,
-                        initialRobotSetup.plans,
-                        1,
-                        true
-                      );
+                      if (simulatorMode === 'robot') {
+                        syncRobotToSimulatorWorkspace(
+                          initialRobotSetup.hw,
+                          initialRobotSetup.plans,
+                          1,
+                          true
+                        );
+                      } else {
+                        clearSimulatorBlockWorkspace();
+                      }
                     }}
                     title="Reset Kode & Posisi Simulator ke Awal"
                     className={`p-1.5 rounded-xl border transition cursor-pointer ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
@@ -9844,7 +9965,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       onSensorDataChange={(newData) => setSensorData(prev => ({ ...prev, ...newData }))}
                       themeMode={themeMode}
                       simulatorMode={simulatorMode}
-                      onSimulatorModeChange={setSimulatorMode}
+                      onSimulatorModeChange={handleSimulatorModeChange}
                       robotHardwareConfig={robotHardwareConfig}
                       onRobotHardwareChange={(nextHw) => {
                         syncRobotToSimulatorWorkspace(nextHw, robotPlans, activeRobotPlanId, false);
@@ -9914,7 +10035,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           terminalLogs.map((log, i) => (
                             <div
                               key={i}
-                              className={
+                              className={`${
                                 log.type === 'error'
                                   ? 'text-rose-400'
                                   : log.type === 'success'
@@ -9922,7 +10043,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   : log.type === 'stdout'
                                   ? 'text-cyan-300'
                                   : 'text-slate-300'
-                              }
+                              } whitespace-pre-wrap font-mono`}
                             >
                               {log.text}
                             </div>

@@ -754,6 +754,19 @@ function parseStatement(line: string, variables: Record<string, string>): string
     }
   }
 
+  // 6b. Serial write
+  match = line.match(/^(?:robot\.serial_write|Serial\.write|sys\.stdout\.write)\((.*)\)$/);
+  if (match) {
+    const expr = match[1].trim();
+    return `
+      <block type="arduino_serial_write">
+        <value name="TEXT">
+          ${parseExpression(expr, variables)}
+        </value>
+      </block>
+    `;
+  }
+
   // 7. WiFi connect: robot.wifi_connect("SSID", "PASS") or wifi.connect(SSID, PASS)
   match = line.match(/^(?:robot\.wifi_connect|wifi\.connect)\(\s*(.+?)\s*,\s*(.+?)\s*\)$/);
   if (match) {
