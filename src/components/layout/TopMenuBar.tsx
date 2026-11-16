@@ -145,7 +145,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
       isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-sm text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
-      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-visible flex-shrink-0">
+      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-clip flex-shrink-0">
         
         {/* Left: Branding + Main Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink">
@@ -190,51 +190,45 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <div className="w-px h-4 bg-white/10 mx-0.5 sm:mx-1 flex-shrink-0" />
 
-            <button
-              onClick={() => handleArduinoHardwareAction('verify')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
-                isDark ? 'hover:bg-white/10 text-emerald-300' : 'bg-emerald-100/70 hover:bg-emerald-200/80 text-emerald-900 border border-emerald-200/90'
-              }`}
-              title="Verify / Compile Firmware"
-            >
-              <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-              <span className="hidden 2xl:inline">{tb('verify')}</span>
-            </button>
+            {/* Primary Action Buttons: Context-aware (Python vs Arduino/C++) */}
+            {activeFile.endsWith('.py') ? (
+              <button
+                onClick={handleRunPython}
+                className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
+                  isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold shadow-amber-400/30 border border-amber-400'
+                }`}
+                title="Jalankan Kode Python"
+              >
+                <PythonLogo className="w-3.5 h-3.5" />
+                <span className="font-bold">{tb('runPython')}</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleArduinoHardwareAction('verify')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+                    isDark ? 'hover:bg-white/10 text-emerald-300' : 'bg-emerald-100/70 hover:bg-emerald-200/80 text-emerald-900 border border-emerald-200/90'
+                  }`}
+                  title="Verify / Compile Firmware"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <span className="hidden xl:inline">{tb('verify')}</span>
+                </button>
 
-            <button
-              onClick={() => handleArduinoHardwareAction('upload')}
-              className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
-                isDark ? 'bg-purple-600/40 hover:bg-purple-600/60 text-purple-200 border border-purple-500/40' : 'bg-purple-600 hover:bg-purple-700 !text-white text-white-force shadow-purple-500/30 border border-purple-600'
-              }`}
-              title="Upload to Hardware"
-            >
-              <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`} />
-              <span className={`hidden xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
-            </button>
+                <button
+                  onClick={() => handleArduinoHardwareAction('upload')}
+                  className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
+                    isDark ? 'bg-purple-600/40 hover:bg-purple-600/60 text-purple-200 border border-purple-500/40' : 'bg-purple-600 hover:bg-purple-700 !text-white text-white-force shadow-purple-500/30 border border-purple-600'
+                  }`}
+                  title="Upload to Hardware"
+                >
+                  <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`} />
+                  <span className={`hidden xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
+                </button>
+              </>
+            )}
 
-            <button
-              onClick={handleInstallCores}
-              className={`hidden 2xl:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
-                isDark ? 'hover:bg-white/10 text-cyan-300' : 'bg-cyan-100/70 hover:bg-cyan-200/80 text-cyan-900 border border-cyan-200/90'
-              }`}
-              title="Install Arduino/ESP Core"
-            >
-              <Package className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
-              <span>{tb('installCore')}</span>
-            </button>
-
-            <button
-              onClick={handleRunPython}
-              className={`hidden 2xl:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
-                isDark ? 'hover:bg-white/10 text-yellow-300' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-950 border border-amber-200/90'
-              }`}
-              title="Jalankan Kode Python"
-            >
-              <PythonLogo className="w-3.5 h-3.5" />
-              <span>{tb('runPython')}</span>
-            </button>
-
-            {/* Dropdown "More" */}
+            {/* Dropdown "More" (3-dots button only, no text label to guarantee zero overlap) */}
             <div className="relative flex-shrink-0" ref={moreMenuRef}>
               <button
                 onClick={(e) => {
@@ -245,13 +239,12 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   });
                   setShowMoreMenu(!showMoreMenu);
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer shadow-sm ${
+                className={`flex items-center justify-center p-1.5 px-2.5 rounded-full text-xs font-bold transition cursor-pointer shadow-sm ${
                   isDark ? 'hover:bg-white/10 text-slate-300' : 'bg-sky-100/70 hover:bg-sky-200/80 text-sky-900 border border-sky-200/90'
                 }`}
-                title="Menu Lainnya"
+                title="Menu Lainnya (Board Manager, Library, Python, Cores, dll.)"
               >
                 <MoreHorizontal className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden 2xl:inline">{tb('more')}</span>
               </button>
 
               {showMoreMenu && typeof document !== 'undefined' && createPortal(
@@ -267,18 +260,18 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                     isDark ? 'bg-[#0f1118] border-white/15 text-slate-200 shadow-black/90' : 'bg-white border-slate-200 text-slate-800 shadow-slate-400/80'
                   }`}
                 >
-                  <div className="2xl:hidden border-b border-white/10 pb-1 mb-1">
-                    <button
-                      onClick={() => { setShowMoreMenu(false); handleInstallCores(); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
-                    >
-                      <Package className="w-3.5 h-3.5 text-cyan-400" /> {tb('installCore')}
-                    </button>
+                  <div className="border-b border-white/10 pb-1 mb-1">
                     <button
                       onClick={() => { setShowMoreMenu(false); handleRunPython(); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                     >
                       <PythonLogo className="w-3.5 h-3.5" /> {tb('runPython')}
+                    </button>
+                    <button
+                      onClick={() => { setShowMoreMenu(false); handleInstallCores(); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5 text-cyan-400" /> {tb('installCore')}
                     </button>
                   </div>
                   <button
