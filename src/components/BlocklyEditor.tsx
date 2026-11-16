@@ -6436,12 +6436,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   return (
     <div className={`w-full h-full relative overflow-hidden flex flex-col ${isLight ? 'bg-white' : 'bg-[#08090d]'} ${compact ? 'compact-blockly' : ''}`}>
-      {/* ✨ Premium Glassmorphism Toolbar */}
-      <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/90 border-slate-200' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-3'} z-20 shadow-sm relative`}>
+      {/* ✨ Kids-Friendly Card Header */}
+      <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/95 border-sky-100' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} z-20 shadow-sm relative`}>
         <div className="flex items-center gap-2">
-          <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} font-bold ${isLight ? 'text-indigo-600' : 'text-indigo-400'} uppercase tracking-widest flex items-center gap-1.5`}>
-            <Blocks className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-            Visual Block
+          <span className={`${compact ? 'text-[11px]' : 'text-xs'} font-extrabold ${isLight ? 'text-slate-800' : 'text-indigo-400'} uppercase tracking-wider flex items-center gap-1.5`}>
+            <span>🧩</span>
+            <span>VISUAL BLOCK</span>
           </span>
         </div>
         
@@ -6461,7 +6461,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
                   Blockly.svgResize(workspaceRef.current);
                 }
               }}
-              className={`text-[10px] border ${isLight ? 'bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100' : 'bg-sky-500/15 text-sky-400 border-sky-500/30 hover:bg-sky-500/25'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
+              className={`text-xs border ${isLight ? 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' : 'bg-sky-500/15 text-sky-400 border-sky-500/30 hover:bg-sky-500/25'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
               title="Sinkronkan susunan block saat ini ke kode editor"
             >
               Sinkron ke Kode
@@ -6472,7 +6472,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             isRunning ? (
               <button 
                 onClick={onStopSimulator}
-                className={`text-[10px] border ${isLight ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'} ${compact ? 'px-2.5 py-1' : 'px-4 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
+                className={`text-xs border ${isLight ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'} ${compact ? 'px-2.5 py-1' : 'px-3.5 py-1'} rounded-full transition flex items-center gap-1.5 font-extrabold cursor-pointer shadow-sm`}
                 title="Stop simulation"
               >
                 <Square className="w-3 h-3 fill-current" /> Stop Sim
@@ -6480,7 +6480,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             ) : (
               <button 
                 onClick={() => onRunSimulator?.(latestCodeRef.current)}
-                className={`text-[10px] border ${isLight ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'} ${compact ? 'px-2.5 py-1' : 'px-4 py-1.5'} rounded-full transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm`}
+                className={`text-xs border ${isLight ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'} ${compact ? 'px-2.5 py-1' : 'px-3.5 py-1'} rounded-full transition flex items-center gap-1.5 font-extrabold cursor-pointer shadow-sm`}
                 title="Run simulation"
               >
                 <Play className="w-3 h-3 fill-current" /> Run Sim
@@ -6497,7 +6497,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
                 workspaceRef.current.scrollCenter();
               }
             }}
-            className={`flex items-center gap-1 text-[10px] font-bold border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' : 'bg-[#151824] text-slate-200 border-slate-700/80 hover:bg-slate-800 hover:text-white'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition cursor-pointer shadow-sm`}
+            className={`flex items-center gap-1 text-xs font-bold border ${isLight ? 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' : 'bg-[#151824] text-slate-200 border-slate-700/80 hover:bg-slate-800 hover:text-white'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1'} rounded-full transition cursor-pointer shadow-sm`}
           >
             <RotateCcw className="w-3 h-3" />
             Reset View
@@ -6510,7 +6510,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
                 }
               }
             }}
-            className={`flex items-center gap-1 text-[10px] font-bold border ${isLight ? 'bg-white text-rose-500 border-slate-200 hover:bg-rose-50 hover:border-rose-200' : 'bg-[#151824] text-rose-400 border-slate-700/80 hover:bg-rose-500/15 hover:border-rose-500/40'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1.5'} rounded-full transition cursor-pointer shadow-sm`}
+            className={`flex items-center gap-1 text-xs font-bold border ${isLight ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-[#151824] text-rose-400 border-slate-700/80 hover:bg-rose-500/15 hover:border-rose-500/40'} ${compact ? 'px-2.5 py-1' : 'px-3 py-1'} rounded-full transition cursor-pointer shadow-sm`}
           >
             <Trash2 className="w-3 h-3" />
             Clear

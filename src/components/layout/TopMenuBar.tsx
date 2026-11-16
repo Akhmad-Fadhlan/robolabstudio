@@ -142,7 +142,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
   return (
     <div className={`flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
-      isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-800'
+      isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-sky-100 shadow-sm text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
       <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-visible flex-shrink-0">
@@ -165,8 +165,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             <button
               onClick={handleNativeOpenFile}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-slate-200' : 'hover:bg-slate-100 text-slate-700'
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+                isDark ? 'hover:bg-white/10 text-slate-200' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-900 border border-amber-200/90'
               }`}
               title="Buka File (Ctrl+O)"
             >
@@ -176,8 +176,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={handleSaveFile}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer relative flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-slate-200' : 'hover:bg-slate-100 text-slate-700'
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer relative flex-shrink-0 shadow-sm ${
+                isDark ? 'hover:bg-white/10 text-slate-200' : 'bg-sky-100/70 hover:bg-sky-200/80 text-sky-900 border border-sky-200/90'
               }`}
               title="Simpan File (Ctrl+S)"
             >
@@ -192,8 +192,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={() => handleArduinoHardwareAction('verify')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-emerald-300' : 'hover:bg-slate-100 text-emerald-600'
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+                isDark ? 'hover:bg-white/10 text-emerald-300' : 'bg-emerald-100/70 hover:bg-emerald-200/80 text-emerald-900 border border-emerald-200/90'
               }`}
               title="Verify / Compile Firmware"
             >
@@ -203,8 +203,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={() => handleArduinoHardwareAction('upload')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-purple-300 bg-purple-500/10 border border-purple-500/20' : 'hover:bg-slate-100 text-purple-600 bg-purple-50 border border-purple-200'
+              className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
+                isDark ? 'hover:bg-white/10 text-purple-300 bg-purple-500/10 border border-purple-500/20' : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
               }`}
               title="Upload to Hardware"
             >
@@ -214,8 +214,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={handleInstallCores}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-cyan-300' : 'hover:bg-slate-100 text-cyan-600'
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+                isDark ? 'hover:bg-white/10 text-cyan-300' : 'bg-cyan-100/70 hover:bg-cyan-200/80 text-cyan-900 border border-cyan-200/90'
               }`}
               title="Install Arduino/ESP Core"
             >
@@ -225,8 +225,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={handleRunPython}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex-shrink-0 ${
-                isDark ? 'hover:bg-white/10 text-yellow-300' : 'hover:bg-slate-100 text-yellow-600'
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+                isDark ? 'hover:bg-white/10 text-yellow-300' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-950 border border-amber-200/90'
               }`}
               title="Jalankan Kode Python"
             >
@@ -245,8 +245,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   });
                   setShowMoreMenu(!showMoreMenu);
                 }}
-                className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-slate-100 text-slate-700'
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer shadow-sm ${
+                  isDark ? 'hover:bg-white/10 text-slate-300' : 'bg-sky-100/70 hover:bg-sky-200/80 text-sky-900 border border-sky-200/90'
                 }`}
                 title="Menu Lainnya"
               >
@@ -386,8 +386,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           )}
 
           {/* Board Selector */}
-          <div className={`flex items-center gap-1 rounded-lg px-1.5 sm:px-2 py-1 border flex-shrink-0 ${
-            isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'
+          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
+            isDark ? 'bg-white/5 border-white/10' : 'bg-sky-100/60 hover:bg-sky-100/90 border-sky-200/80 text-sky-950'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-purple-400 hidden xl:inline">{tb('boardLabel')}</span>
             <select 
@@ -408,8 +408,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           </div>
 
           {/* Port Selector */}
-          <div className={`flex items-center gap-1 rounded-lg px-1.5 sm:px-2 py-1 border flex-shrink-0 ${
-            isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'
+          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
+            isDark ? 'bg-white/5 border-white/10' : 'bg-sky-100/60 hover:bg-sky-100/90 border-sky-200/80 text-sky-950'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden xl:inline">{tb('portLabel')}</span>
             <select 
@@ -457,22 +457,26 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
           {/* Connected Indicator */}
           {isSerialConnected && connectedPort === port && port !== 'none' ? (
-            <div className="flex items-center gap-1.5 rounded-full px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 flex-shrink-0" title={`Connected to ${connectedPort}`}>
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse flex-shrink-0" />
-              <span className="text-[10px] font-bold text-emerald-400 uppercase hidden xl:inline">{tb('connected')}</span>
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border flex-shrink-0 shadow-sm font-extrabold ${
+              isDark ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-200 text-emerald-700'
+            }`} title={`Connected to ${connectedPort}`}>
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse flex-shrink-0" />
+              <span className="text-[11px] uppercase tracking-wide">{tb('connected')}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 rounded-full px-2 py-0.5 bg-rose-500/10 border border-rose-500/30 flex-shrink-0" title="Disconnected">
-              <span className="w-1.5 h-1.5 bg-rose-400 rounded-full flex-shrink-0" />
-              <span className="text-[10px] font-bold text-rose-400 uppercase hidden xl:inline">{tb('disconnected')}</span>
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border flex-shrink-0 shadow-sm font-extrabold ${
+              isDark ? 'bg-rose-500/15 border-rose-500/30 text-rose-400' : 'bg-rose-100 border-rose-200 text-rose-700'
+            }`} title="Disconnected">
+              <span className="w-2 h-2 bg-rose-500 rounded-full flex-shrink-0" />
+              <span className="text-[11px] uppercase tracking-wide">{tb('disconnected')}</span>
             </div>
           )}
 
           {/* Command Palette / Search Button */}
           <button
             onClick={onOpenCommandPalette}
-            className={`p-1.5 px-2 rounded-lg border transition cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
-              isDark ? 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25' : 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'
+            className={`px-2.5 py-1 rounded-full border transition cursor-pointer flex-shrink-0 flex items-center gap-1.5 shadow-sm ${
+              isDark ? 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25' : 'bg-sky-100/70 border-sky-200/90 text-sky-900 hover:bg-sky-200/80'
             }`}
             title="Pencarian & Command Palette (Ctrl + Shift + P)"
           >
@@ -491,10 +495,10 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 });
                 setShowLangMenu(!showLangMenu);
               }}
-              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition cursor-pointer flex-shrink-0 ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark
                   ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                  : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                  : 'bg-sky-100/70 border-sky-200/90 text-sky-900 hover:bg-sky-200/80 font-bold'
               }`}
               title={tb('changeLanguage')}
             >

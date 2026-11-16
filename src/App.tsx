@@ -15,6 +15,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { TerminalPanel } from './components/layout/TerminalPanel';
 import { PythonLogo } from './components/icons/PythonLogo';
+import { CloudFooter, TwinklingStars, MascotRobot, RocketBanner } from './components/decorations/KidsThemeDecorations';
 import type { BlocklyEditor as BlocklyEditorType } from './components/BlocklyEditor';
 import type { CodeEditor as CodeEditorType } from './components/CodeEditor';
 import type { Simulator as SimulatorType } from './components/Simulator';
@@ -8684,6 +8685,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           showExplorer={showExplorer}
           setShowExplorer={setShowExplorer}
           language={language}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          onOpenHelp={() => setShowHelpModal(true)}
+          themeMode={themeMode}
         />
 
         {/* B. MAIN INTERFACE TABS CONTROLLER */}
@@ -9961,146 +9965,117 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
           {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
-            <div className={`absolute inset-0 p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
-              {/* Simulator Dedicated Toolbar (Single Compact Kids-Friendly Bar) */}
-              <div className={`flex flex-wrap items-center justify-between gap-2 pb-2 select-none border-b mb-2 flex-shrink-0 ${themeMode === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
-                <div className="flex items-center gap-2">
-                  {/* PROMINENT SIMULATOR MODE SWITCHER: Robot 3D vs Rangkaian */}
-                  <div className={`flex items-center p-1 rounded-xl border shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-300' : 'bg-slate-900/95 border-slate-700/80'}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleSimulatorModeChange('robot')}
-                      className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        simulatorMode === 'robot'
-                          ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/30'
-                          : themeMode === 'light'
-                          ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <span>🤖 Arena Robot 3D</span>
-                      <span className="px-1.5 py-0.5 text-[9px] rounded bg-black/25 text-white font-bold hidden xl:inline">
-                        Line Follower • PID 1-5
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSimulatorModeChange('circuit')}
-                      className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        simulatorMode === 'circuit'
-                          ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30'
-                          : themeMode === 'light'
-                          ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <span>🔌 Rangkaian Sirkuit</span>
-                    </button>
-                  </div>
+            <div className={`absolute inset-0 p-2 sm:p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-transparent text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
+              {/* Floating Room Tabs Sub-header Bar matching Screenshot */}
+              <div className={`flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border shadow-sm select-none mb-3 flex-shrink-0 ${
+                themeMode === 'light' 
+                  ? 'bg-white/95 backdrop-blur-md border-sky-100/90 text-slate-800 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' 
+                  : 'bg-[#0f111a]/95 border-white/10 text-white'
+              }`}>
+                {/* Left: Back button + Room Tabs */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-0.5 scrollbar-none min-w-0 flex-shrink">
+                  {/* Back arrow */}
+                  <button
+                    onClick={() => setCurrentTab('home')}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition cursor-pointer flex-shrink-0 shadow-sm ${
+                      themeMode === 'light'
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        : 'bg-white/10 hover:bg-white/20 text-white'
+                    }`}
+                    title="Kembali ke Beranda"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
 
-                  {/* Layout Mode Switcher */}
-                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
-                    <button
-                      onClick={() => setSimViewMode('blockly')}
-                      title="Tampilkan Visual Blockly + Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'blockly'
-                          ? 'bg-purple-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Blocks className="w-3.5 h-3.5" /> 🧩 Blok + Sim
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('split')}
-                      title="Tampilkan Blok + Kode + Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'split'
-                          ? 'bg-indigo-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Code className="w-3.5 h-3.5" /> Split
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('code')}
-                      title="Tampilkan Code Editor + Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'code'
-                          ? 'bg-sky-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5" /> Kode + Sim
-                    </button>
-                    <button
-                      onClick={() => setSimViewMode('circuit')}
-                      title="Layar Penuh Arena / Rangkaian Simulator"
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                        simViewMode === 'circuit'
-                          ? 'bg-emerald-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Monitor className="w-3.5 h-3.5" /> Full Arena
-                    </button>
-                  </div>
+                  {/* Room Tab 1: Acen Robot 3D */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSimulatorModeChange('robot');
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                      simulatorMode === 'robot' && activeRobotPlanId !== 1
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                        : themeMode === 'light'
+                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>Acen Robot 3D</span>
+                  </button>
+
+                  {/* Room Tab 2: LineFollower _ PID-S */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSimulatorModeChange('robot');
+                      setActiveRobotPlanId(1);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                      simulatorMode === 'robot' && activeRobotPlanId === 1
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                        : themeMode === 'light'
+                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>LineFollower _ PID-S</span>
+                  </button>
+
+                  {/* Room Tab 3: Rangkaian Shrill ⭐ */}
+                  <button
+                    type="button"
+                    onClick={() => handleSimulatorModeChange('circuit')}
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
+                      simulatorMode === 'circuit'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                        : themeMode === 'light'
+                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>Rangkaian Sirkuit</span>
+                    <span className="text-yellow-300 text-xs">⭐</span>
+                  </button>
+
+                  {/* Room Tab 4: Blynk - Sir */}
+                  <button
+                    type="button"
+                    onClick={() => handleSimulatorModeChange('circuit')}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                      themeMode === 'light'
+                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>Blynk - Sir</span>
+                  </button>
+
+                  {/* Purple Badge: + 598 */}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200 shadow-sm flex-shrink-0">
+                    + 598
+                  </span>
+
+                  {/* Add Room button */}
+                  <button
+                    onClick={handleCreateFile}
+                    className="px-2.5 py-1 rounded-full text-xs font-bold text-blue-600 hover:bg-blue-50 border border-dashed border-blue-300 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 flex items-center gap-1 shadow-sm"
+                    title="Tambah Ruang / File Proyek Baru"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Room</span>
+                  </button>
                 </div>
 
-                {/* Right Controls: Language File, Board, Run/Stop, Reset */}
-                <div className="flex items-center gap-2">
-                  {/* Simulator File / Language Switcher */}
-                  <div className={`flex items-center p-0.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300' : 'bg-slate-900/90 border-slate-800'}`}>
-                    <button
-                      onClick={() => setSimActiveFile('firmware/main.ino')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                        simActiveFile === 'firmware/main.ino'
-                          ? 'bg-cyan-600 text-white shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      ⚡ C++ (.ino)
-                    </button>
-                    <button
-                      onClick={() => setSimActiveFile('python/main.py')}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                        simActiveFile === 'python/main.py'
-                          ? 'bg-amber-500 text-slate-950 shadow'
-                          : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <PythonLogo className="w-3.5 h-3.5" />
-                      <span>Python (.py)</span>
-                    </button>
-                  </div>
-
-                  {/* Simulator Virtual Board Selector */}
-                  <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs ${themeMode === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900/90 border-slate-700/80 text-slate-200'}`}>
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                    <select
-                      value={simBoard}
-                      onChange={(e) => setSimBoard(e.target.value)}
-                      className="bg-transparent text-[11px] font-bold focus:outline-none cursor-pointer"
-                    >
-                      <option value="ESP32 DevKit V1" className="bg-slate-900 text-white">ESP32 DevKit V1</option>
-                      <option value="ESP32-CAM" className="bg-slate-900 text-white">ESP32-CAM</option>
-                      <option value="ESP8266 NodeMCU" className="bg-slate-900 text-white">ESP8266 NodeMCU</option>
-                      <option value="Arduino Uno" className="bg-slate-900 text-white">Arduino Uno</option>
-                      <option value="Arduino Nano" className="bg-slate-900 text-white">Arduino Nano</option>
-                      <option value="Arduino Mega" className="bg-slate-900 text-white">Arduino Mega</option>
-                      <option value="Raspberry Pi Pico" className="bg-slate-900 text-white">Raspberry Pi Pico</option>
-                      <option value="STM32 BluePill" className="bg-slate-900 text-white">STM32 BluePill</option>
-                      <option value="BBC micro:bit" className="bg-slate-900 text-white">BBC micro:bit</option>
-                    </select>
-                  </div>
-
-                  {/* Run / Stop Simulator Button */}
+                {/* Right: Run, Language, Board, Robot Action, Log */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                  {/* Run / Stop Simulation Button */}
                   {isRunning ? (
                     <button
                       onClick={handleStopCode}
-                      className="px-4 py-1.5 text-xs font-extrabold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      className="px-3 py-1 text-xs font-extrabold rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/25 flex items-center gap-1 transition cursor-pointer select-none"
                     >
-                      <Square className="w-3.5 h-3.5 fill-current" /> Stop Robot
+                      <Square className="w-3 h-3 fill-current" /> Stop
                     </button>
                   ) : (
                     <button
@@ -10112,9 +10087,68 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           handleRunCode(codeToRun);
                         }
                       }}
-                      className="px-4 py-1.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      className="px-3 py-1 text-xs font-extrabold rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20 flex items-center gap-1 transition cursor-pointer select-none"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" /> Jalankan Robot!
+                      <Play className="w-3 h-3 fill-current" /> Run
+                    </button>
+                  )}
+
+                  {/* Language / File dropdown */}
+                  <div className={`flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm ${
+                    themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
+                  }`}>
+                    <select
+                      value={simActiveFile}
+                      onChange={(e) => setSimActiveFile(e.target.value)}
+                      className="bg-transparent outline-none cursor-pointer text-xs font-bold"
+                    >
+                      <option value="python/main.py" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Python (py)</option>
+                      <option value="firmware/main.ino" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>C++ (ino)</option>
+                    </select>
+                  </div>
+
+                  {/* Simulator Virtual Board dropdown */}
+                  <div className={`hidden md:flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm ${
+                    themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
+                  }`}>
+                    <select
+                      value={simBoard}
+                      onChange={(e) => setSimBoard(e.target.value)}
+                      className="bg-transparent outline-none cursor-pointer text-xs font-bold"
+                    >
+                      <option value="ESP32 DevKit V1" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>ESP32 DevKit V1</option>
+                      <option value="ESP32-CAM" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>ESP32-CAM</option>
+                      <option value="ESP8266 NodeMCU" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>ESP8266 NodeMCU</option>
+                      <option value="Arduino Uno" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Arduino Uno</option>
+                      <option value="Arduino Nano" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Arduino Nano</option>
+                      <option value="Arduino Mega" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Arduino Mega</option>
+                      <option value="Raspberry Pi Pico" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Raspberry Pi Pico</option>
+                      <option value="STM32 BluePill" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>STM32 BluePill</option>
+                      <option value="BBC micro:bit" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>BBC micro:bit</option>
+                    </select>
+                  </div>
+
+                  {/* Jalankan Robot action button */}
+                  {isRunning ? (
+                    <button
+                      onClick={handleStopCode}
+                      className="px-3.5 py-1 text-xs font-extrabold rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/25 flex items-center gap-1.5 transition cursor-pointer select-none"
+                    >
+                      <Square className="w-3 h-3 fill-current" /> Stop Robot
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const codeToRun = simFiles[simActiveFile] || '';
+                        if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
+                          handleRunPython(codeToRun);
+                        } else {
+                          handleRunCode(codeToRun);
+                        }
+                      }}
+                      className="px-3.5 py-1 text-xs font-extrabold rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition cursor-pointer select-none"
+                    >
+                      <span>🤖 Jalankan Robot</span>
                     </button>
                   )}
 
@@ -10135,7 +10169,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       }
                     }}
                     title="Reset Kode & Posisi Simulator ke Awal"
-                    className={`p-1.5 rounded-xl border transition cursor-pointer ${themeMode === 'light' ? 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
+                    className={`p-1 rounded-full border transition cursor-pointer shadow-sm ${themeMode === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'}`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
@@ -10143,10 +10177,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   {/* Toggle Virtual Serial Output */}
                   <button
                     onClick={() => setSimShowConsole(prev => !prev)}
-                    className={`px-2.5 py-1.5 text-[10px] font-bold rounded-xl border transition cursor-pointer select-none flex items-center gap-1 ${
+                    className={`px-3 py-1 text-xs font-bold rounded-full border transition cursor-pointer select-none flex items-center gap-1 shadow-sm ${
                       simShowConsole
-                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40'
-                        : themeMode === 'light' ? 'bg-white text-slate-600 border-slate-300' : 'bg-slate-900 text-slate-400 border-slate-700'
+                        ? 'bg-sky-500 text-white border-sky-500 shadow-sky-500/20'
+                        : themeMode === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
                     }`}
                   >
                     <TerminalIcon className="w-3 h-3" /> Log
@@ -10162,7 +10196,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
-                        className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-2xl border border-indigo-500/20"
+                        className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-3xl border border-sky-100 shadow-[0_10px_30px_rgba(59,130,246,0.08)]"
                         style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
                       >
                         <BlocklyEditor
@@ -10340,7 +10374,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                 {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
                 <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
-                  <div className={`flex-1 min-w-0 min-h-0 relative rounded-2xl overflow-hidden border shadow-2xl ${themeMode === 'light' ? 'border-slate-200/90 bg-slate-50' : 'border-slate-800 bg-slate-950'}`}>
+                  <div className={`flex-1 min-w-0 min-h-0 relative rounded-3xl overflow-hidden border shadow-[0_10px_30px_rgba(59,130,246,0.08)] ${themeMode === 'light' ? 'border-sky-100/90 bg-white/95 backdrop-blur-md' : 'border-slate-800 bg-slate-950'}`}>
                     <Simulator
                       isExpanded={true}
                       isRunning={isRunning}
@@ -12137,6 +12171,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
           </div>
         </div>
+      )}
+
+      {/* Kids Friendly Theme Visual Decorations */}
+      {themeMode === 'light' && (
+        <>
+          <CloudFooter />
+          <TwinklingStars />
+          <MascotRobot />
+          <RocketBanner />
+        </>
       )}
 
     </div>

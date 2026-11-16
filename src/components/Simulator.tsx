@@ -3844,18 +3844,18 @@ export const Simulator: React.FC<SimulatorProps> = ({
         
         {/* Title */}
         <div className="flex items-center justify-between px-1">
-          <span className={`text-[11px] font-bold flex items-center gap-2 uppercase tracking-widest ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-            <Cpu className="w-4 h-4 text-indigo-400" />
-            Simulator
+          <span className={`text-xs font-extrabold flex items-center gap-2 uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
+            <span>⚙️</span>
+            <span>SIMULATOR</span>
           </span>
-          <span className={`text-[9px] flex items-center gap-1.5 font-semibold px-2 py-1 rounded-md border ${isLight ? 'text-slate-500 bg-slate-200/60 border-slate-300/60' : 'text-slate-400 bg-[#131724] border-slate-800'}`}>
+          <span className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1 rounded-full border shadow-sm ${isLight ? 'text-sky-700 bg-sky-50 border-sky-200' : 'text-slate-400 bg-[#131724] border-slate-800'}`}>
             <Move className="w-3 h-3 text-sky-400" /> DRAG TO MOVE
           </span>
         </div>
 
         {/* WiFi Simulator Panel */}
         {board !== 'Arduino Uno R3' && board !== 'BBC micro:bit' && (
-          <div className={`flex flex-col gap-2.5 p-3.5 rounded-xl border shadow-sm transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
+          <div className={`flex flex-col gap-2.5 p-3.5 rounded-2xl border shadow-sm transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
             <div className="flex items-center justify-between">
               <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 <Wifi className={`w-3.5 h-3.5 ${isWifiConnected ? 'text-emerald-500' : 'text-slate-400'}`} />
@@ -3929,7 +3929,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
         )}
 
         {/* Wiring & Components Panel */}
-        <div className={`p-3.5 rounded-xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
+        <div className={`p-3.5 rounded-2xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
           <div className="flex items-center justify-between">
              <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                <Edit3 className="w-3.5 h-3.5 text-indigo-400" /> Circuit Builder
@@ -4050,7 +4050,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
         
         {/* Wires List Management */}
         {wires.length > 0 && (
-          <div className={`p-3 rounded-xl border shadow-sm flex flex-col gap-2 transition-colors ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800/90'}`}>
+          <div className={`p-3.5 rounded-2xl border shadow-sm flex flex-col gap-2 transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
              <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center justify-between ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                Connections ({wires.length})
                <span className="text-[8px] opacity-75 normal-case font-medium">Klik warna untuk ubah</span>

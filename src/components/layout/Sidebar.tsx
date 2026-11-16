@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Home, Layers, BookOpen, Download, Award, Monitor, Zap, FolderOpen } from 'lucide-react';
+import React from 'react';
+import { Home, BookOpen, Download, Monitor, FolderOpen, PlayCircle, Settings, HelpCircle } from 'lucide-react';
 import type { LangCode } from '../../i18n';
 import { t } from '../../i18n';
 
@@ -12,60 +12,86 @@ interface SidebarProps {
   showExplorer?: boolean;
   setShowExplorer?: React.Dispatch<React.SetStateAction<boolean>>;
   language?: LangCode;
+  onOpenSettings?: () => void;
+  onOpenHelp?: () => void;
+  themeMode?: 'light' | 'dark';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   setCurrentTab,
-  workspaceMode,
-  setWorkspaceMode,
-  level,
+  workspaceMode: _workspaceMode,
+  setWorkspaceMode: _setWorkspaceMode,
+  level: _level,
   showExplorer = true,
   setShowExplorer,
   language = 'id',
+  onOpenSettings,
+  onOpenHelp,
+  themeMode = 'light',
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const sb = (key: string) => t(language, 'sidebar', key, { level: String(level) });
+  const isDark = themeMode === 'dark';
+  const sb = (key: string) => t(language, 'sidebar', key);
 
   return (
-    <div 
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`glass-sidebar flex flex-col justify-between py-4 px-2.5 select-none flex-shrink-0 rounded-2xl border border-white/5 shadow-2xl transition-all duration-300 ease-in-out z-40 ${
-        isHovered ? 'w-56' : 'w-16'
+    <aside 
+      aria-label="Sidebar Navigation"
+      className={`flex flex-col justify-between py-3 px-1.5 sm:px-2 select-none flex-shrink-0 transition-all duration-300 z-40 w-16 sm:w-20 ${
+        isDark 
+          ? 'bg-[#0b0d14]/95 border border-white/10 rounded-2xl shadow-2xl text-slate-300' 
+          : 'bg-white/95 backdrop-blur-md border border-sky-100 rounded-3xl shadow-[0_10px_30px_rgba(59,130,246,0.10)] text-slate-700'
       }`}
     >
-      <div className="flex flex-col gap-3.5 w-full">
-        {/* Top Logo / Brand mark when expanded */}
-        <div className="flex items-center gap-3 px-2 py-1 mb-1">
-          <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0">
-            <Zap className="w-4 h-4 fill-cyan-400/20" />
+      {/* ── Top Navigation Links ── */}
+      <div className="flex flex-col items-center gap-1.5 w-full">
+        {/* Brand Icon Mini */}
+        <div className="mb-1">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-sky-400 to-blue-600 p-0.5 shadow-md shadow-sky-500/20 flex items-center justify-center">
+            <img src="./icon-only.png" alt="RoboLab" className="w-5 h-5 object-contain" />
           </div>
-          {isHovered && (
-            <span className="font-extrabold text-sm tracking-wide bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent whitespace-nowrap overflow-hidden">
-              ROBOLAB
-            </span>
-          )}
         </div>
 
+        {/* 1. Home */}
         <button 
           onClick={() => setCurrentTab('home')}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${
             currentTab === 'home' 
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 scale-105' 
+              : isDark
+                ? 'hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'hover:bg-sky-50 text-slate-600 hover:text-sky-600'
           }`}
           title={sb('dashboardHome')}
         >
-          <Home className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('dashboardHome')}
-            </span>
-          )}
+          <div className={`p-1 rounded-xl transition-transform group-hover:scale-110 ${currentTab === 'home' ? 'text-white' : ''}`}>
+            <Home className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight leading-tight">
+            Home
+          </span>
         </button>
 
+        {/* 2. Library / Packages */}
+        <button 
+          onClick={() => setCurrentTab('packages')}
+          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${
+            currentTab === 'packages' 
+              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 scale-105' 
+              : isDark
+                ? 'hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'hover:bg-sky-50 text-slate-600 hover:text-sky-600'
+          }`}
+          title={sb('packageManager')}
+        >
+          <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight leading-tight">
+            Library
+          </span>
+        </button>
+
+        {/* 3. Project / Explorer */}
         <button 
           onClick={() => {
             if (currentTab !== 'ide') {
@@ -75,118 +101,123 @@ export const Sidebar: React.FC<SidebarProps> = ({
               setShowExplorer(prev => !prev);
             }
           }}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${
             currentTab === 'ide' && showExplorer
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 scale-105' 
+              : isDark
+                ? 'hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'hover:bg-sky-50 text-slate-600 hover:text-sky-600'
           }`}
           title={sb('fileExplorer')}
         >
-          <FolderOpen className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('fileExplorer')}
-            </span>
-          )}
+          <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
+            <FolderOpen className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight leading-tight">
+            Project
+          </span>
         </button>
 
-        <button 
-          onClick={() => { setCurrentTab('ide'); setWorkspaceMode('split'); }}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-            currentTab === 'ide' && workspaceMode === 'split'
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
-          }`}
-          title={sb('workspace')}
-        >
-          <Layers className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('workspace')}
-            </span>
-          )}
-        </button>
-
-        {/* Separator */}
-        <div className="w-full px-2">
-          <div className="w-full h-px bg-white/10 rounded-full" />
-        </div>
-
+        {/* 4. Simulator */}
         <button 
           onClick={() => setCurrentTab('simulator')}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${
             currentTab === 'simulator'
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 scale-105' 
+              : isDark
+                ? 'hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'hover:bg-sky-50 text-slate-600 hover:text-sky-600'
           }`}
           title={sb('hardwareSimulator')}
         >
-          <Monitor className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('hardwareSimulator')}
-            </span>
-          )}
+          <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
+            <Monitor className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight leading-tight">
+            Arena
+          </span>
         </button>
 
+        {/* 5. Tutorial / Learning */}
         <button 
           onClick={() => setCurrentTab('learning')}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-            currentTab === 'learning'
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${
+            currentTab === 'learning' 
+              ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 scale-105' 
+              : isDark
+                ? 'hover:bg-white/5 text-slate-400 hover:text-white'
+                : 'hover:bg-sky-50 text-slate-600 hover:text-sky-600'
           }`}
           title={sb('learningPortal')}
         >
-          <BookOpen className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('learningPortal')}
-            </span>
-          )}
-        </button>
-
-        <button 
-          onClick={() => setCurrentTab('packages')}
-          className={`flex items-center gap-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-            currentTab === 'packages'
-              ? 'nav-icon-active bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10' 
-              : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
-          }`}
-          title={sb('packageManager')}
-        >
-          <Download className="w-5 h-5 flex-shrink-0" />
-          {isHovered && (
-            <span className="text-xs font-semibold whitespace-nowrap overflow-hidden">
-              {sb('packageManager')}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Gamification STEM badge */}
-      <div 
-        className={`rounded-xl p-2.5 flex items-center transition-all ${
-          isHovered ? 'w-full gap-3' : 'w-11 justify-center self-center'
-        }`} 
-        style={{
-          background: 'rgba(245,158,11,0.08)', 
-          border: '1px solid rgba(245,158,11,0.2)', 
-          boxShadow: '0 0 16px rgba(245,158,11,0.1)'
-        }}
-      >
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-yellow-400 flex-shrink-0" style={{background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.25)'}}>
-          <Award className="w-4 h-4" />
-        </div>
-        {isHovered ? (
-          <div className="flex flex-col whitespace-nowrap overflow-hidden">
-            <span className="text-[10px] text-slate-400 font-semibold leading-tight">{sb('robomakerLevel')}</span>
-            <span className="text-xs font-bold text-yellow-400 font-mono leading-tight">{sb('levelMaster')}</span>
+          <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
+            <PlayCircle className="w-5 h-5" />
           </div>
-        ) : (
-          <span className="hidden text-xs font-bold text-yellow-400 font-mono">{level}</span>
-        )}
+          <span className="text-[10px] font-bold mt-0.5 tracking-tight leading-tight">
+            Tutorial
+          </span>
+        </button>
+
+        {/* Separator */}
+        <div className={`w-8 h-px my-1 ${isDark ? 'bg-white/10' : 'bg-sky-100'}`} />
+
+        {/* 6. Settings */}
+        <button 
+          onClick={() => {
+            if (onOpenSettings) onOpenSettings();
+            else setCurrentTab('settings');
+          }}
+          className={`w-full flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all cursor-pointer group ${
+            isDark ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-sky-50 text-slate-500 hover:text-slate-800'
+          }`}
+          title={sb('settings')}
+        >
+          <div className="p-1 rounded-xl transition-transform group-hover:rotate-45">
+            <Settings className="w-4 h-4" />
+          </div>
+          <span className="text-[9.5px] font-semibold mt-0.5 leading-tight">
+            Setting
+          </span>
+        </button>
+
+        {/* 7. Help */}
+        <button 
+          onClick={() => {
+            if (onOpenHelp) onOpenHelp();
+          }}
+          className={`w-full flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all cursor-pointer group ${
+            isDark ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-sky-50 text-slate-500 hover:text-slate-800'
+          }`}
+          title={sb('documentation')}
+        >
+          <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
+            <HelpCircle className="w-4 h-4" />
+          </div>
+          <span className="text-[9.5px] font-semibold mt-0.5 leading-tight">
+            Help
+          </span>
+        </button>
       </div>
-    </div>
+
+      {/* ── Bottom Mascot Avatar ── */}
+      <div className="w-full flex flex-col items-center justify-center pt-2">
+        <div 
+          className="w-10 h-10 rounded-2xl bg-gradient-to-b from-sky-100 to-sky-200 border border-sky-300/80 shadow-sm flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
+          title="RoboBuddy - Sahabat Belajar Robotika"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="4" r="1.5" fill="#f59e0b" />
+            <line x1="12" y1="5.5" x2="12" y2="7.5" stroke="#0284c7" strokeWidth="1.5" strokeLinecap="round" />
+            <rect x="5" y="7.5" width="14" height="11" rx="3" fill="#ffffff" stroke="#0284c7" strokeWidth="1.5" />
+            <rect x="7.5" y="9.5" width="9" height="5" rx="1.5" fill="#0f172a" />
+            <circle cx="9.5" cy="12" r="1" fill="#38bdf8" />
+            <circle cx="14.5" cy="12" r="1" fill="#38bdf8" />
+            <path d="M10 16 Q12 17.5 14 16" stroke="#0284c7" strokeWidth="1" strokeLinecap="round" />
+            <rect x="8" y="19" width="2.5" height="2" rx="0.5" fill="#0284c7" />
+            <rect x="13.5" y="19" width="2.5" height="2" rx="0.5" fill="#0284c7" />
+          </svg>
+        </div>
+      </div>
+    </aside>
   );
 };

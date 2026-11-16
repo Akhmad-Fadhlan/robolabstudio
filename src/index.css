@@ -75,58 +75,55 @@
     --panel-bg-terminal: rgba(6, 8, 12, 0.65);
   }
 
-  /* LIGHT MODE DEFINITION */
+  /* LIGHT MODE DEFINITION - Cheerful Kids-Friendly Theme */
   .theme-light {
     color-scheme: light;
-    --body-bg: #f8fafc;
+    --body-bg: #93c5fd;
     --body-color: #0f172a;
-    --body-bg-image:
-      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--accent-rgb), 0.04) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.03) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(var(--accent-rgb), 0.02) 0%, transparent 70%);
+    --body-bg-image: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 35%, #93c5fd 75%, #60a5fa 100%);
 
-    /* Premium Light Mode Glassmorphism - crisp, high contrast, soft shadows */
-    --glass-bg: rgba(255, 255, 255, 0.85);
-    --glass-bg-hover: rgba(255, 255, 255, 0.95);
-    --glass-border: rgba(226, 232, 240, 0.9); /* slate-200 */
-    --glass-border-bright: rgba(203, 213, 225, 0.9); /* slate-300 */
-    --glass-shadow: 0 10px 40px -10px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
-    --glass-shadow-lg: 0 20px 60px -15px rgba(15, 23, 42, 0.12), 0 10px 24px -10px rgba(15, 23, 42, 0.06);
-    --glass-panel-lg-bg: rgba(255, 255, 255, 0.92);
+    /* Cheerful Kids-Friendly Light Mode Glassmorphism */
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-bg-hover: rgba(255, 255, 255, 1);
+    --glass-border: rgba(186, 230, 253, 0.9); /* sky-200 */
+    --glass-border-bright: rgba(125, 211, 252, 0.9); /* sky-300 */
+    --glass-shadow: 0 10px 30px -5px rgba(59, 130, 246, 0.10), 0 4px 6px -4px rgba(59, 130, 246, 0.05);
+    --glass-shadow-lg: 0 20px 40px -10px rgba(59, 130, 246, 0.15), 0 8px 16px -6px rgba(59, 130, 246, 0.08);
+    --glass-panel-lg-bg: rgba(255, 255, 255, 0.96);
 
-    /* Sidebar, header and panel bases for light mode */
-    --sidebar-bg: rgba(255, 255, 255, 0.85);
-    --sidebar-border: rgba(226, 232, 240, 0.8);
-    --header-bg: rgba(255, 255, 255, 0.85);
-    --header-border: rgba(226, 232, 240, 0.8);
+    /* Sidebar, header and panel bases for kids light mode */
+    --sidebar-bg: rgba(255, 255, 255, 0.95);
+    --sidebar-border: rgba(186, 230, 253, 0.85);
+    --header-bg: rgba(255, 255, 255, 0.95);
+    --header-border: rgba(186, 230, 253, 0.85);
 
-    /* Glow accent colors for light mode (very subtle) */
-    --glow-blue: rgba(59, 130, 246, 0.08);
-    --glow-cyan: rgba(6, 182, 212, 0.08);
-    --glow-purple: rgba(139, 92, 246, 0.08);
-    --glow-green: rgba(16, 185, 129, 0.08);
-    --glow-amber: rgba(245, 158, 11, 0.08);
+    /* Glow accent colors for light mode */
+    --glow-blue: rgba(59, 130, 246, 0.12);
+    --glow-cyan: rgba(6, 182, 212, 0.12);
+    --glow-purple: rgba(139, 92, 246, 0.12);
+    --glow-green: rgba(16, 185, 129, 0.12);
+    --glow-amber: rgba(245, 158, 11, 0.12);
 
-    /* Panel accent configurations for light mode */
-    --panel-border-blockly: rgba(99, 102, 241, 0.15);
-    --panel-shadow-blockly: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
-    --panel-bg-blockly: rgba(255, 255, 255, 0.9);
+    /* Panel accent configurations for kids light mode */
+    --panel-border-blockly: rgba(147, 197, 253, 0.7);
+    --panel-shadow-blockly: 0 10px 30px -5px rgba(59, 130, 246, 0.08);
+    --panel-bg-blockly: rgba(255, 255, 255, 0.95);
 
-    --panel-border-code: rgba(6, 182, 212, 0.15);
-    --panel-shadow-code: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
-    --panel-bg-code: rgba(255, 255, 255, 0.9);
+    --panel-border-code: rgba(147, 197, 253, 0.7);
+    --panel-shadow-code: 0 10px 30px -5px rgba(59, 130, 246, 0.08);
+    --panel-bg-code: rgba(255, 255, 255, 0.95);
 
-    --panel-border-simulator: rgba(16, 185, 129, 0.15);
-    --panel-shadow-simulator: 0 10px 40px -10px rgba(15, 23, 42, 0.06);
-    --panel-bg-simulator: rgba(255, 255, 255, 0.9);
+    --panel-border-simulator: rgba(147, 197, 253, 0.7);
+    --panel-shadow-simulator: 0 10px 30px -5px rgba(59, 130, 246, 0.08);
+    --panel-bg-simulator: rgba(255, 255, 255, 0.95);
 
-    --panel-border-explorer: rgba(226, 232, 240, 0.9);
-    --panel-shadow-explorer: 0 4px 12px rgba(15, 23, 42, 0.04);
-    --panel-bg-explorer: rgba(255, 255, 255, 0.85);
+    --panel-border-explorer: rgba(186, 230, 253, 0.8);
+    --panel-shadow-explorer: 0 4px 14px rgba(59, 130, 246, 0.06);
+    --panel-bg-explorer: rgba(255, 255, 255, 0.95);
 
-    --panel-border-terminal: rgba(226, 232, 240, 0.9);
-    --panel-shadow-terminal: 0 -4px 20px rgba(15, 23, 42, 0.05);
-    --panel-bg-terminal: rgba(255, 255, 255, 0.95);
+    --panel-border-terminal: rgba(186, 230, 253, 0.8);
+    --panel-shadow-terminal: 0 -4px 20px rgba(59, 130, 246, 0.08);
+    --panel-bg-terminal: rgba(255, 255, 255, 0.96);
   }
 
   /* Accent Color Swatch Definitions (applies to both theme-light and theme-dark but customized here) */
@@ -221,10 +218,8 @@
 }
 
 .app-root.theme-light {
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--accent-rgb), 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(139, 92, 246, 0.05) 0%, transparent 60%),
-    linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%) !important;
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 35%, #93c5fd 75%, #60a5fa 100%) !important;
+  background-attachment: fixed !important;
   color: #0f172a !important;
 }
 
