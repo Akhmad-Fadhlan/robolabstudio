@@ -142,7 +142,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
   return (
     <div className={`flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
-      isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-sky-100 shadow-sm text-slate-800'
+      isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-sm text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
       <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-visible flex-shrink-0">
@@ -335,7 +335,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               onClick={() => setUiMode('student')}
               className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition ${
                 uiMode === 'student'
-                  ? 'bg-purple-600 text-white shadow-md'
+                  ? 'text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Student Mode: Tampilan sederhana untuk pemula"
@@ -346,7 +346,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               onClick={() => setUiMode('pro')}
               className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition ${
                 uiMode === 'pro'
-                  ? 'bg-purple-600 text-white shadow-md'
+                  ? 'text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Professional Mode: Tampilan lengkap dengan Explorer & Multi-editor"
@@ -387,7 +387,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
           {/* Board Selector */}
           <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
-            isDark ? 'bg-white/5 border-white/10' : 'bg-sky-100/60 hover:bg-sky-100/90 border-sky-200/80 text-sky-950'
+            isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-purple-400 hidden xl:inline">{tb('boardLabel')}</span>
             <select 
@@ -409,7 +409,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
           {/* Port Selector */}
           <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
-            isDark ? 'bg-white/5 border-white/10' : 'bg-sky-100/60 hover:bg-sky-100/90 border-sky-200/80 text-sky-950'
+            isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden xl:inline">{tb('portLabel')}</span>
             <select 
@@ -476,7 +476,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           <button
             onClick={onOpenCommandPalette}
             className={`px-2.5 py-1 rounded-full border transition cursor-pointer flex-shrink-0 flex items-center gap-1.5 shadow-sm ${
-              isDark ? 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25' : 'bg-sky-100/70 border-sky-200/90 text-sky-900 hover:bg-sky-200/80'
+              isDark ? 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25' : 'bg-[var(--theme-pill-bg,#e0f2fe)] border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)] hover:opacity-90'
             }`}
             title="Pencarian & Command Palette (Ctrl + Shift + P)"
           >
@@ -498,7 +498,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark
                   ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                  : 'bg-sky-100/70 border-sky-200/90 text-sky-900 hover:bg-sky-200/80 font-bold'
+                  : 'bg-[var(--theme-pill-bg,#e0f2fe)] border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)] hover:opacity-90 font-bold'
               }`}
               title={tb('changeLanguage')}
             >

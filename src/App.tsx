@@ -3364,8 +3364,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('robolab_theme_mode') as 'dark' | 'light') || 'light';
   });
-  const [themeColor, setThemeColor] = useState<'cyan' | 'sky' | 'emerald' | 'pink'>(() => {
-    return (localStorage.getItem('robolab_theme_color') as 'cyan' | 'sky' | 'emerald' | 'pink') || 'cyan';
+  const [themeColor, setThemeColor] = useState<'red' | 'sky' | 'cyan' | 'emerald' | 'pink' | 'purple' | 'amber'>(() => {
+    return (localStorage.getItem('robolab_theme_color') as any) || 'sky';
   });
   const [language, setLanguage] = useState<LangCode>(() => {
     return (localStorage.getItem('robolab_language') as LangCode) || 'id';
@@ -3378,7 +3378,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   };
 
   useEffect(() => {
-    document.body.classList.remove('theme-dark', 'theme-light', 'color-cyan', 'color-sky', 'color-emerald', 'color-pink');
+    document.body.classList.remove('theme-dark', 'theme-light', 'color-cyan', 'color-sky', 'color-emerald', 'color-pink', 'color-red', 'color-purple', 'color-amber');
     document.body.classList.add(`theme-${themeMode}`);
     document.body.classList.add(`color-${themeColor}`);
     
@@ -9966,104 +9966,48 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
             <div className={`absolute inset-0 p-2 sm:p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-transparent text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
-              {/* Floating Room Tabs Sub-header Bar matching Screenshot */}
-              <div className={`flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-2xl border shadow-sm select-none mb-3 flex-shrink-0 ${
+              {/* Floating Simulator Menu Bar - Hanya 2 Menu: Simulator Rangkaian & Simulator Robot */}
+              <div className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-2xl border shadow-sm select-none mb-3 flex-shrink-0 ${
                 themeMode === 'light' 
-                  ? 'bg-white/95 backdrop-blur-md border-sky-100/90 text-slate-800 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' 
+                  ? 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] text-slate-800 shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' 
                   : 'bg-[#0f111a]/95 border-white/10 text-white'
               }`}>
-                {/* Left: Back button + Room Tabs */}
-                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-0.5 scrollbar-none min-w-0 flex-shrink">
-                  {/* Back arrow */}
-                  <button
-                    onClick={() => setCurrentTab('home')}
-                    className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition cursor-pointer flex-shrink-0 shadow-sm ${
-                      themeMode === 'light'
-                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        : 'bg-white/10 hover:bg-white/20 text-white'
-                    }`}
-                    title="Kembali ke Beranda"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  {/* Room Tab 1: Acen Robot 3D */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSimulatorModeChange('robot');
-                    }}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                      simulatorMode === 'robot' && activeRobotPlanId !== 1
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                        : themeMode === 'light'
-                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span>Acen Robot 3D</span>
-                  </button>
-
-                  {/* Room Tab 2: LineFollower _ PID-S */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSimulatorModeChange('robot');
-                      setActiveRobotPlanId(1);
-                    }}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                      simulatorMode === 'robot' && activeRobotPlanId === 1
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                        : themeMode === 'light'
-                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span>LineFollower _ PID-S</span>
-                  </button>
-
-                  {/* Room Tab 3: Rangkaian Shrill ⭐ */}
+                {/* Left: Hanya 2 Menu Simulator (Simulator Rangkaian & Simulator Robot) */}
+                <div className="flex items-center gap-2">
+                  {/* Menu 1: Simulator Rangkaian */}
                   <button
                     type="button"
                     onClick={() => handleSimulatorModeChange('circuit')}
-                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
+                    style={simulatorMode === 'circuit' ? { background: 'var(--accent-gradient)' } : {}}
+                    className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 shadow-sm ${
                       simulatorMode === 'circuit'
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                        ? 'text-white shadow-md'
                         : themeMode === 'light'
-                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                        ? 'text-slate-700 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200'
+                        : 'text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10'
                     }`}
                   >
-                    <span>Rangkaian Sirkuit</span>
-                    <span className="text-yellow-300 text-xs">⭐</span>
+                    <span>🔌</span>
+                    <span>Simulator Rangkaian</span>
+                    {simulatorMode === 'circuit' && <span className="text-yellow-300 text-xs">⭐</span>}
                   </button>
 
-                  {/* Room Tab 4: Blynk - Sir */}
+                  {/* Menu 2: Simulator Robot */}
                   <button
                     type="button"
-                    onClick={() => handleSimulatorModeChange('circuit')}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                      themeMode === 'light'
-                        ? 'text-slate-600 hover:bg-sky-50 hover:text-sky-700'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    onClick={() => handleSimulatorModeChange('robot')}
+                    style={simulatorMode === 'robot' ? { background: 'var(--accent-gradient)' } : {}}
+                    className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 shadow-sm ${
+                      simulatorMode === 'robot'
+                        ? 'text-white shadow-md'
+                        : themeMode === 'light'
+                        ? 'text-slate-700 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200'
+                        : 'text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10'
                     }`}
                   >
-                    <span>Blynk - Sir</span>
-                  </button>
-
-                  {/* Purple Badge: + 598 */}
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200 shadow-sm flex-shrink-0">
-                    + 598
-                  </span>
-
-                  {/* Add Room button */}
-                  <button
-                    onClick={handleCreateFile}
-                    className="px-2.5 py-1 rounded-full text-xs font-bold text-blue-600 hover:bg-blue-50 border border-dashed border-blue-300 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 flex items-center gap-1 shadow-sm"
-                    title="Tambah Ruang / File Proyek Baru"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Add Room</span>
+                    <span>🤖</span>
+                    <span>Simulator Robot</span>
+                    {simulatorMode === 'robot' && <span className="text-yellow-300 text-xs">⭐</span>}
                   </button>
                 </div>
 
@@ -10196,7 +10140,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
-                        className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-3xl border border-sky-100 shadow-[0_10px_30px_rgba(59,130,246,0.08)]"
+                        className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-3xl border border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))]"
                         style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
                       >
                         <BlocklyEditor
@@ -10374,7 +10318,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                 {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
                 <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
-                  <div className={`flex-1 min-w-0 min-h-0 relative rounded-3xl overflow-hidden border shadow-[0_10px_30px_rgba(59,130,246,0.08)] ${themeMode === 'light' ? 'border-sky-100/90 bg-white/95 backdrop-blur-md' : 'border-slate-800 bg-slate-950'}`}>
+                  <div className={`flex-1 min-w-0 min-h-0 relative rounded-3xl overflow-hidden border shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))] ${themeMode === 'light' ? 'border-[var(--theme-border,rgba(186,230,253,0.9))] bg-white/95 backdrop-blur-md' : 'border-slate-800 bg-slate-950'}`}>
                     <Simulator
                       isExpanded={true}
                       isRunning={isRunning}
@@ -11287,10 +11231,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 </div>
                 <div className="flex gap-1.5">
                   {[
-                    { id: 'cyan', bg: 'bg-[#06b6d4]', title: 'Cyan' },
-                    { id: 'sky', bg: 'bg-[#0ea5e9]', title: 'Sky' },
-                    { id: 'emerald', bg: 'bg-[#10b981]', title: 'Emerald' },
-                    { id: 'pink', bg: 'bg-[#ec4899]', title: 'Pink' }
+                    { id: 'red', bg: 'bg-[#ef4444]', title: 'Merah (Red)' },
+                    { id: 'sky', bg: 'bg-[#0ea5e9]', title: 'Biru Langit (Sky)' },
+                    { id: 'cyan', bg: 'bg-[#06b6d4]', title: 'Sian (Cyan)' },
+                    { id: 'emerald', bg: 'bg-[#10b981]', title: 'Hijau (Emerald)' },
+                    { id: 'pink', bg: 'bg-[#ec4899]', title: 'Merah Muda (Pink)' },
+                    { id: 'purple', bg: 'bg-[#a855f7]', title: 'Ungu (Purple)' },
+                    { id: 'amber', bg: 'bg-[#f59e0b]', title: 'Kuning Jingga (Amber)' }
                   ].map((item) => {
                     const isSelected = themeColor === item.id;
                     return (

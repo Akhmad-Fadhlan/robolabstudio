@@ -3855,7 +3855,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
         {/* WiFi Simulator Panel */}
         {board !== 'Arduino Uno R3' && board !== 'BBC micro:bit' && (
-          <div className={`flex flex-col gap-2.5 p-3.5 rounded-2xl border shadow-sm transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
+          <div className={`flex flex-col gap-2.5 p-3.5 rounded-2xl border shadow-sm transition-colors ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' : 'bg-[#0f131f] border-slate-800/90'}`}>
             <div className="flex items-center justify-between">
               <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 <Wifi className={`w-3.5 h-3.5 ${isWifiConnected ? 'text-emerald-500' : 'text-slate-400'}`} />
@@ -3929,7 +3929,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
         )}
 
         {/* Wiring & Components Panel */}
-        <div className={`p-3.5 rounded-2xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
+        <div className={`p-3.5 rounded-2xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' : 'bg-[#0f131f] border-slate-800/90'}`}>
           <div className="flex items-center justify-between">
              <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                <Edit3 className="w-3.5 h-3.5 text-indigo-400" /> Circuit Builder
@@ -4050,7 +4050,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
         
         {/* Wires List Management */}
         {wires.length > 0 && (
-          <div className={`p-3.5 rounded-2xl border shadow-sm flex flex-col gap-2 transition-colors ${isLight ? 'bg-white/95 border-sky-100 shadow-[0_4px_16px_rgba(59,130,246,0.06)]' : 'bg-[#0f131f] border-slate-800/90'}`}>
+          <div className={`p-3.5 rounded-2xl border shadow-sm flex flex-col gap-2 transition-colors ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' : 'bg-[#0f131f] border-slate-800/90'}`}>
              <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center justify-between ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                Connections ({wires.length})
                <span className="text-[8px] opacity-75 normal-case font-medium">Klik warna untuk ubah</span>

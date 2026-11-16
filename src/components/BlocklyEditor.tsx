@@ -6437,7 +6437,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   return (
     <div className={`w-full h-full relative overflow-hidden flex flex-col ${isLight ? 'bg-white' : 'bg-[#08090d]'} ${compact ? 'compact-blockly' : ''}`}>
       {/* ✨ Kids-Friendly Card Header */}
-      <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/95 border-sky-100' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} z-20 shadow-sm relative`}>
+      <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))]' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} z-20 shadow-sm relative`}>
         <div className="flex items-center gap-2">
           <span className={`${compact ? 'text-[11px]' : 'text-xs'} font-extrabold ${isLight ? 'text-slate-800' : 'text-indigo-400'} uppercase tracking-wider flex items-center gap-1.5`}>
             <span>🧩</span>
