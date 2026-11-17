@@ -347,7 +347,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               }`}
               title="Student Mode: Tampilan sederhana untuk pemula"
             >
-              <span className="text-white-force">{tb('student')}</span>
+              <span>{tb('student')}</span>
             </button>
             <button
               onClick={() => setUiMode('pro')}
@@ -358,7 +358,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               }`}
               title="Professional Mode: Tampilan lengkap dengan Explorer & Multi-editor"
             >
-              <span className="text-white-force">{tb('pro')}</span>
+              <span>{tb('pro')}</span>
             </button>
           </div>
 
@@ -376,7 +376,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 }`}
               >
                 <Sliders className="w-3 h-3" />
-                <span className="text-white-force">{tb('block')}</span>
+                <span>{tb('block')}</span>
               </button>
               <button
                 onClick={() => setStudentSubMode('code')}
@@ -387,7 +387,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 }`}
               >
                 <Code className="w-3 h-3" />
-                <span className="text-white-force">{tb('code')}</span>
+                <span>{tb('code')}</span>
               </button>
             </div>
           )}
