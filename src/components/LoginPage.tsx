@@ -9,9 +9,18 @@ import {
   Layers,
   ChevronRight,
   Compass,
+  Cpu,
+  Sparkles,
+  Code2,
+  Lock,
+  Activity,
+  Play,
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
 import robolabLogo from '../assets/robolab-logo-only.png';
-import h1Preview from '../assets/h1.jpg';
+import showcaseCircuit from '../assets/showcase-circuit.png';
+import showcaseBlocks from '../assets/showcase-blocks.png';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface LoginPageProps {
@@ -51,8 +60,9 @@ const GoogleIcon: React.FC<{ size?: number }> = ({ size = 24 }) => (
 const SPEECH_QUOTES = [
   'Halo Roboticist Muda! 👋',
   'Siap buat robot impianmu?',
-  'Susun balok & jalankan simulasi!',
-  'Yuk mulai petualangan seru ini! 🚀',
+  'Simulasi sirkuit ESP32 & LED! ⚡',
+  'Susun balok & jalankan kodenya! 🧩',
+  'Ayo mulai petualangan seru ini! 🚀',
 ];
 
 // ─── Cute Animated Robot Companion Avatar ──────────────────────────────────
@@ -62,40 +72,42 @@ const RobotCompanion: React.FC = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       setBubbleTextIdx((prev) => (prev + 1) % SPEECH_QUOTES.length);
-    }, 3800);
+    }, 4200);
     return () => clearInterval(timer);
   }, []);
 
   return (
     <div className="robot-mascot-wrap">
       {/* Interactive Speech Bubble */}
-      <motion.div
-        key={bubbleTextIdx}
-        initial={{ opacity: 0, y: 6, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -6, scale: 0.95 }}
-        transition={{ duration: 0.3 }}
-        className="mascot-speech-bubble"
-      >
-        <span className="bubble-text">{SPEECH_QUOTES[bubbleTextIdx]}</span>
-        <div className="speech-arrow" />
-      </motion.div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={bubbleTextIdx}
+          initial={{ opacity: 0, y: 5, scale: 0.94 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -5, scale: 0.94 }}
+          transition={{ duration: 0.28 }}
+          className="mascot-speech-bubble"
+        >
+          <span className="bubble-text">{SPEECH_QUOTES[bubbleTextIdx]}</span>
+          <div className="speech-arrow" />
+        </motion.div>
+      </AnimatePresence>
 
       {/* Floating Robot SVG */}
       <motion.div
         className="robot-avatar"
         animate={{ y: [-3, 3, -3] }}
-        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
       >
         <svg
-          width="82"
-          height="82"
+          width="74"
+          height="74"
           viewBox="0 0 100 100"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
           {/* Shadow beneath */}
-          <ellipse cx="50" cy="94" rx="26" ry="5" fill="#CBD5E1" opacity="0.6" />
+          <ellipse cx="50" cy="94" rx="24" ry="4.5" fill="#CBD5E1" opacity="0.6" />
 
           {/* Antenna */}
           <line x1="50" y1="20" x2="50" y2="8" stroke="#3B82F6" strokeWidth="3.5" strokeLinecap="round" />
@@ -150,7 +162,17 @@ const RobotCompanion: React.FC = () => {
 // ─── Main Login Page Component ──────────────────────────────────────────────
 export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }) => {
   const [btnHovered, setBtnHovered] = useState(false);
-  const [activeTab, setActiveTab] = useState<'arena' | 'blocks' | 'hardware'>('arena');
+  const [activeTab, setActiveTab] = useState<'circuit' | 'blocks'>('circuit');
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+
+  // Auto-switch showcase tabs every 8 seconds if user hasn't manually interacted
+  useEffect(() => {
+    if (!isAutoPlaying) return;
+    const interval = setInterval(() => {
+      setActiveTab((prev) => (prev === 'circuit' ? 'blocks' : 'circuit'));
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isAutoPlaying]);
 
   const handleGoogleSignIn = async () => {
     if (loading) return;
@@ -159,220 +181,259 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
 
   const showcaseTabs = [
     {
-      id: 'arena' as const,
-      icon: '🏎️',
-      title: '3D Robot Arena',
-      desc: 'Simulasi manuver sensor garis & rintangan real-time',
+      id: 'circuit' as const,
+      icon: <Zap size={15} className="text-amber-500" />,
+      title: 'Simulator Rangkaian & ESP32',
+      badge: 'Live Interactive Circuit',
+      desc: 'Simulasi board ESP32 DevKit, komponen LED menyala, kabel wiring, dan sensor interaktif.',
+      image: showcaseCircuit,
+      windowTitle: 'RoboLab Studio — Simulator Rangkaian ESP32 DevKit V1',
+      highlights: [
+        { label: '⚡ ESP32 DevKit V1', sub: 'Simulasi pin I/O & PWM interaktif', pos: 'top-left' },
+        { label: '💡 Dual LED Glow Effect', sub: 'Visualisasi pin D4 & D15 real-time', pos: 'bottom-right' },
+        { label: '📜 Live C++ (Ino) Sync', sub: 'Kode Arduino terbentuk seketika', pos: 'bottom-left' },
+      ],
     },
     {
       id: 'blocks' as const,
-      icon: '🧩',
-      title: 'Balok Visual',
-      desc: 'Coding drag-and-drop semudah merakit Lego',
-    },
-    {
-      id: 'hardware' as const,
-      icon: '⚡',
-      title: 'ESP32 & Arduino',
-      desc: 'Langsung flash & upload ke mikrokontroler fisik',
+      icon: <Layers size={15} className="text-blue-500" />,
+      title: 'Visual Block Studio',
+      badge: 'Blockly & Logic Studio',
+      desc: 'Pemrograman blok visual drag-and-drop dengan pembacaan sensor pH, ultrasonic, & Serial Monitor.',
+      image: showcaseBlocks,
+      windowTitle: 'RoboLab Studio — Visual Blocks & Real-time Code Editor',
+      highlights: [
+        { label: '🧩 Drag & Drop Blockly', sub: 'Susun fungsi setup() & loop() mudah', pos: 'top-left' },
+        { label: '📡 Integrated Serial Monitor', sub: 'Baudrate 115200 & terminal interaktif', pos: 'bottom-right' },
+        { label: '🎓 Mode Siswa & Pro Mode', sub: 'Transisi bertahap ke kode teks profesional', pos: 'bottom-left' },
+      ],
     },
   ];
 
+  const currentShowcase = showcaseTabs.find((t) => t.id === activeTab) || showcaseTabs[0];
+
   return (
     <div className="robolab-login-root">
-      {/* ── Background Ambiance (Light & Cheerful) ── */}
+      {/* ── Background Ambiance: Elegant Soft Modern Tech Glow ── */}
       <div className="bg-dots-pattern" />
       <div className="bg-shape shape-blue" />
+      <div className="bg-shape shape-cyan" />
       <div className="bg-shape shape-amber" />
-      <div className="bg-shape shape-emerald" />
       <div className="bg-shape shape-violet" />
 
-      {/* Floating Playful Decors */}
+      {/* Subtle modern floating accents */}
       <motion.div
-        className="floating-decor float-1"
-        animate={{ y: [-8, 8, -8], rotate: [0, 8, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+        className="floating-accent accent-1"
+        animate={{ y: [-6, 6, -6], rotate: [0, 6, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
       >
-        <span>🚀</span>
+        <span className="accent-pill">✨ Edukasi Robotika 2026</span>
       </motion.div>
       <motion.div
-        className="floating-decor float-2"
-        animate={{ y: [6, -6, 6], rotate: [0, -10, 0] }}
-        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+        className="floating-accent accent-2"
+        animate={{ y: [6, -6, 6], rotate: [0, -6, 0] }}
+        transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
       >
-        <span>⭐</span>
-      </motion.div>
-      <motion.div
-        className="floating-decor float-3"
-        animate={{ y: [-6, 6, -6], rotate: [0, 12, 0] }}
-        transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-      >
-        <span>🧩</span>
-      </motion.div>
-      <motion.div
-        className="floating-decor float-4"
-        animate={{ y: [7, -7, 7], rotate: [0, -8, 0] }}
-        transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
-      >
-        <span>⚡</span>
+        <span className="accent-pill">🚀 Ready for Competition</span>
       </motion.div>
 
       {/* ── Main Glass Card Container ── */}
       <motion.div
         className="login-card-container"
-        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
       >
-        {/* ── LEFT PANEL: Welcoming Kids-Friendly & Professional Auth ── */}
+        {/* ── LEFT PANEL: Welcoming Kids-Friendly & Elegant Auth ── */}
         <div className="left-auth-panel">
-          {/* Top Category Badge */}
-          <div className="top-platform-badge">
-            <span className="badge-sparkle">✨</span>
-            <span className="badge-text">Platform Robotika &amp; Coding Pelajar</span>
-          </div>
+          {/* Top Brand & Category Header */}
+          <div className="panel-top-section">
+            <div className="top-platform-badge">
+              <Sparkles size={13} className="text-blue-600" />
+              <span>PLATFORM EDUKASI ROBOTIKA &amp; IOT</span>
+            </div>
 
-          {/* Logo & Brand Header */}
-          <div className="brand-header">
-            <img
-              src={robolabLogo}
-              alt="RoboLab Studio Pymasterclass Logo"
-              className="robolab-brand-emblem"
-            />
-          </div>
+            <div className="brand-header">
+              <div className="brand-logo-wrap">
+                <img
+                  src={robolabLogo}
+                  alt="RoboLab Studio Logo"
+                  className="robolab-brand-emblem"
+                />
+              </div>
+              <div className="brand-text-wrap">
+                <div className="brand-app-title">RoboLab Studio</div>
+                <div className="brand-app-sub">Pymasterclass Indonesia</div>
+              </div>
+            </div>
 
-          {/* Animated Mascot Section */}
-          <div className="mascot-greeting-row">
-            <RobotCompanion />
-            <div className="greeting-text-area">
-              <h1 className="main-title">
-                Mulai Petualangan <span className="highlight-text">Robotikamu!</span>
-              </h1>
-              <p className="main-subtitle">
-                Rakit logika, jelajahi arena 3D, dan kendalikan robot sungguhan secara visual &amp; interaktif.
-              </p>
+            {/* Mascot & Greeting Card */}
+            <div className="mascot-greeting-card">
+              <RobotCompanion />
+              <div className="greeting-text-area">
+                <h1 className="main-title">
+                  Mulai Petualangan <span className="highlight-text">Robotikamu!</span>
+                </h1>
+                <p className="main-subtitle">
+                  Rakit logika visual, simulasikan sirkuit ESP32 &amp; sensor, serta flash ke robot fisik semudah menekan tombol.
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Google Sign In Area */}
-          <div className="auth-box">
-            <button
-              id="btn-google-signin"
-              className={`kid-google-btn ${btnHovered ? 'hovered' : ''} ${loading ? 'loading' : ''}`}
-              onClick={handleGoogleSignIn}
-              onMouseEnter={() => setBtnHovered(true)}
-              onMouseLeave={() => setBtnHovered(false)}
-              disabled={loading}
-              type="button"
-              aria-label="Masuk dengan Akun Google"
-            >
-              {loading ? (
-                <div className="loading-state">
-                  <div className="spinner-orbit" />
-                  <div className="btn-labels">
-                    <span className="btn-main-label">Menghubungkan ke Lab...</span>
-                    <span className="btn-sub-label">Mohon tunggu sebentar</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="btn-content-flex">
-                  <div className="google-icon-wrapper">
-                    <GoogleIcon size={26} />
-                  </div>
-                  <div className="btn-labels">
-                    <span className="btn-main-label">Masuk dengan Google</span>
-                    <span className="btn-sub-label">Akun Belajar.id atau Akun Google Pribadi</span>
-                  </div>
-                  <ChevronRight size={20} className="btn-arrow" />
-                </div>
-              )}
-            </button>
-
-            {/* Error Message Box */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  key="login-error"
-                  initial={{ opacity: 0, y: -8, height: 0 }}
-                  animate={{ opacity: 1, y: 0, height: 'auto' }}
-                  exit={{ opacity: 0, y: -8, height: 0 }}
-                  transition={{ duration: 0.25 }}
-                  className="error-box"
-                >
-                  <div className="error-content">
-                    <span className="error-icon">⚠️</span>
-                    <div className="error-text-wrap">
-                      <div className="error-title">Akses Perangkat Belum Terdaftar</div>
-                      <div className="error-desc">{error}</div>
+          {/* Central Auth Area: Google Sign-In */}
+          <div className="panel-auth-section">
+            <div className="auth-box">
+              <button
+                id="btn-google-signin"
+                className={`kid-google-btn ${btnHovered ? 'hovered' : ''} ${loading ? 'loading' : ''}`}
+                onClick={handleGoogleSignIn}
+                onMouseEnter={() => setBtnHovered(true)}
+                onMouseLeave={() => setBtnHovered(false)}
+                disabled={loading}
+                type="button"
+                aria-label="Masuk dengan Akun Google"
+              >
+                {loading ? (
+                  <div className="loading-state">
+                    <div className="spinner-orbit" />
+                    <div className="btn-labels">
+                      <span className="btn-main-label">Menghubungkan ke Lab...</span>
+                      <span className="btn-sub-label">Memverifikasi akun Google Anda</span>
                     </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                ) : (
+                  <div className="btn-content-flex">
+                    <div className="google-icon-wrapper">
+                      <GoogleIcon size={24} />
+                    </div>
+                    <div className="btn-labels">
+                      <span className="btn-main-label">Lanjutkan dengan Google</span>
+                      <span className="btn-sub-label">Akun Belajar.id atau Akun Google Pribadi</span>
+                    </div>
+                    <div className="btn-action-icon">
+                      <ChevronRight size={18} className="btn-arrow" />
+                    </div>
+                  </div>
+                )}
+              </button>
+
+              {/* Error Message Box */}
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    key="login-error"
+                    initial={{ opacity: 0, y: -6, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -6, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="error-box"
+                  >
+                    <div className="error-content">
+                      <div className="error-icon-wrap">
+                        <Lock size={16} className="text-red-500" />
+                      </div>
+                      <div className="error-text-wrap">
+                        <div className="error-title">Akses Perangkat Belum Terdaftar</div>
+                        <div className="error-desc">{error}</div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Learning Feature Badges */}
+            <div className="learning-highlights">
+              <div className="highlight-pill">
+                <CheckCircle2 size={13} className="pill-icon text-emerald-500" />
+                <span>Simulasi ESP32 &amp; Rangkaian Nyata</span>
+              </div>
+              <div className="highlight-pill">
+                <CheckCircle2 size={13} className="pill-icon text-blue-500" />
+                <span>Visual Block &amp; C++ / MicroPython</span>
+              </div>
+              <div className="highlight-pill">
+                <CheckCircle2 size={13} className="pill-icon text-amber-500" />
+                <span>WebUSB &amp; Serial Flash 1-Klik</span>
+              </div>
+            </div>
           </div>
 
-          {/* Quick Learning Features Chips */}
-          <div className="learning-highlights">
-            <div className="highlight-pill">
-              <CheckCircle2 size={14} className="pill-icon text-emerald-500" />
-              <span>Simulasi 3D Interaktif</span>
-            </div>
-            <div className="highlight-pill">
-              <CheckCircle2 size={14} className="pill-icon text-blue-500" />
-              <span>Python &amp; C++ Otomatis</span>
-            </div>
-            <div className="highlight-pill">
-              <CheckCircle2 size={14} className="pill-icon text-amber-500" />
-              <span>100% Aman untuk Siswa</span>
-            </div>
-          </div>
-
-          {/* Footer Security & Copyright */}
-          <div className="auth-footer">
+          {/* Footer Security & Info */}
+          <div className="panel-footer-section">
             <div className="security-guarantee">
-              <ShieldCheck size={16} className="security-icon" />
-              <span>Single-Device Protection · Data Pelajar Terlindungi &amp; Aman</span>
+              <ShieldCheck size={15} className="security-icon" />
+              <span>Single-Device Protection · 1 Akun Pelajar per Perangkat</span>
             </div>
             <div className="copyright-note">
-              © {new Date().getFullYear()} RoboLab Studio · PYMASTERCLASS Indonesia
+              © {new Date().getFullYear()} RoboLab Studio · Hak Cipta Dilindungi Undang-Undang
             </div>
           </div>
         </div>
 
-        {/* ── RIGHT PANEL: Interactive Workspace Showcase & Education Highlights ── */}
-        <div className="right-showcase-panel">
+        {/* ── RIGHT PANEL: Interactive Workspace Showcase ── */}
+        <div 
+          className="right-showcase-panel"
+          onMouseEnter={() => setIsAutoPlaying(false)}
+          onMouseLeave={() => setIsAutoPlaying(true)}
+        >
+          {/* Showcase Header */}
           <div className="showcase-header">
-            <div className="showcase-tag">
-              <Compass size={14} />
-              <span>LABORATORIUM VIRTUAL INTERAKTIF</span>
+            <div className="showcase-top-row">
+              <div className="showcase-tag">
+                <Compass size={13} className="text-blue-600" />
+                <span>WORKSPACE INTERAKTIF PELAJAR</span>
+              </div>
+              <div className="live-indicator-pill">
+                <span className="live-pulse-dot" />
+                <span>Sistem Siap Digunakan</span>
+              </div>
             </div>
+
             <h2 className="showcase-headline">
               Belajar Coding &amp; Robotika Jadi <span className="headline-accent">Mudah &amp; Menyenangkan</span>
             </h2>
             <p className="showcase-description">
-              Tingkatkan kreativitas siswa melalui lingkungan pemrograman visual berstandar lomba robotika nasional dan internasional.
+              Lingkungan belajar visual interaktif dengan simulasi mikrokontroler real-time, circuit builder, dan generator kode C++ otomatis.
             </p>
           </div>
 
-          {/* Tab Switchers */}
+          {/* Tab Switcher Selector */}
           <div className="showcase-tab-bar">
-            {showcaseTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`tab-chip ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span className="tab-emoji">{tab.icon}</span>
-                <span className="tab-chip-title">{tab.title}</span>
-              </button>
-            ))}
+            {showcaseTabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`tab-chip ${isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setIsAutoPlaying(false);
+                  }}
+                >
+                  <span className="tab-icon-wrap">{tab.icon}</span>
+                  <div className="tab-title-group">
+                    <span className="tab-chip-title">{tab.title}</span>
+                    <span className="tab-chip-sub">{tab.badge}</span>
+                  </div>
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTabGlow"
+                      className="tab-active-indicator"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Central Workspace Window Showcase */}
           <div className="workspace-window-wrapper">
             <div className="window-frame">
-              {/* Window Bar */}
+              {/* Window Mac Header Bar */}
               <div className="window-topbar">
                 <div className="mac-dots">
                   <span className="mac-dot red" />
@@ -381,79 +442,82 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
                 </div>
                 <div className="window-title">
                   <Bot size={13} className="text-blue-500" />
-                  <span>RoboLab Studio — Ruang Simulasi &amp; Robot Plan</span>
+                  <span>{currentShowcase.windowTitle}</span>
                 </div>
                 <div className="window-status-pill">
                   <span className="pulse-dot" />
-                  <span>Ready to Run</span>
+                  <span>Interactive Live View</span>
                 </div>
               </div>
 
-              {/* Preview Image with Floating Feature Badges */}
+              {/* Dynamic Image Display with Framer Motion Transition */}
               <div className="window-body">
-                <img
-                  src={h1Preview}
-                  alt="RoboLab Studio Workspace Showcase"
-                  className="preview-screenshot"
-                />
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, scale: 0.985 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.01 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="screenshot-display-wrap"
+                  >
+                    <img
+                      src={currentShowcase.image}
+                      alt={currentShowcase.title}
+                      className="preview-screenshot"
+                    />
 
-                {/* Dynamic Floating Badges over Preview */}
-                <motion.div
-                  className="glass-badge badge-top-left"
-                  animate={{ y: [-3, 3, -3] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <span className="badge-icon">🏎️</span>
-                  <div>
-                    <div className="badge-name">Line Follower Arena</div>
-                    <div className="badge-sub">6-Sensor PID Kontrol</div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  className="glass-badge badge-bottom-right"
-                  animate={{ y: [3, -3, 3] }}
-                  transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
-                >
-                  <span className="badge-icon">🧩</span>
-                  <div>
-                    <div className="badge-name">Blockly Visual Logic</div>
-                    <div className="badge-sub">Drag &amp; Drop Praktis</div>
-                  </div>
-                </motion.div>
+                    {/* Floating Contextual Badges over Preview */}
+                    {currentShowcase.highlights.map((badge, idx) => (
+                      <motion.div
+                        key={badge.label}
+                        className={`glass-badge badge-${badge.pos}`}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.15 + idx * 0.1 }}
+                      >
+                        <div className="badge-glow-dot" />
+                        <div>
+                          <div className="badge-name">{badge.label}</div>
+                          <div className="badge-sub">{badge.sub}</div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
               </div>
             </div>
           </div>
 
-          {/* 3 Kids-Friendly Benefit Cards */}
+          {/* 3 Modern Feature Cards */}
           <div className="kids-benefit-grid">
             <div className="benefit-card card-blue">
-              <div className="benefit-icon-box bg-blue-100 text-blue-600">
-                <Layers size={18} />
+              <div className="benefit-icon-box bg-blue-50 text-blue-600 border border-blue-200">
+                <Zap size={17} />
               </div>
-              <div>
-                <h4 className="benefit-title">1. Susun Balok</h4>
-                <p className="benefit-desc">Atur logika robot semudah main Lego tanpa perlu pusing sintaks.</p>
+              <div className="benefit-content">
+                <h4 className="benefit-title">1. Simulasi Sirkuit</h4>
+                <p className="benefit-desc">Rakit mikrokontroler ESP32, sensor, dan LED interaktif tanpa takut salah colok.</p>
               </div>
             </div>
 
             <div className="benefit-card card-emerald">
-              <div className="benefit-icon-box bg-emerald-100 text-emerald-600">
-                <Rocket size={18} />
+              <div className="benefit-icon-box bg-emerald-50 text-emerald-600 border border-emerald-200">
+                <Layers size={17} />
               </div>
-              <div>
-                <h4 className="benefit-title">2. Uji di Arena 3D</h4>
-                <p className="benefit-desc">Lihat pergerakan robot dan sensor garis secara real-time di layar.</p>
+              <div className="benefit-content">
+                <h4 className="benefit-title">2. Logika Visual Blok</h4>
+                <p className="benefit-desc">Susun balok pemrograman semudah bermain Lego; kode C++ terbit secara otomatis.</p>
               </div>
             </div>
 
             <div className="benefit-card card-amber">
-              <div className="benefit-icon-box bg-amber-100 text-amber-600">
-                <Zap size={18} />
+              <div className="benefit-icon-box bg-amber-50 text-amber-600 border border-amber-200">
+                <Rocket size={17} />
               </div>
-              <div>
-                <h4 className="benefit-title">3. Masuk ke Robot Asli</h4>
-                <p className="benefit-desc">1-klik sinkron ke mikrokontroler ESP32, Arduino, atau Micro:bit.</p>
+              <div className="benefit-content">
+                <h4 className="benefit-title">3. Flash ke Robot Fisik</h4>
+                <p className="benefit-desc">Kirim program langsung ke board nyata lewat WebUSB &amp; Serial dengan 1-klik.</p>
               </div>
             </div>
           </div>
@@ -468,7 +532,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           inset: 0;
           width: 100vw;
           height: 100vh;
-          background: linear-gradient(135deg, #F0F7FF 0%, #FAF5FF 50%, #F0FDF4 100%);
+          background: linear-gradient(135deg, #F0F6FF 0%, #FAF5FF 45%, #F0FDF4 100%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -483,90 +547,99 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         .bg-dots-pattern {
           position: absolute;
           inset: 0;
-          background-image: radial-gradient(#94A3B8 1.1px, transparent 1.1px);
-          background-size: 28px 28px;
-          opacity: 0.28;
+          background-image: radial-gradient(#94A3B8 1px, transparent 1px);
+          background-size: 26px 26px;
+          opacity: 0.22;
           pointer-events: none;
         }
 
         .bg-shape {
           position: absolute;
           border-radius: 50%;
-          filter: blur(120px);
+          filter: blur(110px);
           pointer-events: none;
           opacity: 0.55;
         }
 
         .shape-blue {
-          width: 650px;
-          height: 650px;
-          top: -160px;
-          left: -140px;
-          background: radial-gradient(circle, rgba(59, 130, 246, 0.28) 0%, rgba(219, 234, 254, 0) 70%);
+          width: 700px;
+          height: 700px;
+          top: -180px;
+          left: -160px;
+          background: radial-gradient(circle, rgba(37, 99, 235, 0.22) 0%, rgba(219, 234, 254, 0) 70%);
+        }
+
+        .shape-cyan {
+          width: 550px;
+          height: 550px;
+          bottom: -140px;
+          left: 28%;
+          background: radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, rgba(207, 250, 254, 0) 70%);
         }
 
         .shape-amber {
-          width: 580px;
-          height: 580px;
-          bottom: -150px;
-          right: -100px;
-          background: radial-gradient(circle, rgba(245, 158, 11, 0.22) 0%, rgba(254, 243, 199, 0) 70%);
-        }
-
-        .shape-emerald {
-          width: 500px;
-          height: 500px;
-          bottom: -80px;
-          left: 20%;
-          background: radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, rgba(209, 250, 229, 0) 70%);
+          width: 520px;
+          height: 520px;
+          bottom: -140px;
+          right: -80px;
+          background: radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(254, 243, 199, 0) 70%);
         }
 
         .shape-violet {
           width: 480px;
           height: 480px;
-          top: -100px;
-          right: 25%;
+          top: -120px;
+          right: 22%;
           background: radial-gradient(circle, rgba(139, 92, 246, 0.16) 0%, rgba(237, 233, 254, 0) 70%);
         }
 
-        /* Floating Playful Emojis */
-        .floating-decor {
+        /* Floating Modern Accents */
+        .floating-accent {
           position: absolute;
-          font-size: 32px;
           pointer-events: none;
           user-select: none;
-          z-index: 1;
-          filter: drop-shadow(0 4px 10px rgba(0,0,0,0.08));
+          z-index: 2;
         }
-        .float-1 { top: 7%; left: 8%; }
-        .float-2 { bottom: 10%; left: 6%; }
-        .float-3 { top: 9%; right: 9%; }
-        .float-4 { bottom: 12%; right: 7%; }
+        .accent-1 { top: 3.5%; left: 4%; }
+        .accent-2 { bottom: 4%; right: 4%; }
+
+        .accent-pill {
+          display: inline-block;
+          padding: 6px 14px;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(226, 232, 240, 0.85);
+          border-radius: 999px;
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #334155;
+          box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+        }
 
         /* ── Main Split Card Container ── */
         .login-card-container {
           position: relative;
           z-index: 10;
           width: 100%;
-          max-width: 1540px;
+          max-width: 1520px;
           height: 100%;
-          max-height: 900px;
+          max-height: 890px;
           background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(20px);
-          border-radius: 32px;
-          border: 1.5px solid rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(24px);
+          border-radius: 28px;
+          border: 1px solid rgba(255, 255, 255, 0.95);
           box-shadow:
-            0 24px 60px -12px rgba(37, 99, 235, 0.14),
+            0 24px 60px -12px rgba(37, 99, 235, 0.13),
             0 12px 28px -6px rgba(15, 23, 42, 0.05),
             0 0 0 1px rgba(226, 232, 240, 0.8);
           display: grid;
-          grid-template-columns: 500px 1fr;
+          grid-template-columns: 480px 1fr;
           overflow: hidden;
         }
 
         /* ── LEFT PANEL: AUTH & GREETING ── */
         .left-auth-panel {
-          padding: 38px 44px;
+          padding: 34px 38px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -576,52 +649,82 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           z-index: 2;
         }
 
+        .panel-top-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
         .top-platform-badge {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 6px 14px;
+          padding: 4px 12px;
           background: #EFF6FF;
           border: 1px solid #BFDBFE;
           border-radius: 20px;
           width: fit-content;
-          margin-bottom: 14px;
-        }
-
-        .badge-sparkle {
-          font-size: 13px;
-        }
-
-        .badge-text {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 700;
           color: #1D4ED8;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.04em;
         }
 
         .brand-header {
           display: flex;
           align-items: center;
-          margin-bottom: 12px;
+          gap: 12px;
+          margin-bottom: 2px;
+        }
+
+        .brand-logo-wrap {
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+          flex-shrink: 0;
         }
 
         .robolab-brand-emblem {
-          height: 52px;
+          height: 32px;
           width: auto;
           object-fit: contain;
-          filter: drop-shadow(0 3px 8px rgba(37, 99, 235, 0.12));
         }
 
-        /* Mascot Row */
-        .mascot-greeting-row {
+        .brand-text-wrap {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .brand-app-title {
+          font-size: 19px;
+          font-weight: 800;
+          color: #0F172A;
+          letter-spacing: -0.02em;
+          line-height: 1.15;
+        }
+
+        .brand-app-sub {
+          font-size: 11px;
+          font-weight: 600;
+          color: #64748B;
+          letter-spacing: 0.02em;
+        }
+
+        /* Mascot Greeting Card */
+        .mascot-greeting-card {
           display: flex;
           align-items: center;
-          gap: 16px;
-          margin-bottom: 18px;
+          gap: 14px;
           padding: 12px 14px;
           background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
           border: 1px solid #E2E8F0;
-          border-radius: 20px;
+          border-radius: 18px;
         }
 
         .robot-mascot-wrap {
@@ -634,17 +737,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
 
         .mascot-speech-bubble {
           position: absolute;
-          top: -30px;
+          top: -26px;
           left: 50%;
           transform: translateX(-50%);
-          background: #1E293B;
+          background: #0F172A;
           color: #FFFFFF;
-          padding: 4px 10px;
-          border-radius: 10px;
-          font-size: 10.5px;
+          padding: 3px 9px;
+          border-radius: 8px;
+          font-size: 10px;
           font-weight: 600;
           white-space: nowrap;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          box-shadow: 0 4px 10px rgba(0,0,0,0.18);
           pointer-events: none;
           z-index: 5;
         }
@@ -656,9 +759,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           transform: translateX(-50%);
           width: 0;
           height: 0;
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-top: 5px solid #1E293B;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 4px solid #0F172A;
         }
 
         .robot-avatar {
@@ -688,7 +791,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .main-title {
-          font-size: 21px;
+          font-size: 18.5px;
           font-weight: 800;
           color: #0F172A;
           letter-spacing: -0.02em;
@@ -704,54 +807,58 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .main-subtitle {
-          font-size: 12.5px;
+          font-size: 12px;
           color: #64748B;
           line-height: 1.45;
           margin: 0;
         }
 
-        /* ── Auth Box & Big Kid Google Button ── */
+        /* ── Central Auth Box ── */
+        .panel-auth-section {
+          margin: 16px 0;
+        }
+
         .auth-box {
-          margin-bottom: 16px;
+          margin-bottom: 14px;
         }
 
         .kid-google-btn {
           width: 100%;
-          min-height: 62px;
+          min-height: 60px;
           background: #FFFFFF;
-          border: 2px solid #E2E8F0;
-          border-radius: 18px;
+          border: 1.5px solid #CBD5E1;
+          border-radius: 16px;
           cursor: pointer;
           display: flex;
           align-items: center;
-          padding: 8px 18px;
+          padding: 8px 16px;
           box-sizing: border-box;
           transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
           box-shadow:
-            0 4px 14px rgba(0, 0, 0, 0.04),
-            0 1px 3px rgba(0, 0, 0, 0.02);
+            0 4px 12px rgba(0, 0, 0, 0.04),
+            0 1px 2px rgba(0, 0, 0, 0.02);
           outline: none;
           user-select: none;
         }
 
         .kid-google-btn:hover,
         .kid-google-btn.hovered {
-          border-color: #3B82F6;
+          border-color: #2563EB;
           background: #F8FAFC;
           box-shadow:
-            0 10px 28px rgba(37, 99, 235, 0.16),
+            0 10px 24px -4px rgba(37, 99, 235, 0.18),
             0 2px 6px rgba(37, 99, 235, 0.08);
           transform: translateY(-2px);
         }
 
         .kid-google-btn:active {
           transform: translateY(0);
-          box-shadow: 0 3px 10px rgba(37, 99, 235, 0.12);
+          box-shadow: 0 3px 8px rgba(37, 99, 235, 0.12);
         }
 
         .kid-google-btn.loading {
           cursor: not-allowed;
-          opacity: 0.85;
+          opacity: 0.9;
           background: #F1F5F9;
         }
 
@@ -759,20 +866,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           width: 100%;
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 13px;
         }
 
         .google-icon-wrapper {
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          width: 40px;
+          height: 40px;
+          border-radius: 11px;
           background: #F8FAFC;
           border: 1px solid #E2E8F0;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
         }
 
         .btn-labels {
@@ -784,7 +891,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .btn-main-label {
-          font-size: 15.5px;
+          font-size: 15px;
           font-weight: 700;
           color: #0F172A;
           letter-spacing: -0.01em;
@@ -797,26 +904,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           margin-top: 1px;
         }
 
-        .btn-arrow {
+        .btn-action-icon {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           color: #94A3B8;
-          transition: transform 0.2s;
+          transition: all 0.2s;
         }
 
-        .kid-google-btn:hover .btn-arrow {
+        .kid-google-btn:hover .btn-action-icon {
           color: #2563EB;
-          transform: translateX(3px);
+          background: #EFF6FF;
+          transform: translateX(2px);
         }
 
         .loading-state {
           display: flex;
           align-items: center;
-          gap: 14px;
+          gap: 13px;
           width: 100%;
         }
 
         .spinner-orbit {
-          width: 26px;
-          height: 26px;
+          width: 24px;
+          height: 24px;
           border: 3px solid #DBEAFE;
           border-top-color: #2563EB;
           border-radius: 50%;
@@ -829,24 +943,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
 
         /* Error Box */
         .error-box {
-          margin-top: 12px;
-          padding: 12px 14px;
+          margin-top: 10px;
+          padding: 10px 12px;
           background: #FEF2F2;
           border: 1.5px solid #FECACA;
-          border-radius: 14px;
+          border-radius: 12px;
           overflow: hidden;
         }
 
         .error-content {
           display: flex;
           align-items: flex-start;
-          gap: 10px;
+          gap: 9px;
         }
 
-        .error-icon {
-          font-size: 16px;
-          line-height: 1;
+        .error-icon-wrap {
           margin-top: 2px;
+          flex-shrink: 0;
         }
 
         .error-text-wrap {
@@ -855,34 +968,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
 
         .error-title {
           color: #991B1B;
-          font-size: 12.5px;
+          font-size: 12px;
           font-weight: 700;
           margin-bottom: 2px;
         }
 
         .error-desc {
           color: #B91C1C;
-          font-size: 11.5px;
+          font-size: 11px;
           line-height: 1.45;
         }
 
-        /* Learning highlights pills */
+        /* Highlights Pills */
         .learning-highlights {
           display: flex;
           flex-direction: column;
-          gap: 7px;
-          margin-bottom: 18px;
+          gap: 6px;
         }
 
         .highlight-pill {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 7px 12px;
+          padding: 6px 11px;
           background: #F8FAFC;
           border: 1px solid #E2E8F0;
-          border-radius: 10px;
-          font-size: 12px;
+          border-radius: 9px;
+          font-size: 11.5px;
           font-weight: 600;
           color: #334155;
         }
@@ -892,8 +1004,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         /* Left Footer */
-        .auth-footer {
-          padding-top: 14px;
+        .panel-footer-section {
+          padding-top: 12px;
           border-top: 1px solid #F1F5F9;
         }
 
@@ -901,10 +1013,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           display: flex;
           align-items: center;
           gap: 6px;
-          font-size: 11.5px;
+          font-size: 11px;
           font-weight: 600;
           color: #475569;
-          margin-bottom: 4px;
+          margin-bottom: 3px;
         }
 
         .security-icon {
@@ -913,14 +1025,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .copyright-note {
-          font-size: 11px;
+          font-size: 10.5px;
           color: #94A3B8;
         }
 
-        /* ── RIGHT PANEL: INTERACTIVE SHOWCASE ── */
+        /* ── RIGHT PANEL: SHOWCASE ── */
         .right-showcase-panel {
-          padding: 38px 44px;
-          background: linear-gradient(145deg, #F8FAFC 0%, #EFF6FF 50%, #F5F3FF 100%);
+          padding: 34px 38px;
+          background: linear-gradient(145deg, #F8FAFC 0%, #EFF6FF 50%, #FAF5FF 100%);
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -929,30 +1041,57 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .showcase-header {
-          margin-bottom: 14px;
+          margin-bottom: 12px;
+        }
+
+        .showcase-top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 6px;
         }
 
         .showcase-tag {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          padding: 5px 12px;
+          padding: 4px 11px;
           background: #DBEAFE;
           border: 1px solid #BFDBFE;
           border-radius: 20px;
           color: #1D4ED8;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 700;
           letter-spacing: 0.05em;
-          margin-bottom: 8px;
+        }
+
+        .live-indicator-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 10px;
+          background: #ECFDF5;
+          border: 1px solid #A7F3D0;
+          border-radius: 20px;
+          color: #059669;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .live-pulse-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10B981;
+          animation: pulseDot 2s infinite;
         }
 
         .showcase-headline {
-          font-size: 24px;
+          font-size: 22px;
           font-weight: 800;
           color: #0F172A;
           letter-spacing: -0.025em;
-          margin: 0 0 6px 0;
+          margin: 0 0 4px 0;
           line-height: 1.25;
         }
 
@@ -963,48 +1102,91 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         }
 
         .showcase-description {
-          font-size: 13.5px;
+          font-size: 12.5px;
           color: #64748B;
           margin: 0;
-          line-height: 1.5;
+          line-height: 1.45;
           max-width: 680px;
         }
 
-        /* Tab switchers */
+        /* Tab Switchers */
         .showcase-tab-bar {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 14px;
+          gap: 10px;
+          margin-bottom: 12px;
         }
 
         .tab-chip {
+          position: relative;
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 9px;
           padding: 7px 14px;
           background: rgba(255, 255, 255, 0.85);
-          border: 1px solid #E2E8F0;
+          border: 1px solid #CBD5E1;
           border-radius: 12px;
           cursor: pointer;
-          transition: all 0.2s;
-          font-size: 12.5px;
-          font-weight: 600;
-          color: #475569;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           outline: none;
+          text-align: left;
         }
 
         .tab-chip:hover {
           background: #FFFFFF;
-          border-color: #CBD5E1;
-          color: #1E293B;
+          border-color: #94A3B8;
         }
 
         .tab-chip.active {
-          background: #2563EB;
+          background: #FFFFFF;
           border-color: #2563EB;
-          color: #FFFFFF;
-          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15);
+        }
+
+        .tab-icon-wrap {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border-radius: 7px;
+          background: #F1F5F9;
+        }
+
+        .tab-chip.active .tab-icon-wrap {
+          background: #EFF6FF;
+        }
+
+        .tab-title-group {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .tab-chip-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: #1E293B;
+          line-height: 1.2;
+        }
+
+        .tab-chip.active .tab-chip-title {
+          color: #1D4ED8;
+        }
+
+        .tab-chip-sub {
+          font-size: 10px;
+          font-weight: 500;
+          color: #64748B;
+        }
+
+        .tab-active-indicator {
+          position: absolute;
+          bottom: -1px;
+          left: 14px;
+          right: 14px;
+          height: 2.5px;
+          background: #2563EB;
+          border-radius: 3px;
         }
 
         /* Workspace Window Showcase */
@@ -1013,45 +1195,45 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           display: flex;
           align-items: center;
           justify-content: center;
-          margin: 10px 0 16px 0;
+          margin: 6px 0 14px 0;
           min-height: 0;
         }
 
         .window-frame {
           width: 100%;
           height: 100%;
-          max-height: 440px;
+          max-height: 450px;
           background: #FFFFFF;
-          border-radius: 20px;
+          border-radius: 18px;
           border: 1px solid #CBD5E1;
           box-shadow:
-            0 24px 50px rgba(37, 99, 235, 0.12),
-            0 8px 20px rgba(15, 23, 42, 0.06);
+            0 20px 45px rgba(37, 99, 235, 0.12),
+            0 6px 16px rgba(15, 23, 42, 0.05);
           overflow: hidden;
           display: flex;
           flex-direction: column;
         }
 
         .window-topbar {
-          height: 38px;
+          height: 36px;
           background: #F8FAFC;
           border-bottom: 1px solid #E2E8F0;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 16px;
+          padding: 0 14px;
           flex-shrink: 0;
         }
 
         .mac-dots {
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
         }
 
         .mac-dot {
-          width: 10px;
-          height: 10px;
+          width: 9px;
+          height: 9px;
           border-radius: 50%;
         }
         .mac-dot.red { background: #EF4444; }
@@ -1062,7 +1244,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           display: flex;
           align-items: center;
           gap: 6px;
-          font-size: 11.5px;
+          font-size: 11px;
           font-weight: 600;
           color: #475569;
         }
@@ -1071,18 +1253,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           display: flex;
           align-items: center;
           gap: 5px;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 600;
           color: #059669;
           background: #ECFDF5;
-          padding: 2px 8px;
-          border-radius: 12px;
+          padding: 2px 7px;
+          border-radius: 10px;
           border: 1px solid #A7F3D0;
         }
 
         .pulse-dot {
-          width: 6px;
-          height: 6px;
+          width: 5px;
+          height: 5px;
           border-radius: 50%;
           background: #10B981;
           animation: pulseDot 2s infinite;
@@ -1097,8 +1279,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           position: relative;
           width: 100%;
           height: 100%;
-          background: #FFFFFF;
+          background: #0F172A;
           overflow: hidden;
+        }
+
+        .screenshot-display-wrap {
+          position: relative;
+          width: 100%;
+          height: 100%;
         }
 
         .preview-screenshot {
@@ -1113,39 +1301,50 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         .glass-badge {
           position: absolute;
           background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(10px);
-          border: 1.5px solid rgba(226, 232, 240, 0.95);
-          border-radius: 14px;
-          padding: 7px 12px;
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.95);
+          border-radius: 11px;
+          padding: 6px 11px;
           display: flex;
           align-items: center;
-          gap: 9px;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+          gap: 8px;
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+          pointer-events: none;
+        }
+
+        .badge-glow-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #3B82F6;
+          box-shadow: 0 0 8px #3B82F6;
+          flex-shrink: 0;
         }
 
         .badge-top-left {
-          top: 16px;
-          left: 16px;
+          top: 14px;
+          left: 14px;
         }
 
         .badge-bottom-right {
-          bottom: 16px;
-          right: 16px;
+          bottom: 14px;
+          right: 14px;
         }
 
-        .badge-icon {
-          font-size: 20px;
+        .badge-bottom-left {
+          bottom: 14px;
+          left: 14px;
         }
 
         .badge-name {
-          font-size: 12px;
+          font-size: 11.5px;
           font-weight: 700;
           color: #0F172A;
           line-height: 1.2;
         }
 
         .badge-sub {
-          font-size: 10.5px;
+          font-size: 10px;
           color: #64748B;
           font-weight: 500;
         }
@@ -1154,68 +1353,72 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
         .kids-benefit-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
+          gap: 10px;
         }
 
         .benefit-card {
-          background: rgba(255, 255, 255, 0.9);
+          background: rgba(255, 255, 255, 0.92);
           border: 1px solid #E2E8F0;
-          border-radius: 16px;
-          padding: 12px 14px;
+          border-radius: 14px;
+          padding: 10px 12px;
           display: flex;
           align-items: flex-start;
-          gap: 10px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          gap: 9px;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
           transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .benefit-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+          border-color: #CBD5E1;
         }
 
         .benefit-icon-box {
-          width: 34px;
-          height: 34px;
-          border-radius: 10px;
+          width: 32px;
+          height: 32px;
+          border-radius: 9px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
         }
 
+        .benefit-content {
+          flex: 1;
+        }
+
         .benefit-title {
-          font-size: 12.5px;
+          font-size: 12px;
           font-weight: 700;
           color: #1E293B;
           margin: 0 0 2px 0;
         }
 
         .benefit-desc {
-          font-size: 11px;
+          font-size: 10.5px;
           color: #64748B;
           margin: 0;
-          line-height: 1.4;
+          line-height: 1.35;
         }
 
         /* ── RESPONSIVE DESIGN ── */
-        @media (max-width: 1180px) {
+        @media (max-width: 1200px) {
           .login-card-container {
             grid-template-columns: 440px 1fr;
           }
           .left-auth-panel {
-            padding: 30px 32px;
+            padding: 28px 30px;
           }
           .right-showcase-panel {
-            padding: 30px 34px;
+            padding: 28px 30px;
           }
-          .kids-benefit-grid {
-            grid-template-columns: 1fr;
-            gap: 8px;
+          .badge-bottom-left {
+            display: none;
           }
         }
 
-        @media (max-width: 960px) {
+        @media (max-width: 980px) {
           .robolab-login-root {
             overflow-y: auto;
             align-items: flex-start;
@@ -1224,10 +1427,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
 
           .login-card-container {
             grid-template-columns: 1fr;
-            max-width: 520px;
+            max-width: 500px;
             height: auto;
             max-height: none;
-            border-radius: 28px;
+            border-radius: 24px;
             margin: auto;
           }
 
@@ -1236,32 +1439,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           }
 
           .left-auth-panel {
-            padding: 34px 28px;
+            padding: 32px 26px;
             border-right: none;
           }
 
           .main-title {
-            font-size: 20px;
+            font-size: 19px;
           }
 
-          .floating-decor {
+          .floating-accent {
             display: none;
           }
         }
 
         @media (max-width: 480px) {
           .robolab-login-root {
-            padding: 10px 8px;
+            padding: 8px;
           }
 
           .left-auth-panel {
-            padding: 26px 18px;
+            padding: 24px 16px;
           }
 
-          .mascot-greeting-row {
+          .mascot-greeting-card {
             flex-direction: column;
             text-align: center;
-            gap: 10px;
+            gap: 8px;
           }
 
           .greeting-text-area {
@@ -1269,7 +1472,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSignIn, error, loading }
           }
 
           .main-title {
-            font-size: 19px;
+            font-size: 18px;
           }
         }
       `}</style>
