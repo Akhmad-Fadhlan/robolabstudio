@@ -2296,3 +2296,36 @@ html body:not(.light) .cat-section-header {
 #workspace-split-container {
   min-height: 0 !important;
 }
+
+
+/* ============================================================
+   BLOCKLY SVG DISPLAY ATTRIBUTE OVERRIDE (Fix for Tailwind CSS)
+   Tailwind applies `svg { display: block; }` which overrides
+   Blockly's SVG presentation attribute `display="none"`.
+   This caused flyout scrollbars (.blocklyFlyoutScrollbar) to
+   remain permanently visible over the workspace after closing!
+   ============================================================ */
+svg[display="none"],
+g[display="none"],
+path[display="none"],
+rect[display="none"],
+.blocklyFlyoutScrollbar[display="none"],
+.blocklyScrollbarVertical[display="none"],
+.blocklyScrollbarHorizontal[display="none"],
+.blocklyFlyout[display="none"],
+[display="none"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Ensure flyout scrollbars are always hidden when flyout is closed or not visible */
+.blocklyFlyout[style*="display: none"] ~ .blocklyFlyoutScrollbar,
+.blocklyFlyout[style*="display: none"] + .blocklyFlyoutScrollbar,
+.blocklyToolboxFlyout[style*="display: none"] ~ .blocklyFlyoutScrollbar,
+.blocklyToolboxFlyout[style*="display: none"] + .blocklyFlyoutScrollbar {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}

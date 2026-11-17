@@ -2667,6 +2667,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         .blocklyTreeSelected .blocklyTreeLabel, .blocklyToolboxCategorySelected .blocklyToolboxCategoryLabel { background: transparent !important; background-color: transparent !important; border-left: none !important; }
         .blocklyToolboxContents { overflow: visible !important; padding-bottom: 32px !important; }
         .blocklyToolboxDiv { overflow-x: hidden !important; overflow-y: auto !important; }
+        svg[display="none"], g[display="none"], path[display="none"], rect[display="none"],
+        .blocklyFlyoutScrollbar[display="none"], .blocklyScrollbarVertical[display="none"], .blocklyScrollbarHorizontal[display="none"],
+        [display="none"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+        .blocklyToolboxFlyout[style*="display: none"] ~ .blocklyFlyoutScrollbar,
+        .blocklyToolboxFlyout[style*="display: none"] + .blocklyFlyoutScrollbar,
+        .blocklyFlyout[style*="display: none"] ~ .blocklyFlyoutScrollbar,
+        .blocklyFlyout[style*="display: none"] + .blocklyFlyoutScrollbar { display: none !important; visibility: hidden !important; }
       `;
       document.head.appendChild(killStyle);
     }
@@ -2920,6 +2927,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           } else {
             sec.style.display = 'block';
           }
+        });
+      }
+
+      const flyout = (workspaceRef.current as any)?.getFlyout?.();
+      if (flyout && !flyout.isVisible() && rootEl) {
+        const flyoutSbs = rootEl.querySelectorAll('.blocklyFlyoutScrollbar');
+        flyoutSbs.forEach((el) => {
+          (el as HTMLElement).style.setProperty('display', 'none', 'important');
         });
       }
 
@@ -4597,7 +4612,42 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             if (typeof flyout.reflow === 'function') {
               flyout.reflow();
             }
+            if (blocklyDivRef.current && flyout.isVisible()) {
+              const flyoutSbs = blocklyDivRef.current.querySelectorAll('.blocklyFlyoutScrollbar');
+              flyoutSbs.forEach((sb) => {
+                if (sb.getAttribute('display') !== 'none') {
+                  (sb as HTMLElement).style.removeProperty('display');
+                }
+              });
+            }
             setTimeout(() => updateToolboxUIRef.current(), 20);
+          };
+        }
+
+        const origHide = flyout.hide?.bind(flyout);
+        if (origHide) {
+          flyout.hide = () => {
+            origHide();
+            if (blocklyDivRef.current) {
+              const flyoutSbs = blocklyDivRef.current.querySelectorAll('.blocklyFlyoutScrollbar');
+              flyoutSbs.forEach((el) => {
+                (el as HTMLElement).style.setProperty('display', 'none', 'important');
+              });
+            }
+            setTimeout(() => updateToolboxUIRef.current(), 10);
+          };
+        }
+
+        const origSetVisible = flyout.setVisible?.bind(flyout);
+        if (origSetVisible) {
+          flyout.setVisible = (visible: boolean) => {
+            origSetVisible(visible);
+            if (!visible && blocklyDivRef.current) {
+              const flyoutSbs = blocklyDivRef.current.querySelectorAll('.blocklyFlyoutScrollbar');
+              flyoutSbs.forEach((el) => {
+                (el as HTMLElement).style.setProperty('display', 'none', 'important');
+              });
+            }
           };
         }
       }
@@ -4822,6 +4872,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
     workspace.addChangeListener(updateCode);
     workspace.addChangeListener(handleWorkspaceXmlChange);
+    workspace.addChangeListener((e: any) => {
+      if (e.type === Blockly.Events.TOOLBOX_ITEM_SELECT || e.type === Blockly.Events.CLICK || e.type === Blockly.Events.BLOCK_DRAG) {
+        const flyout = (workspace as any)?.getFlyout?.();
+        if (flyout && !flyout.isVisible() && blocklyDivRef.current) {
+          const flyoutSbs = blocklyDivRef.current.querySelectorAll('.blocklyFlyoutScrollbar');
+          flyoutSbs.forEach((el) => {
+            (el as HTMLElement).style.setProperty('display', 'none', 'important');
+          });
+        }
+      }
+    });
     updateCodeRef.current = updateCode;
 
     // Force initial resize so SVG canvas fills the container correctly.
