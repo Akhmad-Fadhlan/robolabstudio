@@ -184,6 +184,8 @@ function parseCppSections(code: string) {
   return { globalLines, setupLines, loopLines, blynkBlocks };
 }
 
+const RESERVED_CPP = /^(?:while|if|else|for|do|switch|case|default|break|continue|return|goto|typedef|struct|union|enum|class|namespace|try|catch|throw|public|private|protected|static|const|volatile|extern|inline|virtual|explicit|friend|unsigned|signed|void|int|char|short|long|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|size_t)$/i;
+
 function buildArduinoConvertContext(globalLines: string[], setupLines: string[], parsedApi?: any) {
   const variables: Record<string, string> = {};
   const pinConstants: Record<string, string> = {};
@@ -295,39 +297,47 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
     }
 
     // Custom library object instantiation in global scope (e.g. NewPing sonar(12, 11, 200); or LiquidCrystal_I2C lcd(0x27, 16, 2);)
-    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s*(?:&\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[\({]([^)}]*)[)}]|=\s*(.+?))\s*;?$/);
+    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*[\({]([^)}]*)[)}]|(?:\s*=\s*(?:new\s+)?(.+?)))?\s*;?$/);
     if (objInstMatch) {
       const cls = objInstMatch[1].trim();
       const inst = objInstMatch[2].trim();
-      let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
-      if (args.startsWith(cls + '(') && args.endsWith(')')) {
-        args = args.substring(cls.length + 1, args.length - 1).trim();
-      }
-      const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
-      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel', 'Adafruit_SSD1306', 'LiquidCrystal_I2C'];
-      if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
-        libInstantiations.push({ className: cls, instanceName: inst, args });
-        instanceToClass[inst] = cls;
+      if (!RESERVED_CPP.test(cls) && !RESERVED_CPP.test(inst)) {
+        let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
+        if (args.startsWith(cls + '(') && args.endsWith(')')) {
+          args = args.substring(cls.length + 1, args.length - 1).trim();
+        } else if (args === '()' || args === '{}') {
+          args = '';
+        }
+        const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/i;
+        const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+        if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
+          libInstantiations.push({ className: cls, instanceName: inst, args });
+          instanceToClass[inst] = cls;
+        }
       }
     }
   }
 
   // Scan setupLines for object declarations (some examples declare instances in setup)
   for (const line of setupLines) {
-    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s*(?:&\s*)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[\({]([^)}]*)[)}]|=\s*(.+?))\s*;?$/);
+    const objInstMatch = line.match(/^(?:const\s+)?([a-zA-Z_][a-zA-Z0-9_:]*(?:<[^>]+>)?)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*[\({]([^)}]*)[)}]|(?:\s*=\s*(?:new\s+)?(.+?)))?\s*;?$/);
     if (objInstMatch) {
       const cls = objInstMatch[1].trim();
       const inst = objInstMatch[2].trim();
-      let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
-      if (args.startsWith(cls + '(') && args.endsWith(')')) {
-        args = args.substring(cls.length + 1, args.length - 1).trim();
-      }
-      const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/;
-      const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel', 'Adafruit_SSD1306', 'LiquidCrystal_I2C'];
-      if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
-        if (!libInstantiations.some(li => li.instanceName === inst)) {
-          libInstantiations.push({ className: cls, instanceName: inst, args });
-          instanceToClass[inst] = cls;
+      if (!RESERVED_CPP.test(cls) && !RESERVED_CPP.test(inst)) {
+        let args = (objInstMatch[3] || objInstMatch[4] || '').trim();
+        if (args.startsWith(cls + '(') && args.endsWith(')')) {
+          args = args.substring(cls.length + 1, args.length - 1).trim();
+        } else if (args === '()' || args === '{}') {
+          args = '';
+        }
+        const skipPrimitives = /^(?:unsigned\s+long|unsigned\s+int|long|int|short|float|double|bool|boolean|byte|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|char\s*\*?|String|void)$/i;
+        const skipHandled = ['Servo', 'DHT', 'Adafruit_NeoPixel'];
+        if (!skipPrimitives.test(cls) && !skipHandled.includes(cls)) {
+          if (!libInstantiations.some(li => li.instanceName === inst)) {
+            libInstantiations.push({ className: cls, instanceName: inst, args });
+            instanceToClass[inst] = cls;
+          }
         }
       }
     }
@@ -388,7 +398,7 @@ function convertCppExpr(expr: string, pinConstants: Record<string, string>, inst
 
   // Convert custom object and static class method calls in expressions: sonar.ping_cm(), myObj.calc(x), MFRC522Debug::PICC_DumpToSerial(...)
   res = res.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?:\.|::)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g, (full, inst, method, args) => {
-    const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot', 'display', 'oled', 'lcd'];
+    const skipInsts = ['Serial', 'SerialBT', 'WiFi', 'pixels', 'FastLED', 'time', 'math', 'robot'];
     if (skipInsts.includes(inst)) return full;
     const cleanArgs = (args || '').trim();
     return `robot.custom_lib_val("${inst}", "${method}", "${cleanArgs.replace(/"/g, '\\"')}")`;
@@ -602,8 +612,16 @@ function convertCtoPython(
         }
         continue;
       }
-      emitLine(`while ${convertCppCondition(condRaw, pinConstants)}:`);
-      if (hasOpeningBrace && !hasInlineClosingBrace) indentLevel++;
+      if (condRaw === '!Serial' || condRaw === '!SerialBT') {
+        continue;
+      }
+      const pyCond = (condRaw === '1' || condRaw === 'true' || condRaw === 'TRUE') ? 'True' : convertCppCondition(condRaw, pinConstants);
+      emitLine(`while ${pyCond}:`);
+      if (hasOpeningBrace && !hasInlineClosingBrace) {
+        indentLevel++;
+      } else if (!hasOpeningBrace) {
+        emitLine('    pass');
+      }
       continue;
     }
 
@@ -896,7 +914,7 @@ function convertCtoPython(
       const inst = objCallMatch[1];
       const method = objCallMatch[2];
       const rawArgs = objCallMatch[3].trim();
-      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'lcd', 'pixels', 'FastLED', 'ss'];
+      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'pixels', 'FastLED', 'ss'];
       if (!skipInstances.includes(inst)) {
         if (servoPins[inst] && (method === 'write' || method === 'writeMicroseconds')) {
           const pin = servoPins[inst];
@@ -928,7 +946,10 @@ function convertCtoPython(
   return pyLines;
 }
 
-export function arduinoToBlocklyXml(code: string, parsedApi?: any): string {
+export function arduinoToBlocklyXml(code: string, parsedApi?: any, precomputedXml?: string): string {
+  if (precomputedXml && precomputedXml.includes('<xml') && precomputedXml.includes('</xml>')) {
+    return precomputedXml.trim();
+  }
   const { globalLines, setupLines, loopLines, blynkBlocks } = parseCppSections(code);
   const ctx = buildArduinoConvertContext(globalLines, setupLines, parsedApi);
 

@@ -474,6 +474,55 @@ const getGlobalLibraryDirs = () => {
   return dirs;
 };
 
+
+// --- Gemini AI Integration for Arduino Library Analysis & Blockly Block Generation ---
+const DEFAULT_KEY_B64 = 'QVEuQWI4Uk42TGZNaHprT21UQnZuaXJVRWRnOGdoY1pmU3pVM2RmSjhtMllhV3FyX043VUE=';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || Buffer.from(DEFAULT_KEY_B64, 'base64').toString('utf8');
+const GEMINI_MODEL = 'gemini-3.5-flash';
+
+const callGeminiInMain = (prompt, timeoutMs = 12000) => {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const data = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2500 }
+    });
+
+    const https = require('https');
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let b = '';
+      res.on('data', d => b += d);
+      res.on('end', () => {
+        if (!resolved) {
+          resolved = true;
+          if (res.statusCode === 200) {
+            try {
+              const j = JSON.parse(b);
+              const text = j.candidates?.[0]?.content?.parts?.[0]?.text;
+              resolve(text ? text.trim() : null);
+            } catch (_) { resolve(null); }
+          } else {
+            resolve(null);
+          }
+        }
+      });
+    });
+
+    req.on('error', () => { if (!resolved) { resolved = true; resolve(null); } });
+    req.setTimeout(timeoutMs, () => { req.destroy(); if (!resolved) { resolved = true; resolve(null); } });
+    req.write(data);
+    req.end();
+  });
+};
+
 // --- Arduino Library Parser: Extract headers, classes, #define pins & constants, and methods ---
 const parseArduinoLibrary = (libPath, libName) => {
   const result = {
@@ -712,6 +761,45 @@ const parseArduinoLibrary = (libPath, libName) => {
       result.mainHeader = path.basename(bestHeader);
     }
 
+    // Scan .cpp and .ino files in library to capture all public method invocations
+    try {
+      const scanDirForMethods = (dir, depth = 0) => {
+        if (depth > 4) return;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const ent of entries) {
+          const fp = path.join(dir, ent.name);
+          if (ent.isDirectory() && ent.name !== '.git') {
+            scanDirForMethods(fp, depth + 1);
+          } else if (ent.isFile() && (ent.name.endsWith('.cpp') || ent.name.endsWith('.ino') || ent.name.endsWith('.h'))) {
+            try {
+              const src = fs.readFileSync(fp, 'utf8');
+              const callRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
+              let cm;
+              while ((cm = callRegex.exec(src)) !== null) {
+                const inst = cm[1];
+                const mName = cm[2];
+                const rawArgs = cm[3].trim();
+                const skip = ['Serial', 'SerialBT', 'WiFi', 'delay', 'pinMode', 'digitalWrite', 'analogWrite', 'digitalRead', 'analogRead'];
+                if (!skip.includes(inst) && !['if', 'while', 'for', 'switch'].includes(mName)) {
+                  if (!result.methods.some(m => m.name.toLowerCase() === mName.toLowerCase())) {
+                    const isGetter = /^(?:get|read|ping|analog|digital|is|has|check|status|available|measure)/i.test(mName);
+                    const isBool = /^(?:is|has|check)/i.test(mName);
+                    const pList = rawArgs ? rawArgs.split(',').map(p => p.trim()).filter(Boolean) : [];
+                    result.methods.push({
+                      name: mName,
+                      returnType: isBool ? 'Boolean' : (isGetter ? 'Number' : 'void'),
+                      params: pList
+                    });
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      };
+      scanDirForMethods(libPath);
+    } catch (_) {}
+
     if (!result.className) {
       if (result.classes.length > 0) {
         result.className = result.classes[0];
@@ -741,7 +829,7 @@ const scanLibraryExamples = (libPath, libName, parsedApi = null) => {
 
   if (exampleDir) {
     const findInoFiles = (dir, depth = 0) => {
-      if (depth > 3) return;
+      if (depth > 5) return;
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const ent of entries) {
@@ -2401,6 +2489,58 @@ ipcMain.handle('install-lib-from-github', async (event, payload) => {
 
     const parsedApi = parseArduinoLibrary(targetPath, safeFinalName);
     const examples = scanLibraryExamples(targetPath, safeFinalName, parsedApi);
+
+    // AI Enrichment with Gemini 3.5 Flash
+    if (Array.isArray(examples) && examples.length > 0) {
+      safeSend(event, 'arduino-log', { text: '🤖 Menyesuaikan blok kode visual dengan contoh library menggunakan Gemini AI...', type: 'info' });
+      for (let i = 0; i < Math.min(examples.length, 3); i++) {
+        const ex = examples[i];
+        if (ex.code) {
+          try {
+            const prompt = `Convert this Arduino C++ code for library "${safeFinalName}" into Google Blockly XML for RoboLab Studio:
+\`\`\`cpp
+${ex.code}
+\`\`\`
+XML specification:
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="arduino_setup" id="setup" x="40" y="40">
+    <statement name="STACK"> ... </statement>
+  </block>
+  <block type="arduino_loop" id="loop" x="40" y="240">
+    <statement name="STACK"> ... </statement>
+  </block>
+</xml>
+Block types:
+- custom_library_init: fields CLASS, INSTANCE, ARGS
+- custom_library_call: fields INSTANCE, METHOD, PARAM
+- custom_library_call_val: fields INSTANCE, METHOD, PARAM (for values)
+- arduino_define_pin: fields PIN_NAME, PIN_NUM
+- arduino_define_const: fields NAME, VALUE
+- arduino_pin_mode: fields PIN, MODE
+- arduino_digital_write: fields PIN, STATE
+- arduino_delay: field MS
+- arduino_serial_print / arduino_serial_print_inline: value TEXT
+- controls_if: value IF0, statement DO0
+- controls_whileUntil: field MODE (WHILE), value BOOL, statement DO
+- variables_set: field VAR, value VALUE
+- variables_get: field VAR
+
+Return ONLY raw XML inside <xml>...</xml>, no markdown formatting.`;
+            const geminiRes = await callGeminiInMain(prompt, 14000);
+            if (geminiRes) {
+              let clean = geminiRes.replace(/^\`\`\`(?:xml)?\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
+              const sIdx = clean.indexOf('<xml');
+              const eIdx = clean.lastIndexOf('</xml>');
+              if (sIdx >= 0 && eIdx > sIdx) {
+                ex.xml = clean.substring(sIdx, eIdx + 6);
+                safeSend(event, 'arduino-log', { text: `✓ Blok visual berhasil dibuat untuk contoh: ${ex.name}`, type: 'success' });
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     purgeBuildDirs();
     safeSend(event, 'arduino-log', { text: `✅ Library '${safeFinalName}' berhasil diinstal ke akun Anda!`, type: 'success' });
     return {
@@ -2499,6 +2639,58 @@ ipcMain.handle('install-lib-from-zip', async (event, payload) => {
 
     const parsedApi = parseArduinoLibrary(targetPath, safeName);
     const examples = scanLibraryExamples(targetPath, safeName, parsedApi);
+
+    // AI Enrichment with Gemini 3.5 Flash
+    if (Array.isArray(examples) && examples.length > 0) {
+      safeSend(event, 'arduino-log', { text: '🤖 Menyesuaikan blok kode visual dengan contoh ZIP menggunakan Gemini AI...', type: 'info' });
+      for (let i = 0; i < Math.min(examples.length, 3); i++) {
+        const ex = examples[i];
+        if (ex.code) {
+          try {
+            const prompt = `Convert this Arduino C++ code for library "${safeName}" into Google Blockly XML for RoboLab Studio:
+\`\`\`cpp
+${ex.code}
+\`\`\`
+XML specification:
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="arduino_setup" id="setup" x="40" y="40">
+    <statement name="STACK"> ... </statement>
+  </block>
+  <block type="arduino_loop" id="loop" x="40" y="240">
+    <statement name="STACK"> ... </statement>
+  </block>
+</xml>
+Block types:
+- custom_library_init: fields CLASS, INSTANCE, ARGS
+- custom_library_call: fields INSTANCE, METHOD, PARAM
+- custom_library_call_val: fields INSTANCE, METHOD, PARAM (for values)
+- arduino_define_pin: fields PIN_NAME, PIN_NUM
+- arduino_define_const: fields NAME, VALUE
+- arduino_pin_mode: fields PIN, MODE
+- arduino_digital_write: fields PIN, STATE
+- arduino_delay: field MS
+- arduino_serial_print / arduino_serial_print_inline: value TEXT
+- controls_if: value IF0, statement DO0
+- controls_whileUntil: field MODE (WHILE), value BOOL, statement DO
+- variables_set: field VAR, value VALUE
+- variables_get: field VAR
+
+Return ONLY raw XML inside <xml>...</xml>, no markdown formatting.`;
+            const geminiRes = await callGeminiInMain(prompt, 14000);
+            if (geminiRes) {
+              let clean = geminiRes.replace(/^\`\`\`(?:xml)?\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
+              const sIdx = clean.indexOf('<xml');
+              const eIdx = clean.lastIndexOf('</xml>');
+              if (sIdx >= 0 && eIdx > sIdx) {
+                ex.xml = clean.substring(sIdx, eIdx + 6);
+                safeSend(event, 'arduino-log', { text: `✓ Blok visual berhasil dibuat untuk contoh: ${ex.name}`, type: 'success' });
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     purgeBuildDirs();
     safeSend(event, 'arduino-log', { text: `✅ Library '${safeName}' dari ZIP berhasil diinstal ke akun Anda!`, type: 'success' });
     return {

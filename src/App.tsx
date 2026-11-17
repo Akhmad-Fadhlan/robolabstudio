@@ -60,6 +60,7 @@ import {
 import './App.css';
 import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
+import { convertArduinoCodeToBlocklyXmlWithGemini } from './services/geminiLibraryService';
 
 export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'arduino'): boolean => {
   const trimmed = (code || '').trim();
@@ -8251,12 +8252,35 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     // Auto-generate blockly XML jika template dari library belum memiliki XML
     let targetXml = proj.xml;
-    if ((!targetXml || targetXml.trim() === '') && initialIno) {
+    if ((!targetXml || targetXml.trim() === '' || !targetXml.includes('<statement name="STACK">')) && initialIno) {
       try {
-        targetXml = arduinoToBlocklyXml(initialIno, api);
+        targetXml = arduinoToBlocklyXml(initialIno, api, proj.xml);
       } catch (err) {
         targetXml = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
       }
+    }
+
+    // AI Auto-upgrade dengan Gemini jika block XML belum ada atau belum lengkap
+    if ((!proj.xml || !proj.xml.includes('custom_library_')) && initialIno) {
+      convertArduinoCodeToBlocklyXmlWithGemini(initialIno, (proj as any).libraryName || proj.name, api).then((aiXml) => {
+        if (aiXml && aiXml.includes('<statement name="STACK">')) {
+          setWorkspaceXmls(prev => ({
+            ...prev,
+            'firmware/main.ino': aiXml,
+            'python/main.py': aiXml
+          }));
+          setSimWorkspaceXmls(prev => ({
+            ...prev,
+            'firmware/main.ino': aiXml,
+            'python/main.py': aiXml
+          }));
+          setSyncStatuses(prev => ({
+            ...prev,
+            'firmware/main.ino': true,
+            'python/main.py': true
+          }));
+        }
+      }).catch(() => {});
     }
 
     // Load XML ke workspace Blockly
@@ -9654,7 +9678,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 isCustom: true,
                                 isGitHubLib: true,
                                 ino: ex.code,
-                                xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || installedParsedApi) || '') : '',
+                                xml: (ex.xml && ex.xml.includes('<statement name="STACK">')) ? ex.xml : (ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || installedParsedApi, ex.xml) || '') : ''),
                                 parsedApi: ex.parsedApi || installedParsedApi,
                                 py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || installedParsedApi) || `# Contoh Library ${ex.library}\n`) : ''
                               }));
@@ -12005,7 +12029,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               isCustom: true,
                               isGitHubLib: true,
                               ino: ex.code,
-                              xml: ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || res.parsedApi) || '') : '',
+                              xml: (ex.xml && ex.xml.includes('<statement name="STACK">')) ? ex.xml : (ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || res.parsedApi, ex.xml) || '') : ''),
                               parsedApi: ex.parsedApi || res.parsedApi,
                               py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || res.parsedApi) || `# Contoh Library ${ex.library}\n`) : ''
                             }));
