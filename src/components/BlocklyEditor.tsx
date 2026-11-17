@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
 import { Play, Square, RotateCcw, Trash2, Blocks } from 'lucide-react';
+import { findKnownLibrary } from '../data/knownLibrarySignatures';
 import {
   type RobotHardwareConfig,
   type RobotPlan,
@@ -1943,25 +1944,8 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
     return sig.blocks.map(b => b.type);
   }
   
-  // 3. Unknown/GitHub libraries
-  const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
-  return [
-    `custom_${safeName}_define_pin`.toLowerCase(),
-    `custom_${safeName}_set_pin`.toLowerCase(),
-    `custom_${safeName}_attach_pin`.toLowerCase(),
-    `custom_${safeName}_begin`.toLowerCase(),
-    `custom_${safeName}_begin_pin`.toLowerCase(),
-    `custom_${safeName}_init_pin`.toLowerCase(),
-    `custom_${safeName}_read_func`.toLowerCase(),
-    `custom_${safeName}_call_val`.toLowerCase(),
-    `custom_${safeName}_status`.toLowerCase(),
-    `custom_${safeName}_write`.toLowerCase(),
-    `custom_${safeName}_update`.toLowerCase(),
-    `custom_${safeName}_reset`.toLowerCase(),
-    `custom_${safeName}_read`.toLowerCase(),
-    `custom_${safeName}_print`.toLowerCase(),
-    `custom_${safeName}_call`.toLowerCase()
-  ];
+  // 3. Custom / GitHub / Verified libraries
+  return ['custom_library_init', 'custom_library_call', 'custom_library_call_val'];
 };
 
 export const registerCustomLibBlocks = (prefix: string, libName: string) => {
@@ -4402,41 +4386,61 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     xml += `</category>`;
 
     if (customLibs.length > 0) {
-      const escapeXmlVal = (str: string) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const escapeXmlVal = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       customLibs.forEach(lib => {
-        const libName = (typeof lib === 'string' ? lib : (lib as any)?.name) || 'CustomLib';
-        const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const libName = (typeof lib === "string" ? lib : (lib as any)?.name) || "CustomLib";
+        const safeName = libName.replace(/[^a-zA-Z0-9_]/g, "_");
         const prefix = `custom_${safeName}`.toLowerCase();
-        const parsedApi = (typeof lib === 'object' && lib) ? (lib as any).parsedApi : null;
+        const parsedApi = (typeof lib === "object" && lib) ? (lib as any).parsedApi : null;
+        const known = findKnownLibrary(libName);
 
         registerCustomLibBlocks(prefix, libName);
 
-        const className = parsedApi?.className || libName;
-        let instName = 'my' + className;
+        // Sanitize clean C++ class name (remove -Library or invalid chars)
+        let rawClass = parsedApi?.className || known?.className || libName;
+        rawClass = rawClass.replace(/[-_]Library$/i, "").replace(/[^a-zA-Z0-9_]/g, "_");
+        if (/^Adafruit[-_]GFX/i.test(libName) || /^GFX/i.test(libName)) {
+          rawClass = "Adafruit_GFX";
+        }
+        const className = rawClass;
         const lowerCls = className.toLowerCase();
-        if (lowerCls.includes('liquidcrystal') || lowerCls.includes('lcd')) instName = 'lcd';
-        else if (lowerCls.includes('newping') || lowerCls.includes('ultrasonic')) instName = 'sonar';
-        else if (lowerCls.includes('dht')) instName = 'dht';
-        else if (lowerCls.includes('mpu')) instName = 'mpu';
-        else if (lowerCls.includes('servo')) instName = 'myServo';
-        else {
-          const stripped = className.replace(/^(?:Adafruit_|DFRobot_|SparkFun_)/i, '');
-          instName = stripped.charAt(0).toLowerCase() + stripped.slice(1);
+
+        let instName = known?.instanceName || parsedApi?.instanceName;
+        if (!instName) {
+          if (lowerCls.includes("liquidcrystal") || lowerCls.includes("lcd")) instName = "lcd";
+          else if (lowerCls.includes("gfx") || lowerCls.includes("oled") || lowerCls.includes("ssd1306") || lowerCls.includes("tft") || lowerCls.includes("display")) instName = "display";
+          else if (lowerCls.includes("vl53") || lowerCls.includes("tof")) instName = "lox";
+          else if (lowerCls.includes("hx711") || lowerCls.includes("scale")) instName = "scale";
+          else if (lowerCls.includes("dfplayer") || lowerCls.includes("mp3")) instName = "myDFPlayer";
+          else if (lowerCls.includes("newping") || lowerCls.includes("ultrasonic")) instName = "sonar";
+          else if (lowerCls.includes("dht")) instName = "dht";
+          else if (lowerCls.includes("mpu")) instName = "mpu";
+          else if (lowerCls.includes("servo")) instName = "myServo";
+          else if (lowerCls.includes("rtc")) instName = "rtc";
+          else if (lowerCls.includes("pubsub") || lowerCls.includes("mqtt")) instName = "client";
+          else {
+            const stripped = className.replace(/^(?:Adafruit_|DFRobot_|SparkFun_)/i, "");
+            instName = (stripped.charAt(0).toLowerCase() + stripped.slice(1)).replace(/[^a-zA-Z0-9_]/g, "_");
+          }
         }
 
-        let defaultArgs = '';
-        if (parsedApi?.constructors && parsedApi.constructors.length > 0 && parsedApi.constructors[0].params) {
-          defaultArgs = parsedApi.constructors[0].params.join(', ');
-        } else if (lowerCls.includes('liquidcrystal')) {
-          defaultArgs = '0x27, 16, 2';
-        } else if (lowerCls.includes('newping')) {
-          defaultArgs = '12, 11, 200';
-        } else if (parsedApi?.pins && parsedApi.pins.length > 0) {
-          defaultArgs = parsedApi.pins.slice(0, 3).map((p: any) => p.name || p.value || '2').join(', ');
+        let defaultArgs = "";
+        if (known?.constructors && known.constructors.length > 0) {
+          defaultArgs = known.constructors[0].defaultArgs || known.constructors[0].params.join(", ");
+        } else if (parsedApi?.constructors && parsedApi.constructors.length > 0 && parsedApi.constructors[0].params) {
+          defaultArgs = parsedApi.constructors[0].params.join(", ");
+        } else if (lowerCls.includes("liquidcrystal")) {
+          defaultArgs = "0x27, 16, 2";
+        } else if (lowerCls.includes("ssd1306")) {
+          defaultArgs = "128, 64, &Wire, -1";
+        } else if (lowerCls.includes("newping")) {
+          defaultArgs = "12, 11, 200";
         }
 
-        const escapedName = escapeXmlVal(libName);
-        xml += `<category name="${escapedName}" colour="#6366f1" css-row="cat-default">`;
+        const categoryTitle = known?.categoryName || libName;
+        const categoryColour = known?.colour || "#6366f1";
+        const escapedName = escapeXmlVal(categoryTitle);
+        xml += `<category name="${escapedName}" colour="${categoryColour}" css-row="cat-default">`;
 
         // 1. Inisialisasi Objek Library
         xml += `<block type="custom_library_init">`;
@@ -4446,36 +4450,42 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         xml += `</block>`;
 
         // 2. #define Pin Definitions jika ada
-        if (Array.isArray(parsedApi?.pins) && parsedApi.pins.length > 0) {
-          parsedApi.pins.slice(0, 5).forEach((p: any) => {
+        const pinsToRender = (Array.isArray(parsedApi?.pins) && parsedApi.pins.length > 0) ? parsedApi.pins : (known?.pins || []);
+        if (pinsToRender.length > 0) {
+          pinsToRender.slice(0, 5).forEach((p: any) => {
             xml += `<block type="arduino_define_pin">`;
             xml += `<field name="PIN_NAME">${escapeXmlVal(p.name)}</field>`;
-            xml += `<field name="PIN_NUM">${escapeXmlVal(p.value || '2')}</field>`;
+            xml += `<field name="PIN_NUM">${escapeXmlVal(p.value || "2")}</field>`;
             xml += `</block>`;
           });
         }
 
         // 3. #define Constants jika ada
-        if (Array.isArray(parsedApi?.constants) && parsedApi.constants.length > 0) {
-          parsedApi.constants.slice(0, 5).forEach((c: any) => {
+        const constsToRender = (Array.isArray(parsedApi?.constants) && parsedApi.constants.length > 0) ? parsedApi.constants : (known?.constants || []);
+        if (constsToRender.length > 0) {
+          constsToRender.slice(0, 5).forEach((c: any) => {
             xml += `<block type="arduino_define_const">`;
             xml += `<field name="NAME">${escapeXmlVal(c.name)}</field>`;
-            xml += `<field name="VALUE">${escapeXmlVal(c.value || '0')}</field>`;
+            xml += `<field name="VALUE">${escapeXmlVal(c.value || "0")}</field>`;
             xml += `</block>`;
           });
         }
 
-        // 4. Specific Methods dari library
-        const methods: any[] = Array.isArray(parsedApi?.methods) ? parsedApi.methods.filter((m: any) =>
+        // 4. Specific Methods dari library (parsedApi atau known verified database)
+        const rawMethods: any[] = (Array.isArray(parsedApi?.methods) && parsedApi.methods.length > 0)
+          ? parsedApi.methods
+          : (known?.methods || []);
+
+        const methods: any[] = rawMethods.filter((m: any) =>
           m.name &&
-          !m.name.startsWith('_') &&
-          !m.name.startsWith('operator')
-        ) : [];
+          !m.name.startsWith("_") &&
+          !m.name.startsWith("operator")
+        );
 
         if (methods.length > 0) {
           methods.forEach((m: any) => {
-            const paramPlaceholder = Array.isArray(m.params) && m.params.length > 0 ? m.params.join(', ') : '';
-            if (m.returnType === 'void') {
+            const paramPlaceholder = Array.isArray(m.params) && m.params.length > 0 ? m.params.join(", ") : "";
+            if (m.returnType === "void") {
               xml += `<block type="custom_library_call">`;
               xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
               xml += `<field name="METHOD">${escapeXmlVal(m.name)}</field>`;
@@ -4489,27 +4499,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               xml += `</block>`;
             }
           });
-        } else if (!parsedApi) {
-          // Hanya tampilkan fallback blocks jika parsedApi benar-benar tidak ada (library belum ter-parse)
-          xml += `<block type="${prefix}_init_pin"></block>`;
-          xml += `<block type="${prefix}_begin"></block>`;
-          xml += `<block type="${prefix}_begin_pin"></block>`;
-          xml += `<block type="${prefix}_set_pin"></block>`;
-          xml += `<block type="${prefix}_read"></block>`;
-          xml += `<block type="${prefix}_call_val"></block>`;
-          xml += `<block type="${prefix}_print"></block>`;
-          xml += `<block type="${prefix}_call"></block>`;
         }
 
-        // Selalu sertakan generic call di akhir
+        // 5. Generic Custom Call blocks di akhir untuk fleksibilitas pemanggilan method lain
         xml += `<block type="custom_library_call">`;
         xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-        xml += `<field name="METHOD">update</field>`;
+        xml += `<field name="METHOD">panggilMethod</field>`;
         xml += `<field name="PARAM"></field>`;
         xml += `</block>`;
         xml += `<block type="custom_library_call_val">`;
         xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-        xml += `<field name="METHOD">getValue</field>`;
+        xml += `<field name="METHOD">ambilNilai</field>`;
         xml += `<field name="PARAM"></field>`;
         xml += `</block>`;
 

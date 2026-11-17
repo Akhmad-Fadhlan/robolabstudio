@@ -914,7 +914,7 @@ function convertCtoPython(
       const inst = objCallMatch[1];
       const method = objCallMatch[2];
       const rawArgs = objCallMatch[3].trim();
-      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'display', 'oled', 'pixels', 'FastLED', 'ss'];
+      const skipInstances = ['Serial', 'SerialBT', 'WiFi', 'Blynk', 'webSocket', 'client', 'pixels', 'FastLED', 'ss'];
       if (!skipInstances.includes(inst)) {
         if (servoPins[inst] && (method === 'write' || method === 'writeMicroseconds')) {
           const pin = servoPins[inst];

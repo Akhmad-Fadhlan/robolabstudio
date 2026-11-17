@@ -804,7 +804,39 @@ const parseArduinoLibrary = (libPath, libName) => {
       if (result.classes.length > 0) {
         result.className = result.classes[0];
       } else {
-        result.className = libName;
+        let cleanCls = libName.replace(/[-_]Library$/i, '').replace(/[^a-zA-Z0-9_]/g, '_');
+        if (/^Adafruit[-_]GFX/i.test(libName) || /^GFX/i.test(libName)) {
+          cleanCls = 'Adafruit_GFX';
+        }
+        result.className = cleanCls;
+      }
+    }
+
+    if (result.methods.length === 0) {
+      const lower = libName.toLowerCase();
+      if (lower.includes('gfx')) {
+        result.className = 'Adafruit_GFX';
+        result.mainHeader = 'Adafruit_GFX.h';
+        result.methods = [
+          { name: 'fillScreen', returnType: 'void', params: ['0'] },
+          { name: 'drawLine', returnType: 'void', params: ['0', '0', '127', '63', '1'] },
+          { name: 'drawRect', returnType: 'void', params: ['0', '0', '60', '30', '1'] },
+          { name: 'fillRect', returnType: 'void', params: ['0', '0', '60', '30', '1'] },
+          { name: 'drawCircle', returnType: 'void', params: ['64', '32', '20', '1'] },
+          { name: 'fillCircle', returnType: 'void', params: ['64', '32', '20', '1'] },
+          { name: 'drawTriangle', returnType: 'void', params: ['10', '10', '30', '50', '50', '10', '1'] },
+          { name: 'fillTriangle', returnType: 'void', params: ['10', '10', '30', '50', '50', '10', '1'] },
+          { name: 'drawRoundRect', returnType: 'void', params: ['0', '0', '50', '30', '5', '1'] },
+          { name: 'fillRoundRect', returnType: 'void', params: ['0', '0', '50', '30', '5', '1'] },
+          { name: 'setCursor', returnType: 'void', params: ['0', '0'] },
+          { name: 'setTextColor', returnType: 'void', params: ['1'] },
+          { name: 'setTextSize', returnType: 'void', params: ['1'] },
+          { name: 'print', returnType: 'void', params: ['"RoboLab"'] },
+          { name: 'println', returnType: 'void', params: ['"Studio"'] },
+          { name: 'setRotation', returnType: 'void', params: ['1'] },
+          { name: 'width', returnType: 'Number', params: [] },
+          { name: 'height', returnType: 'Number', params: [] }
+        ];
       }
     }
   } catch (_) {}
@@ -2488,6 +2520,30 @@ ipcMain.handle('install-lib-from-github', async (event, payload) => {
     } catch (_) {}
 
     const parsedApi = parseArduinoLibrary(targetPath, safeFinalName);
+
+    // AI API Extraction Fallback if no methods discovered by static parser
+    if (parsedApi.methods.length === 0) {
+      try {
+        const aiPrompt = `Analyze the Arduino library "${safeFinalName}".
+Return a JSON object with:
+"className": primary C++ class name,
+"mainHeader": primary header file (.h),
+"methods": array of objects with { "name": methodName, "returnType": "void"|"Number"|"Boolean", "params": [param1, param2] } for 8-15 most important methods.
+Only output raw JSON.`;
+        const aiRes = await callGeminiInMain(aiPrompt, 10000);
+        if (aiRes) {
+          const cleanAi = aiRes.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          const j = JSON.parse(cleanAi);
+          if (j && Array.isArray(j.methods) && j.methods.length > 0) {
+            parsedApi.className = j.className || parsedApi.className;
+            parsedApi.mainHeader = j.mainHeader || parsedApi.mainHeader;
+            parsedApi.methods = j.methods;
+            safeSend(event, 'arduino-log', { text: `✓ Gemini AI berhasil menganalisis API library '${safeFinalName}' (${j.methods.length} method)`, type: 'success' });
+          }
+        }
+      } catch (_) {}
+    }
+
     const examples = scanLibraryExamples(targetPath, safeFinalName, parsedApi);
 
     // AI Enrichment with Gemini 3.5 Flash
@@ -2638,6 +2694,30 @@ ipcMain.handle('install-lib-from-zip', async (event, payload) => {
     } catch (_) {}
 
     const parsedApi = parseArduinoLibrary(targetPath, safeName);
+
+    // AI API Extraction Fallback if no methods discovered by static parser
+    if (parsedApi.methods.length === 0) {
+      try {
+        const aiPrompt = `Analyze the Arduino library "${safeName}".
+Return a JSON object with:
+"className": primary C++ class name,
+"mainHeader": primary header file (.h),
+"methods": array of objects with { "name": methodName, "returnType": "void"|"Number"|"Boolean", "params": [param1, param2] } for 8-15 most important methods.
+Only output raw JSON.`;
+        const aiRes = await callGeminiInMain(aiPrompt, 10000);
+        if (aiRes) {
+          const cleanAi = aiRes.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          const j = JSON.parse(cleanAi);
+          if (j && Array.isArray(j.methods) && j.methods.length > 0) {
+            parsedApi.className = j.className || parsedApi.className;
+            parsedApi.mainHeader = j.mainHeader || parsedApi.mainHeader;
+            parsedApi.methods = j.methods;
+            safeSend(event, 'arduino-log', { text: `✓ Gemini AI berhasil menganalisis API library '${safeName}' (${j.methods.length} method)`, type: 'success' });
+          }
+        }
+      } catch (_) {}
+    }
+
     const examples = scanLibraryExamples(targetPath, safeName, parsedApi);
 
     // AI Enrichment with Gemini 3.5 Flash

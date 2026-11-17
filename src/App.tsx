@@ -60,7 +60,8 @@ import {
 import './App.css';
 import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
-import { convertArduinoCodeToBlocklyXmlWithGemini } from './services/geminiLibraryService';
+import { convertArduinoCodeToBlocklyXmlWithGemini, inferLibraryApiWithGemini } from './services/geminiLibraryService';
+import { findKnownLibrary } from './data/knownLibrarySignatures';
 
 export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'arduino'): boolean => {
   const trimmed = (code || '').trim();
@@ -4149,6 +4150,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setPackages((prev: any) => {
         const existingArduino = Array.isArray(prev?.arduino) ? [...prev.arduino] : [...INITIAL_PACKAGES.arduino];
 
+        const resolveApi = (libName: string, candidateApi: any, existingApi: any) => {
+          if (candidateApi && Array.isArray(candidateApi.methods) && candidateApi.methods.length > 0) return candidateApi;
+          if (existingApi && Array.isArray(existingApi.methods) && existingApi.methods.length > 0) return existingApi;
+          const known = findKnownLibrary(libName);
+          if (known) {
+            return {
+              name: libName,
+              className: known.className,
+              mainHeader: known.mainHeader,
+              constructors: known.constructors || [],
+              pins: known.pins || [],
+              constants: known.constants || [],
+              methods: known.methods
+            };
+          }
+          return candidateApi || existingApi || undefined;
+        };
+
         // A. Match disk libraries — gunakan exact match dulu, lalu substring hanya jika keduanya cukup panjang (>=5 char)
         let updated = existingArduino.map((p: any) => {
           const diskObj = installedLibsOnDisk.find((diskLib: any) => {
@@ -4170,7 +4189,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               ...p,
               installed: true,
               isCustom: isObj && diskObj.isCustom !== undefined ? diskObj.isCustom : p.isCustom,
-              parsedApi: (isObj && diskObj.parsedApi) ? diskObj.parsedApi : p.parsedApi,
+              parsedApi: resolveApi(p.name, isObj ? diskObj.parsedApi : null, p.parsedApi),
               headers: (isObj && diskObj.headers) ? diskObj.headers : p.headers
             };
           }
@@ -4198,7 +4217,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               installed: true,
               isCustom: true,
               headers: isObj && diskLib.headers ? diskLib.headers : updated[idx].headers,
-              parsedApi: isObj && diskLib.parsedApi ? diskLib.parsedApi : updated[idx].parsedApi,
+              parsedApi: resolveApi(diskName, isObj ? diskLib.parsedApi : null, updated[idx].parsedApi),
             };
           } else {
             updated.push({
@@ -4210,7 +4229,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               isCustom: true,
               userId: isObj ? diskLib.userId : authUser?.id,
               headers: isObj ? diskLib.headers : [],
-              parsedApi: isObj ? diskLib.parsedApi : undefined,
+              parsedApi: resolveApi(diskName, isObj ? diskLib.parsedApi : null, undefined),
             });
           }
         }
@@ -4226,6 +4245,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               isCustom: true,
               userId: authUser?.id,
               headers: cLib.headers || updated[idx].headers || [],
+              parsedApi: resolveApi(cLib.name, cLib.parsed_api, updated[idx]?.parsedApi),
             };
           } else {
             updated.push({
@@ -4237,6 +4257,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               isCustom: true,
               userId: authUser?.id,
               headers: cLib.headers || [],
+              parsedApi: resolveApi(cLib.name, cLib.parsed_api, undefined),
             });
           }
         }
@@ -9703,6 +9724,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         }
                       } else {
                         success = true;
+                        installedParsedApi = await inferLibraryApiWithGemini(repoName, url);
                         if (authUser?.id) {
                           await saveUserCustomLibrary(authUser.id, {
                             name: repoName,
@@ -9711,6 +9733,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             version: 'latest-git',
                             headers: []
                           });
+                        }
+                      }
+
+                      if (!installedParsedApi || !Array.isArray(installedParsedApi.methods) || installedParsedApi.methods.length === 0) {
+                        const known = findKnownLibrary(repoName) || findKnownLibrary(url);
+                        if (known) {
+                          installedParsedApi = {
+                            name: repoName,
+                            className: known.className,
+                            mainHeader: known.mainHeader,
+                            constructors: known.constructors || [],
+                            pins: known.pins || [],
+                            constants: known.constants || [],
+                            methods: known.methods
+                          };
                         }
                       }
 
@@ -12016,6 +12053,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: customGithubUrl.trim(), userId: authUser?.id });
                         if (res && res.success) {
                           const installedName = res.libName || 'Custom_Library';
+                          let finalApi = res.parsedApi;
+                          if (!finalApi || !Array.isArray(finalApi.methods) || finalApi.methods.length === 0) {
+                            const known = findKnownLibrary(installedName) || findKnownLibrary(customGithubUrl);
+                            if (known) {
+                              finalApi = {
+                                name: installedName,
+                                className: known.className,
+                                mainHeader: known.mainHeader,
+                                constructors: known.constructors || [],
+                                pins: known.pins || [],
+                                constants: known.constants || [],
+                                methods: known.methods
+                              };
+                            }
+                          }
                           if (Array.isArray(res.examples) && res.examples.length > 0) {
                             const newCards = res.examples.map((ex: any) => ({
                               name: ex.name,
@@ -12051,7 +12103,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 isCustom: true,
                                 userId: authUser?.id,
                                 headers: res.headers || [],
-                                parsedApi: res.parsedApi
+                                parsedApi: finalApi || res.parsedApi
                               }
                             ]
                           }));

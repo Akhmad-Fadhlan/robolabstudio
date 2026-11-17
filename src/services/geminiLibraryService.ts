@@ -4,6 +4,8 @@
  * using Google Gemini AI.
  */
 
+import { findKnownLibrary } from '../data/knownLibrarySignatures';
+
 const DEFAULT_KEY_B64 = 'QVEuQWI4Uk42TGZNaHprT21UQnZuaXJVRWRnOGdoY1pmU3pVM2RmSjhtMllhV3FyX043VUE=';
 export const getGeminiApiKey = (): string => {
   if (typeof localStorage !== 'undefined') {
@@ -239,6 +241,87 @@ Only return valid JSON, no markdown explanation.`;
     }
   } catch (err) {
     console.warn('[Gemini AI] Failed to parse library analysis JSON:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Infer library API metadata for any library from its name and GitHub URL using Gemini AI.
+ * First checks the verified known library database. If not found, prompts Gemini AI.
+ */
+export async function inferLibraryApiWithGemini(
+  libName: string,
+  githubUrl?: string
+): Promise<ParsedLibraryApi | null> {
+  if (!libName || !libName.trim()) return null;
+
+  // 1. Check known verified signatures first (fast, offline-capable)
+  const known = findKnownLibrary(libName) || (githubUrl ? findKnownLibrary(githubUrl) : null);
+  if (known) {
+    return {
+      name: libName,
+      className: known.className,
+      mainHeader: known.mainHeader,
+      constructors: known.constructors || [],
+      pins: known.pins || [],
+      constants: known.constants || [],
+      methods: known.methods,
+    };
+  }
+
+  // 2. Query Gemini AI to analyze the library
+  const prompt = `You are an expert Arduino C++ developer. Analyze the Arduino library "${libName}"${githubUrl ? ` (GitHub: ${githubUrl})` : ''}.
+Provide its standard public C++ API so we can generate accurate Google Blockly visual blocks for it.
+
+Required JSON format:
+{
+  "name": "${libName}",
+  "className": "PrimaryCppClassName",
+  "instanceName": "recommendedInstanceName",
+  "mainHeader": "PrimaryHeader.h",
+  "constructors": [
+    { "params": ["defaultParam1", "defaultParam2"] }
+  ],
+  "pins": [
+    { "name": "PIN_NAME", "value": "2", "isPin": true }
+  ],
+  "constants": [
+    { "name": "CONST_NAME", "value": "100", "isPin": false }
+  ],
+  "methods": [
+    {
+      "name": "methodName",
+      "returnType": "void" | "Number" | "Boolean" | "String",
+      "params": ["defaultArg1", "defaultArg2"],
+      "doc": "Deskripsi singkat fungsi dalam bahasa Indonesia"
+    }
+  ]
+}
+
+Provide 8-15 of the most commonly used, useful public methods of this library.
+Only return valid JSON, no markdown explanation.`;
+
+  const output = await callGeminiApi(prompt, 12000);
+  if (!output) return null;
+
+  try {
+    const cleanJson = output.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsed = JSON.parse(cleanJson);
+    if (parsed && typeof parsed === 'object') {
+      const sanitizedClass = (parsed.className || libName).replace(/[^a-zA-Z0-9_]/g, '_');
+      return {
+        name: parsed.name || libName,
+        className: sanitizedClass,
+        mainHeader: parsed.mainHeader || `${sanitizedClass}.h`,
+        constructors: Array.isArray(parsed.constructors) ? parsed.constructors : [],
+        pins: Array.isArray(parsed.pins) ? parsed.pins : [],
+        constants: Array.isArray(parsed.constants) ? parsed.constants : [],
+        methods: Array.isArray(parsed.methods) ? parsed.methods : [],
+      };
+    }
+  } catch (err) {
+    console.warn('[Gemini AI] Failed to infer library API:', err);
   }
 
   return null;
