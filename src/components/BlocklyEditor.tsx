@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
-import { Play, Square, RotateCcw, Trash2, Blocks, ZoomIn, ZoomOut } from 'lucide-react';
+import { Play, Square, RotateCcw, Trash2, Blocks } from 'lucide-react';
 import { findKnownLibrary } from '../data/knownLibrarySignatures';
 import {
   type RobotHardwareConfig,
@@ -6607,31 +6607,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           
           <div className={`h-3.5 w-px ${isLight ? 'bg-slate-200' : 'bg-slate-700/80'} mx-0.5`}></div>
 
-          <button 
-            onClick={() => {
-              if (workspaceRef.current) {
-                workspaceRef.current.zoomCenter(1);
-              }
-            }}
-            className={`flex items-center gap-1 text-xs font-bold border ${isLight ? 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' : 'bg-[#151824] text-slate-200 border-slate-700/80 hover:bg-slate-800 hover:text-white'} ${compact ? 'px-2 py-1' : 'px-2.5 py-1'} rounded-full transition cursor-pointer shadow-sm`}
-            title="Perbesar Tampilan (Zoom In)"
-          >
-            <ZoomIn className="w-3 h-3" />
-            <span className="hidden sm:inline">Zoom +</span>
-          </button>
-
-          <button 
-            onClick={() => {
-              if (workspaceRef.current) {
-                workspaceRef.current.zoomCenter(-1);
-              }
-            }}
-            className={`flex items-center gap-1 text-xs font-bold border ${isLight ? 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' : 'bg-[#151824] text-slate-200 border-slate-700/80 hover:bg-slate-800 hover:text-white'} ${compact ? 'px-2 py-1' : 'px-2.5 py-1'} rounded-full transition cursor-pointer shadow-sm`}
-            title="Perkecil Tampilan (Zoom Out)"
-          >
-            <ZoomOut className="w-3 h-3" />
-            <span className="hidden sm:inline">Zoom -</span>
-          </button>
 
           <button 
             onClick={() => {
@@ -6666,86 +6641,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
       <div className="flex-1 w-full relative z-10 overflow-hidden">
         <div ref={blocklyDivRef} className="w-full h-full" />
-
-        {/* Floating Canvas Control Dock: Zoom In, Zoom Out, Reset, Trash */}
-        <div className={`absolute bottom-4 right-4 z-30 flex items-center gap-1.5 p-1.5 rounded-2xl shadow-xl backdrop-blur-md border ${
-          isLight
-            ? 'bg-white/95 border-slate-200/90 shadow-slate-300/60'
-            : 'bg-[#0f121d]/95 border-slate-700/60 shadow-black/80'
-        }`}>
-          <button
-            onClick={() => {
-              if (workspaceRef.current) {
-                workspaceRef.current.zoomCenter(1);
-              }
-            }}
-            className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
-              isLight
-                ? 'hover:bg-slate-100 text-slate-700 active:scale-95'
-                : 'hover:bg-white/10 text-slate-200 active:scale-95'
-            }`}
-            title="Perbesar Tampilan (Zoom In)"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          
-          <button
-            onClick={() => {
-              if (workspaceRef.current) {
-                workspaceRef.current.zoomCenter(-1);
-              }
-            }}
-            className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
-              isLight
-                ? 'hover:bg-slate-100 text-slate-700 active:scale-95'
-                : 'hover:bg-white/10 text-slate-200 active:scale-95'
-            }`}
-            title="Perkecil Tampilan (Zoom Out)"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              if (workspaceRef.current) {
-                workspaceRef.current.setScale(compact ? 0.72 : 0.85);
-                workspaceRef.current.scrollCenter();
-              }
-            }}
-            className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
-              isLight
-                ? 'hover:bg-slate-100 text-slate-700 active:scale-95'
-                : 'hover:bg-white/10 text-slate-200 active:scale-95'
-            }`}
-            title="Reset Posisi dan Zoom"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <div className={`w-px h-5 mx-0.5 ${isLight ? 'bg-slate-200' : 'bg-white/10'}`} />
-
-          <button
-            onClick={() => {
-              if (!workspaceRef.current) return;
-              const selected = (Blockly as any).common?.getSelected?.() || (Blockly as any).selected;
-              if (selected && typeof selected.dispose === 'function') {
-                selected.dispose(false, true);
-              } else {
-                if (window.confirm('Bersihkan semua blok di lembar kerja?')) {
-                  workspaceRef.current.clear();
-                }
-              }
-            }}
-            className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
-              isLight
-                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 active:scale-95'
-                : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 active:scale-95'
-            }`}
-            title="Hapus Blok Terpilih / Bersihkan Lembar Kerja"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
       </div>
     </div>
   );
