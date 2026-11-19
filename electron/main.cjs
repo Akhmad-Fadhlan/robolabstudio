@@ -576,8 +576,8 @@ const parseArduinoLibrary = (libPath, libName) => {
               if (!result.className) result.className = kw;
             } else if (type === 'KEYWORD2') {
               if (!result.methods.some(m => m.name.toLowerCase() === kw.toLowerCase())) {
-                const isBool = /^(?:is|has|check)\b/i.test(kw);
-                const isGetter = /^(?:get|read|ping|analog|digital)\b/i.test(kw);
+                const isBool = /^(?:is|has|check|was|can|should)/i.test(kw);
+                const isGetter = /^(?:get|read|calc|calculate|measure|ping|analog|digital)/i.test(kw);
                 result.methods.push({
                   name: kw,
                   returnType: isBool ? 'Boolean' : (isGetter ? 'Number' : 'void'),
@@ -616,8 +616,8 @@ const parseArduinoLibrary = (libPath, libName) => {
         while ((dm = defRegex.exec(content)) !== null) {
           const dName = dm[1].trim();
           const dVal = dm[2].trim().replace(/^\(|\)$/g, '');
-          if (dName.toUpperCase() === `_${fileNameBase}_H_` || dName.toUpperCase() === `${fileNameBase}_H` || dName.toUpperCase() === `_${fileNameBase}_H`) continue;
-          if (dName.endsWith('_H') && (!dVal || dVal === '1')) continue;
+          if (dVal.startsWith('#') || dVal.startsWith('//') || dVal.startsWith('/*')) continue;
+          if (dName.toUpperCase() === `_${fileNameBase}_H_` || dName.toUpperCase() === `${fileNameBase}_H` || dName.toUpperCase() === `_${fileNameBase}_H` || dName.endsWith('_H') || dName.endsWith('_H_')) continue;
           if (dVal.startsWith('(') && dVal.includes(')')) continue;
 
           const isPin = pinKeywordsRegex.test(dName) || /^(?:[AD]?\d+)$/.test(dVal);
@@ -707,13 +707,14 @@ const parseArduinoLibrary = (libPath, libName) => {
 
               const existingIdx = result.methods.findIndex(m => m.name.toLowerCase() === mName.toLowerCase());
               const isVoid = /\bvoid\b/i.test(rawRetType);
-              const isBool = /\b(?:bool|boolean)\b/i.test(rawRetType) || /^(?:is|has|check)\b/i.test(mName);
-              const returnType = isVoid ? 'void' : (isBool ? 'Boolean' : 'Number');
+              const isBool = /\b(?:bool|boolean)\b/i.test(rawRetType) || /^(?:is|has|check|was|can|should)/i.test(mName);
+              const isNum = /\b(?:float|double|int|uint\d+_t|int\d+_t|long|unsigned|byte|word|size_t|short)\b/i.test(rawRetType) || /^(?:get|read|calc|calculate|measure|ping)/i.test(mName);
+              const returnType = isVoid ? 'void' : (isBool ? 'Boolean' : (isNum ? 'Number' : 'Number'));
               if (existingIdx >= 0) {
-                if (result.methods[existingIdx].params.length === 0 && mParams.length > 0) {
+                if (mParams.length > 0) {
                   result.methods[existingIdx].params = mParams;
-                  result.methods[existingIdx].returnType = returnType;
                 }
+                result.methods[existingIdx].returnType = returnType;
               } else {
                 result.methods.push({ name: mName, returnType, params: mParams });
               }

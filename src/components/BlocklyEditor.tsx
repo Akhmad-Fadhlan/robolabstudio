@@ -4501,17 +4501,19 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           });
         }
 
-        // 5. Generic Custom Call blocks di akhir untuk fleksibilitas pemanggilan method lain
-        xml += `<block type="custom_library_call">`;
-        xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-        xml += `<field name="METHOD">panggilMethod</field>`;
-        xml += `<field name="PARAM"></field>`;
-        xml += `</block>`;
-        xml += `<block type="custom_library_call_val">`;
-        xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-        xml += `<field name="METHOD">ambilNilai</field>`;
-        xml += `<field name="PARAM"></field>`;
-        xml += `</block>`;
+        // 5. Generic Custom Call blocks hanya jika tidak ada method spesifik yang terdeteksi
+        if (methods.length === 0) {
+          xml += `<block type="custom_library_call">`;
+          xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+          xml += `<field name="METHOD">panggilMethod</field>`;
+          xml += `<field name="PARAM"></field>`;
+          xml += `</block>`;
+          xml += `<block type="custom_library_call_val">`;
+          xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
+          xml += `<field name="METHOD">ambilNilai</field>`;
+          xml += `<field name="PARAM"></field>`;
+          xml += `</block>`;
+        }
 
         xml += `</category>`;
       });

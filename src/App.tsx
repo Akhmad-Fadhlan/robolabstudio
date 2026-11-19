@@ -62,6 +62,7 @@ import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
 import { convertArduinoCodeToBlocklyXmlWithGemini, inferLibraryApiWithGemini } from './services/geminiLibraryService';
 import { findKnownLibrary } from './data/knownLibrarySignatures';
+import { parseArduinoZipArchive } from './services/zipLibraryService';
 
 export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'arduino'): boolean => {
   const trimmed = (code || '').trim();
@@ -5533,61 +5534,208 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleImportZipLibrary = async () => {
     const req = (window as any).__electronRequire || (window as any).require;
+
+    // Flow for Electron (Native OS dialog + background extraction)
     if (req) {
       try {
         const electron = req('electron');
+        setTerminalLogs((prev: any) => [
+          ...prev,
+          { text: `📂 Membuka penjelajah berkas untuk memilih file ZIP library...`, type: 'info' }
+        ]);
         const res = await electron.ipcRenderer.invoke('install-lib-from-zip', { userId: authUser?.id });
-        if (res && res.success) {
-          const installedName = res.libName || 'Custom_ZIP_Library';
-          setPackages((prev: any) => ({
-            ...prev,
-            arduino: [
-              ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
-              {
-                name: installedName,
-                desc: `ZIP Library terpasang di akun Anda`,
-                version: '1.0.0-custom',
-                author: authUser?.name || 'Akun Anda',
-                installed: true,
-                isCustom: true,
-                userId: authUser?.id
-              }
-            ]
-          }));
-          if (authUser?.id) {
-            saveUserCustomLibrary(authUser.id, {
-              name: installedName,
-              source_type: 'zip',
-              version: '1.0.0-custom',
-              headers: res.headers || []
-            });
+        if (!res || !res.success) {
+          if (res?.error && res.error !== 'Canceled') {
+            setTerminalLogs((prev: any) => [
+              ...prev,
+              { text: `[ZIP IMPORT] ❌ Gagal menginstal file ZIP: ${res.error}`, type: 'error' }
+            ]);
           }
-          setTerminalLogs((prev: any) => [
-            ...prev,
-            { text: `[ZIP IMPORT] Library '${installedName}' berhasil diekstrak dan diinstal ke akun Anda!`, type: 'success' }
-          ]);
-          syncInstalledLibraries();
+          return;
         }
+
+        const installedName = res.libName || 'Custom_ZIP_Library';
+        let finalApi = res.parsedApi;
+        if (!finalApi || !Array.isArray(finalApi.methods) || finalApi.methods.length === 0) {
+          const known = findKnownLibrary(installedName);
+          if (known) {
+            finalApi = {
+              name: installedName,
+              className: known.className,
+              mainHeader: known.mainHeader,
+              constructors: known.constructors || [],
+              pins: known.pins || [],
+              constants: known.constants || [],
+              methods: known.methods
+            };
+          }
+        }
+
+        if (Array.isArray(res.examples) && res.examples.length > 0) {
+          const newCards = res.examples.map((ex: any) => ({
+            name: ex.name,
+            board: ex.board || 'Arduino Uno',
+            description: ex.description || `Contoh program ${ex.name} dari library ${ex.library || installedName}.`,
+            iconColor: 'emerald',
+            components: ['custom_lib'],
+            libraryName: ex.library || installedName,
+            category: 'Library Example',
+            isLibraryExample: true,
+            isCustom: true,
+            isGitHubLib: true,
+            ino: ex.code,
+            xml: (ex.xml && ex.xml.includes('<statement name="STACK">')) ? ex.xml : (ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || finalApi, ex.xml) || '') : ''),
+            parsedApi: ex.parsedApi || finalApi,
+            py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || finalApi) || `# Contoh Library ${ex.library}\n`) : ''
+          }));
+          setCustomLibProjects((prev: any[]) => {
+            const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
+            return [...newCards, ...existing];
+          });
+        }
+
+        setPackages((prev: any) => ({
+          ...prev,
+          arduino: [
+            ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
+            {
+              name: installedName,
+              desc: `ZIP Library terpasang di akun Anda`,
+              version: '1.0.0-custom',
+              author: authUser?.name || 'Akun Anda',
+              installed: true,
+              isCustom: true,
+              userId: authUser?.id,
+              headers: res.headers || [],
+              parsedApi: finalApi || res.parsedApi
+            }
+          ]
+        }));
+
+        if (authUser?.id) {
+          await saveUserCustomLibrary(authUser.id, {
+            name: installedName,
+            source_type: 'zip',
+            version: '1.0.0-custom',
+            headers: res.headers || [],
+            parsed_api: finalApi || res.parsedApi
+          });
+        }
+
+        const methodCount = (finalApi?.methods || []).length;
+        setTerminalLogs((prev: any) => [
+          ...prev,
+          { text: `[ZIP IMPORT] ✓ Library '${installedName}' dari ZIP berhasil diekstrak dan diinstal! (${methodCount} blok method tersedia)`, type: 'success' }
+        ]);
+        await syncInstalledLibraries();
+        return;
       } catch (e: any) {
-        console.warn('ZIP Import error:', e);
+        console.warn('Electron ZIP Import error, falling back to browser picker:', e);
       }
-    } else {
-      const input = prompt("Nama Pustaka Arduino (.zip):", "Adafruit_MPU6050.zip");
-      if (!input) return;
+    }
+
+    // Flow for Web Browser / Fallback: Opens Native File Picker via input[type="file"]
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip,application/zip,application/x-zip-compressed';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (!file) return;
+
+      setTerminalLogs((prev: any) => [
+        ...prev,
+        { text: `📦 Membaca dan mengekstrak berkas ZIP: ${file.name}...`, type: 'info' }
+      ]);
+
+      const parsed = await parseArduinoZipArchive(file, file.name);
+      if (!parsed.success) {
+        setTerminalLogs((prev: any) => [
+          ...prev,
+          { text: `[ZIP IMPORT] ❌ Gagal membaca ZIP: ${parsed.error || 'Format berkas tidak valid'}`, type: 'error' }
+        ]);
+        return;
+      }
+
+      const installedName = parsed.name;
+      let finalApi = parsed.parsedApi;
+      if (!finalApi || !Array.isArray(finalApi.methods) || finalApi.methods.length === 0) {
+        const known = findKnownLibrary(installedName);
+        if (known) {
+          finalApi = {
+            name: installedName,
+            className: known.className,
+            mainHeader: known.mainHeader,
+            constructors: known.constructors || [],
+            pins: known.pins || [],
+            constants: known.constants || [],
+            methods: known.methods
+          };
+        }
+      }
+
+      if (Array.isArray(parsed.examples) && parsed.examples.length > 0) {
+        const newCards = parsed.examples.map((ex: any) => ({
+          name: ex.name,
+          board: ex.board || 'Arduino Uno',
+          description: ex.description || `Contoh program ${ex.name} dari library ${installedName}.`,
+          iconColor: 'emerald',
+          components: ['custom_lib'],
+          libraryName: installedName,
+          category: 'Library Example',
+          isLibraryExample: true,
+          isCustom: true,
+          isGitHubLib: true,
+          ino: ex.code,
+          xml: ex.xml || (ex.code ? (arduinoToBlocklyXml(ex.code, finalApi) || '') : ''),
+          parsedApi: finalApi,
+          py: ex.py || (ex.code ? (arduinoToPython(ex.code, finalApi) || '') : '')
+        }));
+        setCustomLibProjects((prev: any[]) => {
+          const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
+          return [...newCards, ...existing];
+        });
+      }
+
       setPackages((prev: any) => ({
         ...prev,
         arduino: [
-          ...prev.arduino,
+          ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
           {
-            name: input.replace('.zip', ''),
-            desc: `ZIP Library imported from local file: ${input}`,
-            version: '1.0.0-custom',
+            name: installedName,
+            desc: parsed.description || `ZIP Library: ${file.name}`,
+            version: parsed.version || '1.0.0-custom',
+            author: parsed.author || authUser?.name || 'Akun Anda',
             installed: true,
-            isCustom: true
+            isCustom: true,
+            userId: authUser?.id,
+            headers: parsed.headers || [],
+            parsedApi: finalApi
           }
         ]
       }));
-    }
+
+      if (authUser?.id) {
+        await saveUserCustomLibrary(authUser.id, {
+          name: installedName,
+          source_type: 'zip',
+          version: parsed.version || '1.0.0-custom',
+          headers: parsed.headers || [],
+          parsed_api: finalApi
+        });
+      }
+
+      const methodCount = (finalApi?.methods || []).length;
+      setTerminalLogs((prev: any) => [
+        ...prev,
+        { text: `[ZIP IMPORT] ✓ Library '${installedName}' dari ZIP berhasil diekstrak dan diinstal! (${methodCount} blok method tersedia)`, type: 'success' }
+      ]);
+    };
+
+    input.click();
   };
 
   const handleTerminalCommand = (e: React.FormEvent) => {
@@ -9791,10 +9939,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   </button>
                   <button
                     onClick={handleImportZipLibrary}
-                    className="px-4 py-2 text-white-force text-xs font-bold rounded-lg transition cursor-pointer select-none whitespace-nowrap flex items-center gap-1.5 hover:opacity-90"
+                    className="px-4 py-2 text-white-force text-xs font-bold rounded-lg transition cursor-pointer select-none whitespace-nowrap flex items-center gap-1.5 hover:opacity-90 shadow-sm"
                     style={{ background: 'var(--accent-gradient)' }}
                   >
-                    📦 Upload ZIP
+                    📁 Upload ZIP (Buka Folder)
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-500">Paste URL repo GitHub atau upload file .zip library Arduino yang sudah didownload.</p>
@@ -12027,6 +12175,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)'
                 }}
               />
+
+              {/* ZIP Upload Card / Button */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleImportZipLibrary}
+                  className="w-full px-4 py-2.5 text-white-force text-xs font-bold rounded-xl transition cursor-pointer select-none flex items-center justify-center gap-2 hover:opacity-95 shadow-md"
+                  style={{ background: 'var(--accent-gradient)' }}
+                >
+                  📁 Unggah File .ZIP Library Arduino (Buka File Explorer)
+                </button>
+              </div>
 
               {/* GitHub Direct URL Install Box */}
               <div className="flex gap-2">

@@ -234,6 +234,105 @@ export const KNOWN_LIBRARIES: KnownLibraryApi[] = [
       { name: 'subscribe', returnType: 'Boolean', params: ['"robolab/perintah"'], label: 'Berlangganan Topik MQTT (Topik)', doc: 'Menerima pesan dari topik MQTT' },
       { name: 'loop', returnType: 'Boolean', params: [], label: 'Loop MQTT (Panggil di Loop)', doc: 'Menjaga koneksi tetap hidup dan memproses pesan masuk' }
     ]
+  },
+
+  // ── GravityTDS (DFRobot Analog TDS Sensor Kualitas Air) ───────────────────
+  {
+    patterns: ['gravitytds', 'gravity_tds', 'gravity-tds', 'tds', 'dfrobot_gravitytds'],
+    className: 'GravityTDS',
+    instanceName: 'gravityTds',
+    mainHeader: 'GravityTDS.h',
+    categoryName: 'Gravity TDS (Air)',
+    colour: '#0284c7',
+    constructors: [{ params: [], defaultArgs: '' }],
+    pins: [{ name: 'TdsSensorPin', value: 'A1', isPin: true }],
+    constants: [
+      { name: 'TdsFactor', value: '0.5', isPin: false },
+      { name: 'ReceivedBufferLength', value: '20', isPin: false }
+    ],
+    methods: [
+      { name: 'setPin', returnType: 'void', params: ['A1'], label: 'Atur Pin Sensor (pin analog)', doc: 'Menghubungkan sensor TDS ke pin analog mikrokontroler (contoh: A1)' },
+      { name: 'setAref', returnType: 'void', params: ['5.0'], label: 'Atur Tegangan Referensi Aref (V)', doc: 'Mengatur tegangan referensi ADC mikrokontroler (5.0V pada Uno/Nano, 3.3V pada ESP32)' },
+      { name: 'setAdcRange', returnType: 'void', params: ['1024.0'], label: 'Atur Resolusi ADC (1024 / 4096)', doc: 'Resolusi konversi ADC (1024.0 untuk Uno 10-bit, 4096.0 untuk ESP32 12-bit)' },
+      { name: 'setTemperature', returnType: 'void', params: ['25.0'], label: 'Atur Suhu Air Kompensasi (°C)', doc: 'Mengatur nilai suhu air untuk kompensasi otomatis keakuratan pembacaan TDS' },
+      { name: 'begin', returnType: 'void', params: [], label: 'Mulai Sensor TDS (begin)', doc: 'Inisialisasi objek sensor TDS' },
+      { name: 'update', returnType: 'void', params: [], label: 'Perbarui Sampel TDS (update di loop)', doc: 'Membaca sampel tegangan analog dan menghitung ppm TDS (wajib dipanggil di loop)' },
+      { name: 'getTdsValue', returnType: 'Number', params: [], label: 'Baca Nilai TDS Air (ppm)', doc: 'Mengembalikan kadar Total Dissolved Solids dalam satuan ppm (parts per million)' },
+      { name: 'getKvalue', returnType: 'Number', params: [], label: 'Baca Nilai Kalibrasi K (K-Value)', doc: 'Mengembalikan nilai koefisien kalibrasi elektroda TDS' }
+    ]
+  },
+
+  // ── DFRobot_PH (DFRobot Gravity Analog pH Sensor) ─────────────────────────
+  {
+    patterns: ['dfrobot_ph', 'dfrobot-ph', 'gravity_ph', 'ph_meter'],
+    className: 'DFRobot_PH',
+    instanceName: 'ph',
+    mainHeader: 'DFRobot_PH.h',
+    categoryName: 'DFRobot pH Sensor',
+    colour: '#059669',
+    constructors: [{ params: [], defaultArgs: '' }],
+    pins: [{ name: 'PH_PIN', value: 'A1', isPin: true }],
+    methods: [
+      { name: 'begin', returnType: 'void', params: [], label: 'Mulai Sensor pH (begin)', doc: 'Inisialisasi sensor pH dan memuat data kalibrasi dari EEPROM' },
+      { name: 'readPH', returnType: 'Number', params: ['voltage', '25.0'], label: 'Hitung Nilai pH (tegangan, suhu)', doc: 'Mengonversi pembacaan tegangan analog dan suhu menjadi nilai derajat keasaman pH (0-14)' },
+      { name: 'calibration', returnType: 'void', params: ['voltage', '25.0'], label: 'Kalibrasi Sensor pH (tegangan, suhu)', doc: 'Rutin kalibrasi sensor pH menggunakan larutan buffer standar 4.0 & 7.0' }
+    ]
+  },
+
+  // ── DFRobot_EC (DFRobot Gravity Analog Electrical Conductivity) ───────────
+  {
+    patterns: ['dfrobot_ec', 'dfrobot-ec', 'gravity_ec', 'ec_meter'],
+    className: 'DFRobot_EC',
+    instanceName: 'ec',
+    mainHeader: 'DFRobot_EC.h',
+    categoryName: 'DFRobot EC Sensor',
+    colour: '#0891b2',
+    constructors: [{ params: [], defaultArgs: '' }],
+    pins: [{ name: 'EC_PIN', value: 'A2', isPin: true }],
+    methods: [
+      { name: 'begin', returnType: 'void', params: [], label: 'Mulai Sensor EC (begin)', doc: 'Inisialisasi sensor konduktivitas listrik cairan dan memuat data kalibrasi dari EEPROM' },
+      { name: 'readEC', returnType: 'Number', params: ['voltage', '25.0'], label: 'Hitung Nilai EC (tegangan, suhu)', doc: 'Mengonversi tegangan analog dan suhu menjadi nilai konduktivitas listrik (ms/cm)' },
+      { name: 'calibration', returnType: 'void', params: ['voltage', '25.0'], label: 'Kalibrasi Sensor EC (tegangan, suhu)', doc: 'Rutin kalibrasi sensor EC menggunakan larutan standar' }
+    ]
+  },
+
+  // ── NewPing (High Performance Ultrasonic HC-SR04) ─────────────────────────
+  {
+    patterns: ['newping', 'new_ping', 'hcsr04_sonar'],
+    className: 'NewPing',
+    instanceName: 'sonar',
+    mainHeader: 'NewPing.h',
+    categoryName: 'NewPing Ultrasonik',
+    colour: '#6366f1',
+    constructors: [{ params: ['trigPin', 'echoPin', 'maxCm'], defaultArgs: '12, 11, 200' }],
+    pins: [
+      { name: 'TRIGGER_PIN', value: '12', isPin: true },
+      { name: 'ECHO_PIN', value: '11', isPin: true }
+    ],
+    constants: [{ name: 'MAX_DISTANCE', value: '200', isPin: false }],
+    methods: [
+      { name: 'ping_cm', returnType: 'Number', params: [], label: 'Baca Jarak Objek (cm)', doc: 'Mengembalikan jarak pantulan gelombang suara dalam satuan sentimeter (0 jika di luar jangkauan)' },
+      { name: 'ping_in', returnType: 'Number', params: [], label: 'Baca Jarak Objek (inci)', doc: 'Mengembalikan jarak pantulan dalam satuan inci' },
+      { name: 'ping_median', returnType: 'Number', params: ['5'], label: 'Baca Jarak Median Stabil (sampel)', doc: 'Mengambil n kali sampel dan mengembalikan median untuk menyaring derau pembacaan' },
+      { name: 'ping', returnType: 'Number', params: [], label: 'Baca Waktu Pantul Echo (mikrodetik)', doc: 'Mengembalikan durasi bolak-balik pulsa dalam mikrodetik' }
+    ]
+  },
+
+  // ── Adafruit MPU6050 Accelerometer & Gyroscope ────────────────────────────
+  {
+    patterns: ['adafruit_mpu6050', 'mpu6050', 'mpu_6050'],
+    className: 'Adafruit_MPU6050',
+    instanceName: 'mpu',
+    mainHeader: 'Adafruit_MPU6050.h',
+    categoryName: 'MPU6050 Akselerometer',
+    colour: '#8b5cf6',
+    constructors: [{ params: [], defaultArgs: '' }],
+    methods: [
+      { name: 'begin', returnType: 'Boolean', params: [], label: 'Mulai Sensor MPU6050 (I2C)', doc: 'Inisialisasi chip akselerometer dan giroskop 6-axis MPU6050 via bus I2C' },
+      { name: 'setAccelerometerRange', returnType: 'void', params: ['MPU6050_RANGE_8_G'], label: 'Atur Rentang Akselerometer (2G/4G/8G/16G)', doc: 'Menentukan skala batas maksimum pengukuran percepatan gravitasi' },
+      { name: 'setGyroRange', returnType: 'void', params: ['MPU6050_RANGE_500_DEG'], label: 'Atur Rentang Giroskop (250/500/1000/2000 deg/s)', doc: 'Menentukan skala sudut putar maksimum giroskop' },
+      { name: 'setFilterBandwidth', returnType: 'void', params: ['MPU6050_BAND_21_HZ'], label: 'Atur Filter Bandwidth (DLPF)', doc: 'Mengatur filter sinyal low-pass bawaan chip untuk meredam getaran mekanis' }
+    ]
   }
 ];
 

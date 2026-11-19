@@ -553,6 +553,7 @@ export interface UserCustomLibraryRecord {
   source_url?: string;
   version?: string;
   headers?: string[];
+  parsed_api?: any;
   created_at?: string;
 }
 
