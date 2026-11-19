@@ -1302,6 +1302,28 @@ html body #root .blocklyTreeRow::before {
 .theme-light .blocklyZoom > image,
 .theme-light .blocklyZoom > svg { filter: invert(0.8); }
 
+/* Blockly Native Trashcan & Zoom Controls */
+.blocklyTrash {
+  cursor: pointer;
+  opacity: 0.88;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.blocklyTrash:hover {
+  opacity: 1;
+}
+.blocklyZoom {
+  cursor: pointer;
+  opacity: 0.88;
+  transition: opacity 0.2s ease;
+}
+.blocklyZoom:hover {
+  opacity: 1;
+}
+.theme-dark .blocklyZoom > image,
+.theme-dark .blocklyZoom > svg {
+  filter: brightness(1.2) contrast(1.1);
+}
+
 /* ── 14. SIMULATOR PANEL — all internal dark classes ── */
 .theme-light .panel-simulator .bg-\[\#08090d\],
 .theme-light .panel-simulator .bg-\[\#0c0d12\] { background-color: #f8fafc !important; }

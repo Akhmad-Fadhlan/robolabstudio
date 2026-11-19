@@ -145,10 +145,10 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
       isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-sm text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
-      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-clip flex-shrink-0">
+      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-auto overflow-y-hidden no-scrollbar flex-shrink-0 flex-nowrap">
         
         {/* Left: Branding + Main Action Buttons */}
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
           {/* Logo & Title */}
           <div className="flex items-center gap-1.5 mr-0.5 flex-shrink-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center shadow-lg shadow-purple-500/10 flex-shrink-0">
@@ -165,7 +165,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             <button
               onClick={handleNativeOpenFile}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark ? 'hover:bg-white/10 text-slate-200' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-900 border border-amber-200/90'
               }`}
               title="Buka File (Ctrl+O)"
@@ -176,7 +176,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
 
             <button
               onClick={handleSaveFile}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer relative flex-shrink-0 shadow-sm ${
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer relative flex-shrink-0 shadow-sm ${
                 isDark ? 'hover:bg-white/10 text-slate-200' : 'bg-sky-100/70 hover:bg-sky-200/80 text-sky-900 border border-sky-200/90'
               }`}
               title="Simpan File (Ctrl+S)"
@@ -194,13 +194,13 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             {activeFile.endsWith('.py') ? (
               <button
                 onClick={handleRunPython}
-                className={`flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
                   isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold shadow-amber-400/30 border border-amber-400'
                 }`}
                 title="Jalankan Kode Python"
               >
                 <PythonLogo className="w-3.5 h-3.5" />
-                <span className="font-bold">{tb('runPython')}</span>
+                <span className="font-bold hidden sm:inline">{tb('runPython')}</span>
               </button>
             ) : (
               <>
@@ -340,25 +340,27 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           }`}>
             <button
               onClick={() => setUiMode('student')}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 uiMode === 'student'
                   ? (isDark ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-600 !text-white text-white-force shadow-sm')
                   : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
               }`}
               title="Student Mode: Tampilan sederhana untuk pemula"
             >
-              <span>{tb('student')}</span>
+              <span>🎓</span>
+              <span className="hidden sm:inline">{tb('student')}</span>
             </button>
             <button
               onClick={() => setUiMode('pro')}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 uiMode === 'pro'
                   ? (isDark ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-600 !text-white text-white-force shadow-sm')
                   : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
               }`}
               title="Professional Mode: Tampilan lengkap dengan Explorer & Multi-editor"
             >
-              <span>{tb('pro')}</span>
+              <span>⚡</span>
+              <span className="hidden sm:inline">{tb('pro')}</span>
             </button>
           </div>
 
@@ -369,38 +371,40 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             }`}>
               <button
                 onClick={() => setStudentSubMode('block')}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                   studentSubMode === 'block'
                     ? (isDark ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-600 !text-white text-white-force shadow-sm')
                     : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
                 }`}
+                title="Tampilan Visual Block"
               >
-                <Sliders className="w-3 h-3" />
-                <span>{tb('block')}</span>
+                <Sliders className="w-3 h-3 flex-shrink-0" />
+                <span className="hidden md:inline">{tb('block')}</span>
               </button>
               <button
                 onClick={() => setStudentSubMode('code')}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                   studentSubMode === 'code'
                     ? (isDark ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-600 !text-white text-white-force shadow-sm')
                     : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
                 }`}
+                title="Tampilan Kode Program"
               >
-                <Code className="w-3 h-3" />
-                <span>{tb('code')}</span>
+                <Code className="w-3 h-3 flex-shrink-0" />
+                <span className="hidden md:inline">{tb('code')}</span>
               </button>
             </div>
           )}
 
           {/* Board Selector */}
-          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
+          <div className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-1 border flex-shrink-0 shadow-sm ${
             isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-purple-400 hidden xl:inline">{tb('boardLabel')}</span>
             <select 
               value={board} 
               onChange={(e) => setBoard(e.target.value)}
-              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[95px] sm:max-w-[120px] lg:max-w-[130px] xl:max-w-[150px] truncate"
+              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[80px] sm:max-w-[100px] md:max-w-[120px] lg:max-w-[135px] xl:max-w-[150px] truncate"
             >
               <option value="ESP32 DevKit V1" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>ESP32 DevKit V1</option>
               <option value="NodeMCU / ESP8266" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>NodeMCU / ESP8266</option>
@@ -415,7 +419,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           </div>
 
           {/* Port Selector */}
-          <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border flex-shrink-0 shadow-sm ${
+          <div className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-1 border flex-shrink-0 shadow-sm ${
             isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
             <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden xl:inline">{tb('portLabel')}</span>
@@ -428,7 +432,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   setPort(e.target.value);
                 }
               }}
-              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[90px] sm:max-w-[115px] lg:max-w-[130px] xl:max-w-[145px] truncate"
+              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[70px] sm:max-w-[90px] md:max-w-[110px] lg:max-w-[130px] xl:max-w-[145px] truncate"
             >
               {availablePorts.map((p) => (
                 <option key={p.address} value={p.address} className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>
@@ -468,14 +472,14 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               isDark ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-200 text-emerald-700'
             }`} title={`Connected to ${connectedPort}`}>
               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse flex-shrink-0" />
-              <span className="text-[11px] uppercase tracking-wide">{tb('connected')}</span>
+              <span className="text-[11px] uppercase tracking-wide hidden lg:inline">{tb('connected')}</span>
             </div>
           ) : (
             <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border flex-shrink-0 shadow-sm font-extrabold ${
               isDark ? 'bg-rose-500/15 border-rose-500/30 text-rose-400' : 'bg-rose-100 border-rose-200 text-rose-700'
             }`} title="Disconnected">
               <span className="w-2 h-2 bg-rose-500 rounded-full flex-shrink-0" />
-              <span className="text-[11px] uppercase tracking-wide">{tb('disconnected')}</span>
+              <span className="text-[11px] uppercase tracking-wide hidden lg:inline">{tb('disconnected')}</span>
             </div>
           )}
 
