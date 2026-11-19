@@ -1948,7 +1948,75 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   return ['custom_library_init', 'custom_library_call', 'custom_library_call_val'];
 };
 
-export const registerCustomLibBlocks = (prefix: string, libName: string) => {
+export function getLibraryIcon(libName: string, category: string = ''): string {
+  const str = (libName + ' ' + category).toLowerCase();
+  if (/tds|ph|ec|turbidity|water|liquid|flow|moisture|soil/.test(str)) return '💧';
+  if (/distance|ultrasonic|sonar|laser|tof|vl53|hcsr|range/.test(str)) return '📏';
+  if (/temp|humi|dht|bme|bmp|therm|ds18b20/.test(str)) return '🌡️';
+  if (/oled|lcd|display|screen|tft|ssd1306|gfx|ili9|st7/.test(str)) return '🖥️';
+  if (/servo|motor|stepper|accelstep|l298|l293|drv/.test(str)) return '⚙️';
+  if (/mpu|gyro|accel|motion|imu|compass|bno/.test(str)) return '🧭';
+  if (/rfid|nfc|pn532|mfrc|card/.test(str)) return '💳';
+  if (/mp3|sound|audio|dfplayer|voice|speaker|buzzer/.test(str)) return '🎵';
+  if (/rtc|clock|ds3231|ds1307|time/.test(str)) return '⏰';
+  if (/mqtt|wifi|ble|bluetooth|esp|lora|radio|wireless|sub/.test(str)) return '📡';
+  if (/scale|loadcell|hx711|weigh/.test(str)) return '⚖️';
+  return '📦';
+}
+
+export function formatFriendlyMethodLabel(methodName: string, returnType: string = 'void'): string {
+  const lower = methodName.toLowerCase();
+  if (lower === 'begin' || lower === 'init') return 'Mulai Sensor (begin)';
+  if (lower === 'update') return 'Perbarui Pembacaan (update)';
+  if (lower === 'setpin') return 'Atur Pin Sensor';
+  if (lower === 'settemperature') return 'Atur Suhu Air (°C)';
+  if (lower === 'setaref') return 'Atur Tegangan Aref (V)';
+  if (lower === 'setadcrange') return 'Atur Resolusi ADC';
+  if (lower === 'gettdsvalue') return 'Baca Nilai TDS Air (ppm)';
+  if (lower === 'getkvalue') return 'Baca Faktor Kalibrasi K';
+  if (lower === 'readph') return 'Baca Nilai pH (0-14)';
+  if (lower === 'readec') return 'Baca Nilai EC (ms/cm)';
+  if (lower === 'calibration' || lower === 'calibrate') return 'Kalibrasi Sensor';
+  if (lower === 'readrange' || lower === 'readrangecontinuousmillimeters') return 'Baca Jarak Laser (mm)';
+  if (lower === 'ping_cm' || lower === 'ping') return 'Baca Jarak Pantul (cm)';
+  if (lower === 'ping_in') return 'Baca Jarak Pantul (inci)';
+  if (lower === 'get_units' || lower === 'getunits') return 'Baca Berat Beban (Gram)';
+  if (lower === 'tare') return 'Nolkan Timbangan (Tare)';
+  if (lower === 'isready' || lower === 'is_ready') return 'Sensor Siap? (Ready)';
+  if (lower === 'cleardisplay' || lower === 'clear') return 'Bersihkan Layar (Clear)';
+  if (lower === 'display') return 'Render Tampilan Layar (Display)';
+  if (lower === 'stop') return 'Hentikan (Stop)';
+  if (lower === 'reset') return 'Reset Sensor';
+  if (lower === 'play') return 'Putar Lagu (Play)';
+  if (lower === 'pause') return 'Jeda Lagu (Pause)';
+
+  if (lower.startsWith('get') || lower.startsWith('read')) {
+    const rawName = methodName.replace(/^(?:get|read)_?/i, '');
+    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
+    return `Baca Nilai ${cleanWord}`;
+  }
+  if (lower.startsWith('set')) {
+    const rawName = methodName.replace(/^set_?/i, '');
+    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
+    return `Atur ${cleanWord}`;
+  }
+  if (lower.startsWith('is') || lower.startsWith('has') || lower.startsWith('check')) {
+    const rawName = methodName.replace(/^(?:is|has|check)_?/i, '');
+    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
+    return `Cek ${cleanWord}?`;
+  }
+
+  const cleanWord = methodName.replace(/([A-Z])/g, ' $1').trim();
+  return `${cleanWord} (${methodName})`;
+}
+
+export const registerCustomLibBlocks = (
+  prefix: string,
+  libName: string,
+  parsedApi?: any,
+  known?: any,
+  colour?: string
+) => {
   const safeName = libName.replace(/[^a-zA-Z0-9_]/g, '_');
   const typeDefPin    = `${prefix}_define_pin`;
   const typeSetPin    = `${prefix}_set_pin`;
@@ -1965,6 +2033,106 @@ export const registerCustomLibBlocks = (prefix: string, libName: string) => {
   const typeCall      = `${prefix}_call`;
   const typeUpdate    = `${prefix}_update`;
   const typeReset     = `${prefix}_reset`;
+  const typeInitObj   = `${prefix}_init`;
+
+  const categoryTitle = known?.categoryName || libName;
+  const col = colour || known?.colour || '#0284c7';
+  const icon = getLibraryIcon(libName, categoryTitle);
+  const className = parsedApi?.className || known?.className || safeName;
+  let instName = known?.instanceName || parsedApi?.instanceName;
+  if (!instName) {
+    const stripped = className.replace(/^(?:Adafruit_|DFRobot_|SparkFun_)/i, '');
+    instName = (stripped.charAt(0).toLowerCase() + stripped.slice(1)).replace(/[^a-zA-Z0-9_]/g, '_');
+  }
+
+  // 1. Dedicated Init Block: e.g. custom_gravitytds_init
+  if (!Blockly.Blocks[typeInitObj]) {
+    Blockly.Blocks[typeInitObj] = {
+      init: function () {
+        this.appendDummyInput().appendField(`${icon} Inisialisasi Objek Sensor ${categoryTitle}`);
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour(col);
+        this.setTooltip(`Menyiapkan objek ${className} (${instName}) di program Arduino`);
+      }
+    };
+    (Blockly.Blocks[typeInitObj] as any)._libMeta = { libName, instName, className, isInit: true };
+  }
+
+  // 2. Specific Methods registration
+  const rawMethods: any[] = (Array.isArray(parsedApi?.methods) && parsedApi.methods.length > 0)
+    ? parsedApi.methods
+    : (known?.methods || []);
+
+  const methods: any[] = rawMethods.filter((m: any) =>
+    m.name &&
+    !m.name.startsWith('_') &&
+    !m.name.startsWith('operator')
+  );
+
+  methods.forEach((m: any) => {
+    const safeM = m.name.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_');
+    const blockType = `${prefix}_${safeM}`;
+    if (!Blockly.Blocks[blockType]) {
+      const friendlyLabel = m.label || formatFriendlyMethodLabel(m.name, m.returnType);
+      const isVoid = m.returnType === 'void';
+      const paramCount = Array.isArray(m.params) ? m.params.length : 0;
+
+      Blockly.Blocks[blockType] = {
+        init: function () {
+          const title = `${icon} ${categoryTitle}: ${friendlyLabel}`;
+          if (isVoid) {
+            this.setPreviousStatement(true, null);
+            this.setNextStatement(true, null);
+            this.setColour(col);
+
+            if (paramCount === 0) {
+              this.appendDummyInput().appendField(title);
+            } else if (paramCount === 1) {
+              const pName = (m.params[0] || 'nilai').replace(/=[^,]+$/, '').trim();
+              const isPin = /(?:pin|rx|tx|sda|scl|cs)/i.test(pName) || /^[AD]?\d+$/i.test(pName);
+              if (isPin) {
+                this.appendDummyInput()
+                  .appendField(title)
+                  .appendField(new Blockly.FieldTextInput(pName || 'A1'), 'PIN');
+              } else {
+                this.appendDummyInput().appendField(title);
+                this.appendValueInput('PARAM').appendField(pName);
+              }
+            } else {
+              this.appendDummyInput().appendField(title);
+              m.params.forEach((p: string, idx: number) => {
+                const cleanP = p.replace(/=[^,]+$/, '').trim();
+                this.appendValueInput(`PARAM${idx}`).appendField(cleanP || `Param ${idx + 1}`);
+              });
+            }
+          } else {
+            this.setOutput(true, m.returnType === 'Boolean' ? 'Boolean' : (m.returnType === 'Number' ? 'Number' : null));
+            this.setColour(col);
+
+            if (paramCount === 0) {
+              this.appendDummyInput().appendField(title);
+            } else {
+              this.appendDummyInput().appendField(title);
+              m.params.forEach((p: string, idx: number) => {
+                const cleanP = p.replace(/=[^,]+$/, '').trim();
+                this.appendValueInput(`PARAM${idx}`).appendField(cleanP || `Param ${idx + 1}`);
+              });
+            }
+          }
+          this.setTooltip(m.doc || `${friendlyLabel} (${libName}.${m.name})`);
+        }
+      };
+      (Blockly.Blocks[blockType] as any)._libMeta = {
+        libName,
+        instName,
+        className,
+        methodName: m.name,
+        returnType: m.returnType,
+        params: m.params
+      };
+    }
+  });
 
   if (!Blockly.Blocks[typeDefPin]) {
     Blockly.Blocks[typeDefPin] = {
@@ -2239,7 +2407,7 @@ export const ensureCustomBlocks = (xmlText?: string | null) => {
   if (!xmlText) return;
 
   // Scan any custom_${prefix}_* blocks in XML
-  const regex = /<block\s+[^>]*type="custom_([a-zA-Z0-9_]+)_(define_pin|set_pin|attach_pin|begin|begin_pin|init_pin|read|read_func|call_val|status|write|print|call|update|reset)"/g;
+  const regex = /<block\s+[^>]*type="custom_([a-zA-Z0-9_]+)_([a-zA-Z0-9_]+)"/g;
   let m: RegExpExecArray | null;
   while ((m = regex.exec(xmlText)) !== null) {
     const rawSafe = m[1];
@@ -4471,6 +4639,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           });
         }
 
+        // Register all library blocks with dedicated friendly titles
+        registerCustomLibBlocks(prefix, libName, parsedApi, known, categoryColour);
+
         // 4. Specific Methods dari library (parsedApi atau known verified database)
         const rawMethods: any[] = (Array.isArray(parsedApi?.methods) && parsedApi.methods.length > 0)
           ? parsedApi.methods
@@ -4484,20 +4655,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
         if (methods.length > 0) {
           methods.forEach((m: any) => {
-            const paramPlaceholder = Array.isArray(m.params) && m.params.length > 0 ? m.params.join(", ") : "";
-            if (m.returnType === "void") {
-              xml += `<block type="custom_library_call">`;
-              xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-              xml += `<field name="METHOD">${escapeXmlVal(m.name)}</field>`;
-              xml += `<field name="PARAM">${escapeXmlVal(paramPlaceholder)}</field>`;
-              xml += `</block>`;
-            } else {
-              xml += `<block type="custom_library_call_val">`;
-              xml += `<field name="INSTANCE">${escapeXmlVal(instName)}</field>`;
-              xml += `<field name="METHOD">${escapeXmlVal(m.name)}</field>`;
-              xml += `<field name="PARAM">${escapeXmlVal(paramPlaceholder)}</field>`;
-              xml += `</block>`;
+            const safeM = m.name.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_');
+            const dedicatedType = `${prefix}_${safeM}`;
+            xml += `<block type="${dedicatedType}">`;
+            if (m.params && m.params.length === 1) {
+              const rawP = m.params[0] || '';
+              const isPin = /(?:pin|rx|tx|sda|scl|cs)/i.test(rawP) || /^[AD]?\d+$/i.test(rawP);
+              const isNum = /^-?\d+(\.\d+)?$/.test(rawP);
+              if (isPin) {
+                xml += `<field name="PIN">${escapeXmlVal(rawP)}</field>`;
+              } else if (isNum) {
+                xml += `<value name="PARAM"><block type="math_number"><field name="NUM">${rawP}</field></block></value>`;
+              }
             }
+            xml += `</block>`;
           });
         }
 
@@ -5134,6 +5305,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const methodName = typeStr.split('_m_')[1];
         if (lang === 'arduino') return `${libSafe}.${methodName}()`;
         return `${libSafe}_${methodName}()`;
+      }
+      const meta = (Blockly.Blocks[typeStr] as any)?._libMeta;
+      if (meta && meta.returnType !== 'void') {
+        const inst = meta.instName || libSafe;
+        const mName = meta.methodName;
+        const params: string[] = [];
+        if (meta.params && meta.params.length === 1) {
+          const pBlock = block.getInputTargetBlock('PARAM');
+          const pField = block.getFieldValue('PIN') || block.getFieldValue('PARAM');
+          params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+        } else if (meta.params && meta.params.length > 1) {
+          meta.params.forEach((_: any, idx: number) => {
+            const pBlock = block.getInputTargetBlock(`PARAM${idx}`);
+            const pField = block.getFieldValue(`PARAM${idx}`);
+            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+          });
+        }
+        const cleanParams = params.filter(p => p !== '').join(', ');
+        if (lang === 'arduino') return `${inst}.${mName}(${cleanParams})`;
+        return `robot.custom_lib_val("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})`;
       }
     }
     if (block.type === 'arduino_serial_available') {
@@ -6222,6 +6413,34 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             code += `${indent}${libSafe}.${methodName}();\n`;
           } else {
             code += `${indent}${libSafe}_${methodName}()\n`;
+          }
+        } else if (typeStr.endsWith('_init')) {
+          if (lang === 'arduino') {
+            code += `${indent}// Objek ${libSafe} siap digunakan\n`;
+          } else {
+            code += `${indent}# Objek ${libSafe} siap digunakan\n`;
+          }
+        } else if ((Blockly.Blocks[typeStr] as any)?._libMeta) {
+          const meta = (Blockly.Blocks[typeStr] as any)._libMeta;
+          const inst = meta.instName || libSafe;
+          const mName = meta.methodName;
+          const params: string[] = [];
+          if (meta.params && meta.params.length === 1) {
+            const pBlock = currentBlock.getInputTargetBlock('PARAM');
+            const pField = currentBlock.getFieldValue('PIN') || currentBlock.getFieldValue('PARAM');
+            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+          } else if (meta.params && meta.params.length > 1) {
+            meta.params.forEach((_: any, idx: number) => {
+              const pBlock = currentBlock.getInputTargetBlock(`PARAM${idx}`);
+              const pField = currentBlock.getFieldValue(`PARAM${idx}`);
+              params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+            });
+          }
+          const cleanParams = params.filter(p => p !== '').join(', ');
+          if (lang === 'arduino') {
+            code += `${indent}${inst}.${mName}(${cleanParams});\n`;
+          } else {
+            code += `${indent}robot.custom_lib_call("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})\n`;
           }
         } else {
           if (lang === 'arduino') {

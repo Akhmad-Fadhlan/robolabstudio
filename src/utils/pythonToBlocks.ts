@@ -518,11 +518,9 @@ function parseStatement(line: string, variables: Record<string, string>): string
     const cls = libInitObj[1].trim();
     const inst = libInitObj[2].trim();
     const args = (libInitObj[3] || '').trim().replace(/\\"/g, '"');
+    const safeCls = cls.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
     return `
-      <block type="custom_library_init">
-        <field name="CLASS">${escapeXml(cls)}</field>
-        <field name="INSTANCE">${escapeXml(inst)}</field>
-        <field name="ARGS">${escapeXml(args)}</field>
+      <block type="custom_${safeCls}_init">
       </block>
     `;
   }
@@ -562,11 +560,25 @@ function parseStatement(line: string, variables: Record<string, string>): string
     const method = libCall[2].trim();
     let arg = libCall[3] ? libCall[3].trim().replace(/\\"/g, '"') : '';
     if (arg === '""') arg = '';
+    const safeInst = inst.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const safeMethod = method.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const dedicatedType = `custom_${safeInst}_${safeMethod}`;
+
+    const isNum = /^-?\d+(\.\d+)?$/.test(arg);
+    const isPin = /(?:pin|rx|tx|sda|scl|cs)/i.test(method) || /^[AD]?\d+$/i.test(arg);
+    let valXml = '';
+    if (arg) {
+      if (isPin) {
+        valXml = `<field name="PIN">${escapeXml(arg)}</field>`;
+      } else if (isNum) {
+        valXml = `<value name="PARAM"><block type="math_number"><field name="NUM">${escapeXml(arg)}</field></block></value>`;
+      } else {
+        valXml = `<value name="PARAM"><block type="text"><field name="TEXT">${escapeXml(arg)}</field></block></value>`;
+      }
+    }
     return `
-      <block type="custom_library_call">
-        <field name="INSTANCE">${escapeXml(inst)}</field>
-        <field name="METHOD">${escapeXml(method)}</field>
-        <field name="PARAM">${escapeXml(arg)}</field>
+      <block type="${dedicatedType}">
+        ${valXml}
       </block>
     `;
   }
@@ -1289,11 +1301,11 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     if (param === '""') param = '';
     const skipInsts = ['math', 'time', 'robot', 'machine', 'display', 'oled', 'lcd', 'pixels', 'FastLED', 'Serial', 'WiFi', 'wifi', 'Blynk', 'blynk'];
     if (!skipInsts.includes(inst)) {
+      const safeInst = inst.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      const safeMethod = method.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      const dedicatedType = `custom_${safeInst}_${safeMethod}`;
       return `
-        <block type="custom_library_call_val">
-          <field name="INSTANCE">${escapeXml(inst)}</field>
-          <field name="METHOD">${escapeXml(method)}</field>
-          <field name="PARAM">${escapeXml(param)}</field>
+        <block type="${dedicatedType}">
         </block>
       `;
     }
