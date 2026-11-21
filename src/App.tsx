@@ -181,6 +181,10 @@ interface ProgramPinConfig {
   potPins?: string[];
   btnPin?: string;
   btnPins?: string[];
+  dhtPins?: string[];
+  i2c?: boolean;
+  i2cSda?: string;
+  i2cScl?: string;
 }
 
 const PYTHON_LESSONS = [
@@ -4917,6 +4921,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handlePinStateChange = (pin: string, state: 'HIGH' | 'LOW' | number) => {
     const cleanPin = pin.replace(/^[DPGA]/, '');
+    if (pinStatesRef.current[pin] === state && pinStatesRef.current[cleanPin] === state) return;
     pinStatesRef.current[pin] = state;
     pinStatesRef.current[cleanPin] = state;
     pinStatesRef.current['D' + cleanPin] = state;
@@ -4937,7 +4942,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       ledPins: [],
       servoPins: [],
       potPins: [],
-      btnPins: []
+      btnPins: [],
+      dhtPins: []
     };
     const codeLines = codeText.split('\n');
     const vars: { [key: string]: string } = {};
@@ -4977,7 +4983,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
       }
       val = val.replace(/['"]/g, '');
-      if (/^[ADPG]\d+$/i.test(val)) {
+      if (/^[DPG]\d+$/i.test(val)) {
         return val.substring(1);
       }
       if (/^pin(\d+)$/i.test(val)) {
@@ -5019,9 +5025,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           addPin(config.ledPins, objName);
         }
       }
-      const mbMatch = trimmed.match(/microbit\.pin(\d+)\.write_digital/) ||
+      const mbMatch = trimmed.match(/(?:microbit\.)?pin(\d+)\.write_digital/) ||
                       trimmed.match(/pins\.digitalWrite\(\s*"(P\d+)"/) ||
-                      trimmed.match(/microbit\.pin(\d+)\.write_analog/) ||
+                      trimmed.match(/(?:microbit\.)?pin(\d+)\.write_analog/) ||
                       trimmed.match(/pins\.analogWrite\(\s*"(P\d+)"/);
       if (mbMatch) {
         addPin(config.ledPins, mbMatch[1]);
@@ -5040,7 +5046,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       // 3. Potentiometer Pin
       const potMatch = trimmed.match(/(?:analogRead|analog_read)\(\s*([a-zA-Z0-9_]+)/) ||
                        trimmed.match(/ADC\(\s*(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)/) ||
-                       trimmed.match(/microbit\.pin(\d+)\.read_analog/) ||
+                       trimmed.match(/(?:microbit\.)?pin(\d+)\.read_analog/) ||
                        trimmed.match(/pins\.analogRead\(\s*"(P\d+)"/);
       if (potMatch) {
         addPin(config.potPins, potMatch[1]);
@@ -5049,12 +5055,23 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       // 4. Button Pin
       const btnMatch = trimmed.match(/(?:digitalRead|digital_read)\(\s*([a-zA-Z0-9_]+)/) ||
                        trimmed.match(/([a-zA-Z0-9_]+)\s*=\s*(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)\s*,\s*(?:machine\.)?Pin\.IN/) ||
-                       trimmed.match(/microbit\.pin(\d+)\.read_digital/) ||
+                       trimmed.match(/(?:microbit\.)?pin(\d+)\.read_digital/) ||
                        trimmed.match(/pins\.digitalRead\(\s*"(P\d+)"/);
       if (btnMatch) {
         addPin(config.btnPins, btnMatch[2] || btnMatch[1]);
       }
 
+      const dht = trimmed.match(/(?:\bDHT\s+\w+|\bdht\.DHT(?:11|22)|\brobot\.dht_init)\(\s*((?:machine\.)?Pin\(\s*\w+|\w+)/);
+      if (dht) addPin(config.dhtPins, dht[1]);
+      const i2c = trimmed.match(/(?:\bU?Wire\.begin|\b(?:Soft)?I2C)\(([^)]*(?:\)[^)]*)?)\)/);
+      if (i2c) {
+        config.i2c = true;
+        const sda = trimmed.match(/\bsda\s*=\s*(?:Pin\(\s*)?(\w+)/);
+        const scl = trimmed.match(/\bscl\s*=\s*(?:Pin\(\s*)?(\w+)/);
+        const wirePins = trimmed.match(/Wire\.begin\(\s*(\w+)\s*,\s*(\w+)\s*\)/);
+        if (sda || wirePins) config.i2cSda = resolvePin((sda || wirePins)![1]);
+        if (scl || wirePins) config.i2cScl = resolvePin(scl ? scl[1] : wirePins![2]);
+      }
       // 5. Ultrasonic Pins (Trig & Echo)
       const ultraMatch = trimmed.match(/(?:readUltrasonic|read_ultrasonic|readDistance)\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)/);
       if (ultraMatch) {
@@ -5063,6 +5080,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
     });
 
+    config.ledPins = config.ledPins?.filter(pin => !config.servoPins?.includes(pin));
     config.ledPin = config.ledPins?.[0];
     config.servoPin = config.servoPins?.[0];
     config.potPin = config.potPins?.[0];
@@ -6726,7 +6744,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           const isServoPin = servoPins.has(analogPinNum);
           if (isServoPin) {
             // Treat as servo: try extract angle from int(30 + (angle * 90) / 180)
-            const angleFromFormula = analogExpr.match(/int\s*\(\s*30\s*\+\s*\((.+?)\s*\*\s*90\)\s*\/\s*180\s*\)/);
+            const angleFromFormula = analogExpr.match(/int\s*\(\s*30\s*\+\s*\((.+?)\s*\*\s*90\)\s*\/\s*180\s*\)/) ||
+              analogExpr.match(/^int\(\(500 \+ min\(180, max\(0, (.+)\)\) \* 2000 \/ 180\) \* 1023 \/ 20000\)$/);
             if (angleFromFormula) {
               queue.push({
                 type: 'servoWrite',
@@ -6765,9 +6784,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
 
         // 8. Microbit matches
-        const mbDigitalWriteMatch = trimmed.match(/microbit\.pin(\d+)\.write_digital\(\s*(\d+)\s*\)/) ||
+        const mbDigitalWriteMatch = trimmed.match(/(?:microbit\.)?pin(\d+)\.write_digital\(\s*(.+)\)\s*$/) ||
                                      trimmed.match(/pins\.digitalWrite\(\s*"(P\d+)"\s*,\s*(\d+)\s*\)/);
-        const mbAnalogWriteMatch = trimmed.match(/microbit\.pin(\d+)\.write_analog\(\s*([0-9.]+)\s*\)/) ||
+        const mbAnalogWriteMatch = trimmed.match(/(?:microbit\.)?pin(\d+)\.write_analog\(\s*([0-9.]+)\s*\)/) ||
                                     trimmed.match(/pins\.analogWrite\(\s*"(P\d+)"\s*,\s*([0-9.]+)\s*\)/);
         const mbServoWriteMatch = trimmed.match(/pins\.servoWrite\(\s*"(P\d+)"\s*,\s*([0-9.]+)\s*\)/);
         const mbPauseMatch = trimmed.match(/basic\.pause\(\s*([0-9.]+)\s*\)/);
@@ -6775,8 +6794,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (mbDigitalWriteMatch) {
           const rawPin = mbDigitalWriteMatch[1] || mbDigitalWriteMatch[2];
           const pin = rawPin.startsWith('P') ? rawPin.replace('P', '') : rawPin;
-          const valVal = mbDigitalWriteMatch[2];
-          const state = valVal === '1' || valVal === 'HIGH' ? 'HIGH' : 'LOW';
+          const expression = mbDigitalWriteMatch[2].trim();
+          const normalized = expression.match(/^1 if (.+) else 0$/);
+          const state = normalized ? normalized[1] : expression;
           queue.push({ type: 'digitalWrite', value: { pin, state } });
           continue;
         }

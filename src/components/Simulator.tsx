@@ -21,6 +21,10 @@ interface ProgramPinConfig {
   potPins?: string[];
   btnPin?: string;
   btnPins?: string[];
+  dhtPins?: string[];
+  i2c?: boolean;
+  i2cSda?: string;
+  i2cScl?: string;
 }
 
 export interface Wire {
@@ -221,7 +225,39 @@ export const getBaseComponentType = (id: string): string => {
   return id.replace(/_\d+$/, '');
 };
 
+const wokwiNativeParts: Record<string, { type: string; terminals: string[] }> = {
+  'wokwi-led': { type: 'led', terminals: ['LED_A', 'LED_K'] },
+  'wokwi-servo': { type: 'servo', terminals: ['SERVO_GND', 'SERVO_VCC', 'SERVO_SIG'] },
+  'wokwi-hc-sr04': { type: 'ultrasonic', terminals: ['SR04_VCC', 'SR04_TRIG', 'SR04_ECHO', 'SR04_GND'] },
+  'wokwi-potentiometer': { type: 'pot', terminals: ['POT_GND', 'POT_SIG', 'POT_VCC'] },
+  'wokwi-slide-potentiometer': { type: 'pot', terminals: ['POT_VCC', 'POT_SIG', 'POT_GND'] },
+  'wokwi-pushbutton': { type: 'button', terminals: ['BTN_SIG', 'BTN_GND'] },
+  'wokwi-pushbutton-6mm': { type: 'button', terminals: ['BTN_SIG', 'BTN_GND'] },
+  'wokwi-dht22': { type: 'dht11', terminals: ['DHT11_VCC', 'DHT11_DATA', '', 'DHT11_GND'] },
+};
+const wokwiInputs: Record<string, { label: string; analog?: string; digital?: string; indicator?: string }> = {
+  'wokwi-photoresistor-sensor': { label: 'Intensitas cahaya', analog: 'AO', digital: 'DO', indicator: 'ledDO' },
+  'wokwi-ntc-temperature-sensor': { label: 'Bacaan termistor (ADC)', analog: 'OUT' },
+  'wokwi-big-sound-sensor': { label: 'Level suara', analog: 'AOUT', digital: 'DOUT' },
+  'wokwi-small-sound-sensor': { label: 'Level suara', analog: 'AOUT', digital: 'DOUT', indicator: 'ledSignal' },
+  'wokwi-flame-sensor': { label: 'Intensitas api', analog: 'AOUT', digital: 'DOUT', indicator: 'ledSignal' },
+  'wokwi-gas-sensor': { label: 'Level gas', analog: 'AOUT', digital: 'DOUT', indicator: 'ledD0' },
+  'wokwi-pir-motion-sensor': { label: 'Gerakan terdeteksi', digital: 'OUT' },
+  'wokwi-tilt-switch': { label: 'Sensor miring', digital: 'OUT' },
+};
+
+const simulatedType = (id: string) => wokwiNativeParts[getBaseComponentType(id)]?.type ?? getBaseComponentType(id);
+const isWokwiPart = (id: string) => id.startsWith('wokwi-');
+const wiringAliases: Record<string, string> = {
+  hcsr04: 'ultrasonic', sr04: 'ultrasonic', potentiometer: 'pot',
+  dht: 'dht11', mfrc522: 'rfid', rc522: 'rfid',
+};
+const wiringType = (id: string) => wiringAliases[simulatedType(id)] ?? simulatedType(id);
+
 export const getInstancePinId = (instanceId: string, basePin: string): string => {
+  const part = wokwiNativeParts[getBaseComponentType(instanceId)];
+  const index = part?.terminals.indexOf(basePin) ?? -1;
+  if (index >= 0) return wokwiPartPinId(instanceId, index);
   if (!instanceId.includes('_')) return basePin;
   const suffix = instanceId.split('_').slice(1).join('_');
   return `${basePin}_${suffix}`;
@@ -241,7 +277,7 @@ const DEFAULT_COMPONENT_POSITIONS: { [key: string]: { x: number; y: number } } =
 };
 
 export const isComponentPin = (pinId: string): boolean => {
-  return /^(LED_|SERVO_|SR04_|POT_|BTN_|DHT11_|LCD_|MOTOR_|RFID_)/.test(pinId);
+  return /^(wokwi-|LED_|SERVO_|SR04_|POT_|BTN_|DHT11_|LCD_|MOTOR_|RFID_)/.test(pinId);
 };
 
 export const hexToRgba = (hex: string, alpha: number): string => {
@@ -564,6 +600,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
       sclPin = 'G22';
     }
 
+    if (programPins.i2cSda) sdaPin = getBoardSignalPin(programPins.i2cSda);
+    if (programPins.i2cScl) sclPin = getBoardSignalPin(programPins.i2cScl);
+
+    function getBoardSignalPin(pin: string) {
+      if (isArduino && /^A\d+$/.test(pin)) return pin;
+      return (isArduino || isEsp8266 ? 'D' : isMicrobit ? 'P' : 'G') + pin.replace(/^[ADPG]/i, '');
+    }
+
     const usedSignalPins = new Set<string>();
 
     const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum?: string): string => {
@@ -610,15 +654,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     const autoWires: Wire[] = [];
 
-    const leds = list.filter(id => id === 'led' || id.startsWith('led_'));
-    const servos = list.filter(id => id === 'servo' || id.startsWith('servo_'));
-    const ultrasonics = list.filter(id => id === 'ultrasonic' || id === 'hcsr04' || id === 'sr04' || id.startsWith('ultrasonic_') || id.startsWith('hcsr04_') || id.startsWith('sr04_'));
-    const pots = list.filter(id => id === 'pot' || id === 'potentiometer' || id.startsWith('pot_') || id.startsWith('potentiometer_'));
-    const buttons = list.filter(id => id === 'button' || id.startsWith('button_'));
-    const dht11s = list.filter(id => id === 'dht11' || id === 'dht' || id.startsWith('dht11_') || id.startsWith('dht_'));
-    const lcds = list.filter(id => id === 'lcd' || id.startsWith('lcd_'));
-    const motors = list.filter(id => id === 'motor' || id.startsWith('motor_'));
-    const rfids = list.filter(id => id === 'rfid' || id === 'mfrc522' || id === 'rc522' || id.startsWith('rfid_') || id.startsWith('mfrc522_') || id.startsWith('rc522_'));
+    const leds = list.filter(id => wiringType(id) === 'led');
+    const servos = list.filter(id => wiringType(id) === 'servo');
+    const ultrasonics = list.filter(id => wiringType(id) === 'ultrasonic');
+    const pots = list.filter(id => wiringType(id) === 'pot');
+    const buttons = list.filter(id => wiringType(id) === 'button');
+    const dht11s = list.filter(id => wiringType(id) === 'dht11');
+    const lcds = list.filter(id => wiringType(id) === 'lcd');
+    const motors = list.filter(id => wiringType(id) === 'motor');
+    const rfids = list.filter(id => wiringType(id) === 'rfid');
 
     // 1. LEDs
     leds.forEach((id, idx) => {
@@ -629,7 +673,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
         ? getMcuPinId('digital', targetPin) 
         : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '9' : (isMicrobit ? '2' : (isEsp8266 ? '4' : '4'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D9' : `D${Math.max(2, 9 - idx)}`) : undefined;
-      const pin = allocatePin('digital', pref, def);
+      const pin = targetPin && pref ? pref : allocatePin('digital', pref, def);
+      usedSignalPins.add(pin);
       const color = getComponentColor(id, '#ef4444');
       autoWires.push({ from: pin, to: getInstancePinId(id, 'LED_A'), color, bendPoints: [] });
       autoWires.push({ from: gndPin, to: getInstancePinId(id, 'LED_K'), color: '#1e293b', bendPoints: [] });
@@ -644,7 +689,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
         ? getMcuPinId('digital', targetPin)
         : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '3' : (isMicrobit ? '1' : (isEsp8266 ? '2' : '18'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D3' : `D${Math.min(11, 3 + idx * 2)}`) : undefined;
-      const pin = allocatePin('digital', pref, def);
+      const pin = targetPin && pref ? pref : allocatePin('digital', pref, def);
+      usedSignalPins.add(pin);
       const color = getComponentColor(id, '#3b82f6');
       autoWires.push({ from: pin, to: getInstancePinId(id, 'SERVO_SIG'), color, bendPoints: [] });
       autoWires.push({ from: vccPin, to: getInstancePinId(id, 'SERVO_VCC'), color: '#ef4444', bendPoints: [] });
@@ -655,8 +701,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
     ultrasonics.forEach((id) => {
       const prefTrig = getMcuPinId('digital', programPins?.ultrasonicTrigPin, isArduino ? '12' : (isMicrobit ? '8' : (isEsp8266 ? '5' : '23')));
       const prefEcho = getMcuPinId('digital', programPins?.ultrasonicEchoPin, isArduino ? '13' : (isMicrobit ? '9' : (isEsp8266 ? '6' : '22')));
-      const trig = allocatePin('digital', prefTrig, isArduino ? 'D12' : undefined);
-      const echo = allocatePin('digital', prefEcho, isArduino ? 'D13' : undefined);
+      const trig = programPins.ultrasonicTrigPin ? prefTrig : allocatePin('digital', prefTrig, isArduino ? 'D12' : undefined);
+      const echo = programPins.ultrasonicEchoPin ? prefEcho : allocatePin('digital', prefEcho, isArduino ? 'D13' : undefined);
+      usedSignalPins.add(trig);
+      usedSignalPins.add(echo);
       autoWires.push({ from: vccPin, to: getInstancePinId(id, 'SR04_VCC'), color: '#ef4444', bendPoints: [] });
       autoWires.push({ from: trig, to: getInstancePinId(id, 'SR04_TRIG'), color: '#10b981', bendPoints: [] });
       autoWires.push({ from: echo, to: getInstancePinId(id, 'SR04_ECHO'), color: '#f59e0b', bendPoints: [] });
@@ -672,7 +720,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
         ? getMcuPinId('analog', targetPin)
         : (idx === 0 ? getMcuPinId('analog', undefined, isArduino ? '0' : (isMicrobit ? '0' : (isEsp8266 ? '0' : '36'))) : undefined);
       const def = isArduino ? `A${idx}` : undefined;
-      const pin = allocatePin('analog', pref, def);
+      const pin = targetPin && pref ? pref : allocatePin('analog', pref, def);
+      usedSignalPins.add(pin);
       const color = getComponentColor(id, '#a78bfa');
       autoWires.push({ from: vccPin, to: getInstancePinId(id, 'POT_VCC'), color: '#ef4444', bendPoints: [] });
       autoWires.push({ from: pin, to: getInstancePinId(id, 'POT_SIG'), color, bendPoints: [] });
@@ -688,16 +737,19 @@ export const Simulator: React.FC<SimulatorProps> = ({
         ? getMcuPinId('digital', targetPin)
         : (idx === 0 ? getMcuPinId('digital', undefined, isArduino ? '2' : (isMicrobit ? '1' : (isEsp8266 ? '3' : '27'))) : undefined);
       const def = isArduino ? (idx === 0 ? 'D2' : `D${Math.min(10, 2 + idx * 2)}`) : undefined;
-      const pin = allocatePin('digital', pref, def);
+      const pin = targetPin && pref ? pref : allocatePin('digital', pref, def);
+      usedSignalPins.add(pin);
       const color = getComponentColor(id, '#eab308');
       autoWires.push({ from: pin, to: getInstancePinId(id, 'BTN_SIG'), color, bendPoints: [] });
       autoWires.push({ from: gndPin, to: getInstancePinId(id, 'BTN_GND'), color: '#1e293b', bendPoints: [] });
     });
 
-    // 6. DHT11
+    // 6. DHT
     dht11s.forEach((id, idx) => {
       const def = isArduino ? (idx === 0 ? 'D4' : `D${Math.max(2, 4 + idx)}`) : undefined;
-      const pin = allocatePin('digital', undefined, def);
+      const preferred = programPins.dhtPins?.[idx];
+      const pin = preferred ? getMcuPinId('digital', preferred) : allocatePin('digital', undefined, def);
+      usedSignalPins.add(pin);
       const color = getComponentColor(id, '#a78bfa');
       autoWires.push({ from: vccPin, to: getInstancePinId(id, 'DHT11_VCC'), color: '#ef4444', bendPoints: [] });
       autoWires.push({ from: pin, to: getInstancePinId(id, 'DHT11_DATA'), color, bendPoints: [] });
@@ -737,10 +789,46 @@ export const Simulator: React.FC<SimulatorProps> = ({
       autoWires.push({ from: p3v3Pin, to: getInstancePinId(id, 'RFID_3V3'), color: '#f43f5e', bendPoints: [] });
     });
 
-    if (autoWires.length > 0) {
+    const analogInputs = (programPins.potPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('analog', pin)));
+    const digitalInputs = (programPins.btnPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('digital', pin)));
+    const outputs = (programPins.ledPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('digital', pin)));
+    for (const id of list.filter(isWokwiPart)) {
+      const tag = getBaseComponentType(id);
+      const model = wokwiInputs[tag];
+      if (!model && tag !== 'wokwi-rgb-led') continue;
+      const wiring: Record<string, string> = model ? { VCC: p3v3Pin, GND: gndPin } : { COM: gndPin };
+      if (model?.analog && analogInputs.length) wiring[model.analog] = getMcuPinId('analog', analogInputs.shift());
+      if (model?.digital && digitalInputs.length) wiring[model.digital] = getMcuPinId('digital', digitalInputs.shift());
+      if (!model) for (const channel of ['R', 'G', 'B']) {
+        if (outputs.length) wiring[channel] = getMcuPinId('digital', outputs.shift());
+      }
+      (wokwiPins[id] || []).forEach((pin, index) => {
+        const from = wiring[pin.name];
+        if (from) autoWires.push({ from, to: wokwiPartPinId(id, index), color: ['COM','GND'].includes(pin.name) ? '#1e293b' : '#0284c7', bendPoints: [] });
+      });
+    }
+
+    // Generic components are wired only where the part pinout and program are unambiguous.
+    for (const id of list.filter(id => isWokwiPart(id) && !wokwiNativeParts[getBaseComponentType(id)])) {
+      if (!programPins.i2c) continue;
+      const terminals = wokwiPins[id] || [];
+      const role = (pin: WokwiPin) => pin.signals?.find(signal => signal.signal === 'SDA' || signal.signal === 'SCL')?.signal || pin.name;
+      if (!terminals.some(pin => role(pin) === 'SDA') || !terminals.some(pin => role(pin) === 'SCL')) continue;
+      const powerIndex = terminals.findIndex(pin => ['3V3', 'VDD', 'VCC', 'VIN'].includes(pin.name));
+      terminals.forEach((pin, index) => {
+        const name = role(pin);
+        const declaredVoltage = pin.signals?.find(signal => signal.type === 'power')?.voltage;
+        const from = name === 'SDA' ? sdaPin : name === 'SCL' ? sclPin : name === 'GND' ? gndPin
+          : index === powerIndex ? (declaredVoltage === 5 ? vccPin : p3v3Pin) : undefined;
+        if (from) autoWires.push({ from, to: wokwiPartPinId(id, index), color: name === 'GND' ? '#1e293b' : index === powerIndex ? '#ef4444' : '#0284c7', bendPoints: [] });
+      });
+    }
+    const boardPins = new Set(getPins().filter(pin => pin.type === 'mcu').map(pin => pin.id));
+    const validWires = autoWires.filter(wire => boardPins.has(wire.from));
+    if (validWires.length > 0) {
       setWires(prev => {
         const targetCompPins = new Set<string>();
-        autoWires.forEach(w => {
+        validWires.forEach(w => {
           if (isComponentPin(w.from)) targetCompPins.add(w.from);
           if (isComponentPin(w.to)) targetCompPins.add(w.to);
         });
@@ -751,7 +839,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           return !fromIsTarget && !toIsTarget;
         });
 
-        return [...kept, ...autoWires];
+        return [...kept, ...validWires];
       });
     }
   };
@@ -1006,7 +1094,13 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // MERGE detected with existing — never wipe what the user manually added
     const mergedList = [...activeComponents];
-    detected.forEach(c => { if (!mergedList.includes(c)) mergedList.push(c); });
+    detected.forEach(c => { const covered = mergedList.some(id => {
+        const tag = getBaseComponentType(id);
+        const input = wokwiInputs[tag];
+        return simulatedType(id) === c || (c === 'led' && tag === 'wokwi-rgb-led') ||
+          (c === 'pot' && !!input?.analog) || (c === 'button' && !!input?.digital);
+      });
+      if (!covered) mergedList.push(c); });
     setActiveComponents(mergedList);
 
     // Auto-wire all components using smart pin allocation
@@ -1069,6 +1163,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   // Filter active components by base type
+  const [catalogInputLevels, setCatalogInputLevels] = useState<Record<string, number>>({});
   const [partSearch, setPartSearch] = useState('');
   const matchingWokwiParts = wokwiParts.filter(tag => wokwiPartName(tag).toLowerCase().includes(partSearch.trim().toLowerCase()));
   const [wokwiPins, setWokwiPins] = useState<Record<string, WokwiPin[]>>({});
@@ -1077,14 +1172,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
     setWokwiPins(previous => ({ ...previous, [id]: next }));
   }, []);
 
-  const ledComponents = activeComponents.filter(c => getBaseComponentType(c) === 'led');
-  const servoComponents = activeComponents.filter(c => getBaseComponentType(c) === 'servo');
-  const ultrasonicComponents = activeComponents.filter(c => getBaseComponentType(c) === 'ultrasonic');
-  const potComponents = activeComponents.filter(c => getBaseComponentType(c) === 'pot');
-  const buttonComponents = activeComponents.filter(c => getBaseComponentType(c) === 'button');
+  const ledComponents = activeComponents.filter(c => simulatedType(c) === 'led');
+  const servoComponents = activeComponents.filter(c => simulatedType(c) === 'servo');
+  const ultrasonicComponents = activeComponents.filter(c => simulatedType(c) === 'ultrasonic');
+  const potComponents = activeComponents.filter(c => simulatedType(c) === 'pot');
+  const buttonComponents = activeComponents.filter(c => simulatedType(c) === 'button');
   const lcdComponents = activeComponents.filter(c => getBaseComponentType(c) === 'lcd');
   const motorComponents = activeComponents.filter(c => getBaseComponentType(c) === 'motor');
-  const dht11Components = activeComponents.filter(c => getBaseComponentType(c) === 'dht11');
+  const dht11Components = activeComponents.filter(c => simulatedType(c) === 'dht11');
   const rfidComponents = activeComponents.filter(c => getBaseComponentType(c) === 'rfid');
 
   const hasServo = servoComponents.length > 0;
@@ -1287,7 +1382,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     const componentPins: Pin[] = [];
 
     // LED Pins (size 200x200, center 100x100)
-    ledComponents.forEach(id => {
+    ledComponents.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const ledA = getRotatedPinCoords(id, 80, 185, 100, 100);
       const ledK = getRotatedPinCoords(id, 120, 185, 100, 100);
@@ -1298,7 +1393,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     });
     
     // Servo Pins (size 200x200, center 100x100)
-    servoComponents.forEach(id => {
+    servoComponents.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const gnd = getRotatedPinCoords(id, 85, 20, 100, 100);
       const vcc = getRotatedPinCoords(id, 100, 20, 100, 100);
@@ -1311,7 +1406,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     });
 
     // HC-SR04 Pins (size 200x200, center 100x100)
-    ultrasonicComponents.forEach(id => {
+    ultrasonicComponents.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const vcc = getRotatedPinCoords(id, 84, 157, 100, 100);
       const trig = getRotatedPinCoords(id, 94, 157, 100, 100);
@@ -1326,7 +1421,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     });
 
     // Potentiometer Pins (size 200x200, center 100x100)
-    potComponents.forEach(id => {
+    potComponents.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const gnd = getRotatedPinCoords(id, 50, 150, 100, 100);
       const sig = getRotatedPinCoords(id, 100, 150, 100, 100);
@@ -1339,7 +1434,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     });
 
     // Push Button Pins (size 120x120, center 60x60)
-    buttonComponents.forEach(id => {
+    buttonComponents.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const sig = getRotatedPinCoords(id, 35, 95, 60, 60);
       const gnd = getRotatedPinCoords(id, 85, 95, 60, 60);
@@ -1376,7 +1471,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     });
 
     // DHT11 Pins (aligned with dht11 layout, pitch 20px, corrected offset)
-    dht11Components.forEach(id => {
+    dht11Components.filter(id => !isWokwiPart(id)).forEach(id => {
       const s = id.includes('_') ? ` #${id.split('_')[1]}` : '';
       const vcc = getRotatedPinCoords(id, 15, 115, 45, 60);
       const data = getRotatedPinCoords(id, 35, 115, 45, 60);
@@ -1524,6 +1619,29 @@ export const Simulator: React.FC<SimulatorProps> = ({
     ...(board === 'BBC micro:bit' ? Array.from({ length: 21 }, (_, i) => `V${i}`) : [])
   ];
 
+  const getCatalogConnection = (id: string, name: string) => {
+    const index = wokwiPins[id]?.findIndex(pin => pin.name === name) ?? -1;
+    return index < 0 ? null : getConnectedMcuPin(wokwiPartPinId(id, index));
+  };
+  const isCatalogPowered = (id: string) => {
+    const power = getCatalogConnection(id, 'VCC');
+    const ground = getCatalogConnection(id, 'GND');
+    return !!power && !!ground && powerPins.includes(power.id) && gndPins.includes(ground.id);
+  };
+
+  useEffect(() => {
+    if (!isRunning || !onPinStateChange) return;
+    for (const id of catalogParts) {
+      const model = wokwiInputs[getBaseComponentType(id)];
+      if (!model || !isCatalogPowered(id)) continue;
+      const level = catalogInputLevels[id] ?? 0;
+      const analogPin = model.analog && getCatalogConnection(id, model.analog);
+      const digitalPin = model.digital && getCatalogConnection(id, model.digital);
+      if (analogPin) onPinStateChange(analogPin.id, Math.round(level * 1023 / 100));
+      if (digitalPin) onPinStateChange(digitalPin.id, level >= 50 ? 'HIGH' : 'LOW');
+    }
+  }, [catalogInputLevels, activeComponents, wires, wokwiPins, board, isRunning, onPinStateChange]);
+
   const ledAnodePin = getConnectedMcuPin('LED_A');
   const ledCathodePin = getConnectedMcuPin('LED_K');
   
@@ -1633,18 +1751,18 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const servoAngle = getServoAngle();
 
-  const checkUltrasonicWiring = (): boolean => {
-    const trigPin = getConnectedMcuPin('SR04_TRIG');
-    const echoPin = getConnectedMcuPin('SR04_ECHO');
-    const vccPin = getConnectedMcuPin('SR04_VCC');
-    const gndPin = getConnectedMcuPin('SR04_GND');
+  const checkUltrasonicWiring = (id: string): boolean => {
+    const trigPin = getConnectedMcuPin(getInstancePinId(id, 'SR04_TRIG'));
+    const echoPin = getConnectedMcuPin(getInstancePinId(id, 'SR04_ECHO'));
+    const vccPin = getConnectedMcuPin(getInstancePinId(id, 'SR04_VCC'));
+    const gndPin = getConnectedMcuPin(getInstancePinId(id, 'SR04_GND'));
     
     const isPowerOk = vccPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
     if (!isPowerOk || !trigPin || !echoPin) return false;
     return trigPin.type === 'mcu' && echoPin.type === 'mcu' && !gndPins.includes(trigPin.id) && !gndPins.includes(echoPin.id);
   };
 
-  const isUltrasonicWired = checkUltrasonicWiring();
+  const isUltrasonicWired = ultrasonicComponents.some(checkUltrasonicWiring);
 
   const checkPotWiring = (instanceId: string = 'pot'): boolean => {
     const sigPin = getConnectedMcuPin(getInstancePinId(instanceId, 'POT_SIG'));
@@ -1667,16 +1785,16 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
   const isButtonWired = checkBtnWiring();
 
-  const checkDhtWiring = (): boolean => {
-    const dataPin = getConnectedMcuPin('DHT11_DATA');
-    const vccPin = getConnectedMcuPin('DHT11_VCC');
-    const gndPin = getConnectedMcuPin('DHT11_GND');
+  const checkDhtWiring = (id: string): boolean => {
+    const dataPin = getConnectedMcuPin(getInstancePinId(id, 'DHT11_DATA'));
+    const vccPin = getConnectedMcuPin(getInstancePinId(id, 'DHT11_VCC'));
+    const gndPin = getConnectedMcuPin(getInstancePinId(id, 'DHT11_GND'));
     
     if (!dataPin || !vccPin || !gndPin || !gndPins.includes(gndPin.id) || !powerPins.includes(vccPin.id)) return false;
     return true;
   };
 
-  const isDhtWired = checkDhtWiring();
+  const isDhtWired = dht11Components.some(checkDhtWiring);
 
   const checkLcdWiring = (): boolean => {
     const gndPin = getConnectedMcuPin('LCD_GND');
@@ -2297,7 +2415,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             <clipPath id="led_legs_clip"><rect x="0" y="140" width="200" height="60" /></clipPath>
 
             {/* Dynamic Gradients for LED Custom Colors */}
-            {ledComponents.map(id => {
+            {ledComponents.filter(id => !isWokwiPart(id)).map(id => {
               const compColor = getComponentColor(id, '#ef4444');
               const lightColor = hexToRgbBoost(compColor, 1.35);
               const darkColor = hexToRgbDarken(compColor, 0.55);
@@ -2317,7 +2435,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 </React.Fragment>
               );
             })}
-            {servoComponents.map(id => {
+            {servoComponents.filter(id => !isWokwiPart(id)).map(id => {
               const compColor = getComponentColor(id, '#3b82f6');
               if (compColor.toLowerCase() === '#3b82f6') return null;
               const rgb = hexToRgb(compColor);
@@ -2534,7 +2652,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           {/* ==================== ACTUATORS & COMPONENTS LAYER — 3D SVG ==================== */}
 
           {/* A. RED LED — Multi-instance support */}
-          {ledComponents.map(id => {
+          {ledComponents.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.led ?? DEFAULT_COMPONENT_POSITIONS.led);
             const rot = rotations[id] || (rotations.led ?? 0);
             const pinA = getInstancePinId(id, 'LED_A');
@@ -2648,7 +2766,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* B. SG90 SERVO MOTOR — Multi-instance support */}
-          {servoComponents.map(id => {
+          {servoComponents.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.servo ?? DEFAULT_COMPONENT_POSITIONS.servo);
             const rot = rotations[id] || (rotations.servo ?? 0);
             const pinSig = getInstancePinId(id, 'SERVO_SIG');
@@ -2765,7 +2883,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* C. HC-SR04 ULTRASONIC — Multi-instance support */}
-          {ultrasonicComponents.map(id => {
+          {ultrasonicComponents.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.ultrasonic ?? DEFAULT_COMPONENT_POSITIONS.ultrasonic);
             const rot = rotations[id] || (rotations.ultrasonic ?? 0);
             const pinVcc = getInstancePinId(id, 'SR04_VCC');
@@ -2851,7 +2969,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* D. ROTARY POTENTIOMETER — Multi-instance support */}
-          {potComponents.map(id => {
+          {potComponents.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.pot ?? DEFAULT_COMPONENT_POSITIONS.pot);
             const rot = rotations[id] || (rotations.pot ?? 0);
             const pinVcc = getInstancePinId(id, 'POT_VCC');
@@ -2957,7 +3075,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* E. TACTILE PUSH BUTTON — Multi-instance support */}
-          {buttonComponents.map(id => {
+          {buttonComponents.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.button ?? DEFAULT_COMPONENT_POSITIONS.button);
             const rot = rotations[id] || (rotations.button ?? 0);
             const pinSig = getInstancePinId(id, 'BTN_SIG');
@@ -3169,7 +3287,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* G. DHT11 TEMP/HUMIDITY SENSOR — Multi-instance support */}
-          {dht11Components.map(id => {
+          {dht11Components.filter(id => !isWokwiPart(id)).map(id => {
             const pos = positions[id] || (positions.dht11 ?? DEFAULT_COMPONENT_POSITIONS.dht11);
             const rot = rotations[id] || (rotations.dht11 ?? 0);
             const pinData = getInstancePinId(id, 'DHT11_DATA');
@@ -3460,12 +3578,36 @@ export const Simulator: React.FC<SimulatorProps> = ({
           {catalogParts.map(id => {
             const tag = getBaseComponentType(id);
             const pos = positions[id] || { x: 50, y: 420 };
+            const model = wokwiNativeParts[tag]?.type;
+            const signal = model === 'led' ? getConnectedMcuPin(getInstancePinId(id, 'LED_A'))
+              : model === 'servo' ? getConnectedMcuPin(getInstancePinId(id, 'SERVO_SIG')) : null;
+            const ground = model === 'led' ? getConnectedMcuPin(getInstancePinId(id, 'LED_K'))
+              : model === 'servo' ? getConnectedMcuPin(getInstancePinId(id, 'SERVO_GND')) : null;
+            const supply = model === 'servo' ? getConnectedMcuPin(getInstancePinId(id, 'SERVO_VCC')) : null;
+            const wired = !!ground && gndPins.includes(ground.id);
+            const level = signal ? pinStates[signal.id] ?? pinStates[signal.id.replace(/^[ADPG]/i, '')] : undefined;
+            const sensor = wokwiInputs[tag];
+            const channelLevel = (name: string) => {
+              const pin = getCatalogConnection(id, name);
+              const common = getCatalogConnection(id, 'COM');
+              if (!pin || !common || !isRunning) return 0;
+              const raw = pinStates[pin.id] ?? pinStates[pin.id.replace(/^[ADPG]/i, '')];
+              const level = typeof raw === 'number' ? Math.min(1, Math.max(0, raw / (board === 'BBC micro:bit' ? 1023 : 255))) : raw === 'HIGH' ? 1 : 0;
+              if (raw === undefined) return 0;
+              return gndPins.includes(common.id) ? level : powerPins.includes(common.id) ? 1 - level : 0;
+            };
+            const displayState = model === 'led' ? {value: wired && (level === 'HIGH' || typeof level === 'number' && level > 0)}
+              : model === 'servo' ? { angle: getServoAngle(signal, wired && !!supply && powerPins.includes(supply.id)) }
+              : model === 'button' ? { pressed: !!pressedButtons[id] }
+              : model === 'pot' ? { value: extraPotValues[id] ?? potValue } : tag === 'wokwi-rgb-led' ? { ledRed: channelLevel('R'), ledGreen: channelLevel('G'), ledBlue: channelLevel('B') }
+              : sensor?.indicator ? { ledPower: isCatalogPowered(id), [sensor.indicator]: isCatalogPowered(id) && (catalogInputLevels[id] ?? 0) >= 50 }
+              : undefined;
             return <g key={id} className="cursor-move" aria-label={wokwiPartName(tag)}
               transform={`translate(${pos.x}, ${pos.y}) rotate(${rotations[id] || 0}, ${wokwiPartWidth / 2}, ${wokwiPartHeight / 2})`}
               onMouseDown={event => startDrag(id, event)}
               onContextMenu={event => { event.preventDefault(); handleRotateComponent(id); }}>
               <rect width={wokwiPartWidth} height={wokwiPartHeight} rx="8" fill="transparent" pointerEvents="all" />
-              <WokwiPart id={id} tag={tag} onPins={updateWokwiPins} />
+              <WokwiPart id={id} tag={tag} onPins={updateWokwiPins} displayState={displayState} />
             </g>;
           })}
 
@@ -3619,7 +3761,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
         {/* ── SENSOR DYNAMIC SIMULATOR POPUP OVERLAY ── */}
         {activePopup && (() => {
-          const basePopup = getBaseComponentType(activePopup);
+          const basePopup = simulatedType(activePopup);
+          const catalogTag = getBaseComponentType(activePopup);
+          const catalogSensor = wokwiInputs[catalogTag];
+          const visualOnly = isWokwiPart(activePopup) && !wokwiNativeParts[catalogTag] && !catalogSensor && catalogTag !== 'wokwi-rgb-led';
           const isUltrasonicPopup = basePopup === 'ultrasonic' || basePopup === 'hcsr' || basePopup === 'hcsr04';
           const isDhtPopup = basePopup === 'dht11' || basePopup === 'dht';
           const isPotPopup = basePopup === 'pot';
@@ -3643,7 +3788,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             if (isButtonPopup) return `🔘 Button${instanceSuffix}`;
             if (isLcdPopup) return `📟 LCD 16x2${instanceSuffix}`;
             if (isMotorPopup) return `⚙️ DC Motor${instanceSuffix}`;
-            if (basePopup.startsWith('wokwi-')) return wokwiPartName(basePopup);
+            if (isWokwiPart(activePopup)) return wokwiPartName(getBaseComponentType(activePopup));
             return `${activePopup.toUpperCase()}${instanceSuffix}`;
           };
 
@@ -3662,6 +3807,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 </button>
               </div>
               
+              {visualOnly && <p className="mb-3 text-xs">Komponen diagram. Perilaku perangkat ini belum tersedia di simulator.</p>}
+              {catalogSensor && <label className="mb-3 block space-y-1 text-xs">
+                <span>{catalogSensor.label}</span>
+                {catalogSensor.analog ? <input type="range" min={0} max={100} value={catalogInputLevels[activePopup] ?? 0}
+                  onChange={event => setCatalogInputLevels(previous => ({ ...previous, [activePopup]: Number(event.target.value) }))} className="w-full" />
+                  : <input type="checkbox" checked={(catalogInputLevels[activePopup] ?? 0) >= 50}
+                    onChange={event => setCatalogInputLevels(previous => ({ ...previous, [activePopup]: event.target.checked ? 100 : 0 }))} className="ml-2" />}
+              </label>}
               {isUltrasonicPopup && (
                 <div className="space-y-1.5 mb-2.5">
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-350">
@@ -3931,7 +4084,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>
 
-          <p className="text-[10px]">Aset Wokwi dapat dipasang dan dikabelkan sesuai pin yang tersedia. Gunakan komponen bawaan untuk simulasi perilaku program. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
+          <p className="text-[10px]">Auto Wire mengikuti pin kode untuk komponen yang didukung. Komponen katalog lain dapat dikabelkan secara manual. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
 
           <div className={`border-t ${isLight ? 'border-slate-100' : 'border-slate-800/80'}`} />
 
