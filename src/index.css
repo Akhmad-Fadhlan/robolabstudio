@@ -2370,3 +2370,22 @@ nav[aria-label="Jalur belajar"] button:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+.studio-strip { min-height: 56px; padding-block: 6px; flex-wrap: wrap; overflow: visible; }
+.studio-strip button { border-radius: 8px; min-height: 32px; box-shadow: none; }
+.studio-strip button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.studio-strip > div:first-child > div:first-child > div:first-child { background: transparent; border: 0; box-shadow: none; }
+.studio-strip > div:first-child > div:first-child img { width: 28px; height: 28px; }
+.studio-disclosure { display: none; }
+.studio-strip button.bg-purple-600 { background: color-mix(in srgb,var(--accent-primary) 50%,#152137); color: white; }
+@media(max-width:1150px) {
+  .studio-disclosure { display:block; padding: 4px 10px; color:inherit; border:1px solid var(--theme-border,currentColor); font-size:12px; }
+  #studio-tools { width:100%; flex-wrap:wrap; border-top:1px solid var(--theme-border,#65728a); padding-top:6px; }
+  #studio-tools[data-open="false"] { display:none; }
+}
+@media(max-width:620px) {
+  .studio-strip > div:first-child { flex-wrap:wrap; max-width:100%; }
+  .studio-strip > div:first-child > div:nth-child(2) { flex-wrap:wrap; }
+  .studio-strip h1 { font-size:14px; }
+  .studio-strip { gap:6px; }
+}
