@@ -122,20 +122,33 @@ import {
 
 const INITIAL_PACKAGES = {
   arduino: [
-    { name: 'ArduinoJson', desc: 'Efficient JSON serialization library for embedded C++.', version: '6.21.3', installed: true },
-    { name: 'Adafruit_MPU6050', desc: 'Inertial Measurement Unit (IMU) sensor driver library.', version: '2.2.4', installed: false },
-    { name: 'Servo', desc: 'Controls servo motors connected to Arduino/ESP32.', version: '1.2.1', installed: false },
-    { name: 'Wire', desc: 'I2C communication library for Arduino.', version: '1.0.0', installed: true },
-    { name: 'SPI', desc: 'SPI communication library for Arduino.', version: '1.0.0', installed: true },
-    { name: 'DHT sensor library', desc: 'Library for DHT11/DHT22 temperature and humidity sensors.', version: '1.4.6', installed: false },
-    { name: 'Adafruit_NeoPixel', desc: 'Driver for WS2812B RGB LEDs (NeoPixel strips).', version: '1.11.0', installed: false },
-    { name: 'PubSubClient', desc: 'MQTT client library for ESP32 IoT projects.', version: '2.8.0', installed: false },
-    { name: 'ESP32Servo', desc: 'Servo library specifically optimized for ESP32.', version: '0.13.0', installed: false },
-    { name: 'IRremote', desc: 'Send and receive infrared remote control signals.', version: '4.3.1', installed: false },
-    { name: 'Ultrasonic', desc: 'HC-SR04 ultrasonic distance sensor driver.', version: '3.0.0', installed: false },
-    { name: 'Adafruit PN532', desc: 'Library RFID & NFC Reader PN532 via I2C / SPI by Adafruit.', version: '1.3.3', installed: false },
-    { name: 'WebSockets', desc: 'WebSocket Server and Client for Arduino.', version: '2.4.1', installed: false },
-    { name: 'Blynk', desc: 'Blynk IoT library for ESP8266 & ESP32.', version: '1.3.2', installed: false }
+    { name: 'ArduinoJson', desc: 'Efficient JSON serialization library for embedded C++.', version: '6.21.3', installed: true, cat: 'Core' },
+    { name: 'Wire', desc: 'I2C communication library for Arduino.', version: '1.0.0', installed: true, cat: 'Core' },
+    { name: 'SPI', desc: 'SPI communication library for Arduino.', version: '1.0.0', installed: true, cat: 'Core' },
+    { name: 'DHT sensor library', displayName: 'DHT11 / DHT22 (Suhu & Kelembapan)', desc: 'Library sensor suhu presisi (°C) dan kelembapan udara relatif (%) untuk DHT11 dan DHT22.', version: '1.4.6', installed: false, cat: 'Sensor', tags: ['dht', 'dht11', 'dht22', 'suhu', 'kelembaban', 'temperature'] },
+    { name: 'NewPing', displayName: 'Ultrasonik HC-SR04 (NewPing)', desc: 'Library sensor jarak ultrasonik HC-SR04 ultra cepat dengan penyaring median derau pantulan.', version: '1.9.7', installed: false, cat: 'Sensor', tags: ['ultrasonic', 'ultrasonik', 'hcsr04', 'hc-sr04', 'sonar', 'jarak'] },
+    { name: 'Adafruit SSD1306', displayName: 'OLED Display 0.96" I2C (SSD1306)', desc: 'Menampilkan visual grafik, teks, garis, lingkaran, dan gambar monokrom pada layar OLED I2C 128x64.', version: '2.5.9', installed: false, cat: 'Display', tags: ['oled', 'ssd1306', 'display', 'layar', 'i2c'] },
+    { name: 'DFRobot_PH', displayName: 'Sensor pH Cairan (DFRobot Gravity)', desc: 'Sensor derajat keasaman cairan (pH 0-14) analog Gravity dengan kalibrasi larutan buffer pH 4.0 & 7.0.', version: '1.0.0', installed: false, cat: 'Sensor', tags: ['ph', 'ph_meter', 'keasaman', 'air'] },
+    { name: 'GravityTDS', displayName: 'Sensor EC & TDS Kualitas Air (DFRobot)', desc: 'Sensor konduktivitas listrik (EC) & Total Dissolved Solids (TDS ppm) untuk nutrisi tanaman & kemurnian air.', version: '1.0.0', installed: false, cat: 'Sensor', tags: ['ec', 'tds', 'gravitytds', 'ppm', 'air'] },
+    { name: 'DFRobot_EC', displayName: 'Sensor EC Konduktivitas Listrik (DFRobot)', desc: 'Sensor konduktivitas listrik (EC) analog Gravity untuk larutan nutrisi tanaman hidroponik.', version: '1.0.0', installed: false, cat: 'Sensor', tags: ['ec', 'dfrobot_ec', 'konduktivitas', 'nutrisi'] },
+    { name: 'Adafruit_MAX31865', displayName: 'Sensor PT100 / PT1000 RTD (MAX31865)', desc: 'Amplifier RTD Platinum presisi tinggi industri untuk membaca probe suhu ekstrem PT100 / PT1000 via SPI.', version: '1.6.2', installed: false, cat: 'Sensor', tags: ['pt100', 'pt1000', 'max31865', 'rtd', 'suhu'] },
+    { name: 'FirebaseESP32', displayName: 'Google Firebase Realtime Database (IoT)', desc: 'Koneksi cloud langsung ke Google Firebase Realtime Database untuk sinkronisasi nilai sensor & saklar IoT.', version: '4.4.14', installed: false, cat: 'IoT', tags: ['firebase', 'database', 'rtdb', 'cloud', 'iot'] },
+    { name: 'MFRC522', displayName: 'RFID Reader RC522 13.56 MHz (SPI)', desc: 'Membaca nomor UID kartu RFID / e-KTP / gantungan kunci 13.56 MHz untuk sistem absensi dan akses pintu.', version: '1.4.10', installed: false, cat: 'Sensor', tags: ['rfid', 'rc522', 'mfrc522', 'nfc', 'kartu'] },
+    { name: 'Adafruit PN532', displayName: 'RFID & NFC Reader (Adafruit PN532)', desc: 'Modul NFC & RFID canggih komunikasi I2C/SPI untuk membaca kartu Mifare, ponsel pintar, dan tag NFC.', version: '1.3.3', installed: false, cat: 'Sensor', tags: ['pn532', 'nfc', 'rfid'] },
+    { name: 'LiquidCrystal_I2C', displayName: 'LCD 16x2 / 20x4 I2C Backpack', desc: 'Menampilkan karakter alfanumerik pada modul LCD 16x2 / 20x4 dengan chip PCF8574 hemat pin I2C.', version: '1.1.4', installed: false, cat: 'Display', tags: ['lcd', 'liquidcrystal', '16x2', '20x4', 'display'] },
+    { name: 'Blynk', displayName: 'Blynk IoT Cloud Platform', desc: 'Library resmi Blynk IoT Cloud untuk ESP8266 & ESP32 guna memonitor widget dashboard di ponsel.', version: '1.3.2', installed: false, cat: 'IoT', tags: ['blynk', 'iot', 'cloud', 'dashboard'] },
+    { name: 'PubSubClient', displayName: 'MQTT Client IoT (HiveMQ / ThingsBoard)', desc: 'Protokol pengiriman pesan data ringan Publish-Subscribe ke broker MQTT untuk aplikasi IoT industri.', version: '2.8.0', installed: false, cat: 'IoT', tags: ['mqtt', 'pubsubclient', 'broker'] },
+    { name: 'Adafruit_MPU6050', displayName: 'MPU6050 Akselerometer & Gyroscope 6-Axis', desc: 'Sensor gerak 6-Axis (3-axis akselerasi + 3-axis sudut rotasi putar) via I2C untuk deteksi kemiringan.', version: '2.2.6', installed: false, cat: 'Sensor', tags: ['mpu6050', 'gyro', 'accelerometer', 'akselerometer'] },
+    { name: 'Adafruit_NeoPixel', displayName: 'NeoPixel RGB LED Strip (WS2812B)', desc: 'Mengendalikan rangkaian LED RGB addressable WS2812B dengan 16 juta warna hanya dari 1 pin mikrokontroler.', version: '1.12.0', installed: false, cat: 'Aktuator', tags: ['neopixel', 'ws2812', 'rgb', 'led'] },
+    { name: 'HX711', displayName: 'Timbangan Digital Load Cell (HX711)', desc: 'Amplifier ADC 24-bit untuk membaca sensor berat (load cell) timbangan digital dengan akurasi gram.', version: '0.7.5', installed: false, cat: 'Sensor', tags: ['hx711', 'loadcell', 'timbangan', 'berat'] },
+    { name: 'RTClib', displayName: 'RTC Waktu Real-Time (DS3231 / DS1307)', desc: 'Pencatat waktu nyata presisi tinggi (jam, menit, detik, tanggal) dengan baterai backup cadangan.', version: '2.1.3', installed: false, cat: 'Sensor', tags: ['rtc', 'rtclib', 'ds3231', 'jam', 'waktu'] },
+    { name: 'Adafruit_VL53L0X', displayName: 'Laser ToF Distance Sensor (VL53L0X)', desc: 'Sensor jarak laser Time-of-Flight hingga 2 meter dengan presisi tinggi bebas gangguan warna target.', version: '1.2.4', installed: false, cat: 'Sensor', tags: ['vl53l0x', 'laser', 'tof', 'distance'] },
+    { name: 'DFRobotDFPlayerMini', displayName: 'DFPlayer Mini MP3 Player Audio', desc: 'Pemutar file musik MP3/WAV dari microSD dengan komunikasi serial UART dan kontrol volume langsung.', version: '1.0.6', installed: false, cat: 'Aktuator', tags: ['dfplayer', 'mp3', 'audio', 'musik'] },
+    { name: 'AccelStepper', displayName: 'AccelStepper Motor Stepper Presisi', desc: 'Pengendalian motor stepper multi-axis dengan akselerasi dan deselerasi halus tanpa kehilangan langkah.', version: '1.64.0', installed: false, cat: 'Aktuator', tags: ['stepper', 'accelstepper', 'motor'] },
+    { name: 'Servo', displayName: 'Servo Motor Control (SG90 / MG996R)', desc: 'Pengendali posisi sudut rotasi (0 - 180 derajat) untuk motor servo standar Arduino & ESP32.', version: '1.2.1', installed: false, cat: 'Aktuator', tags: ['servo', 'motor'] },
+    { name: 'ESP32Servo', displayName: 'ESP32Servo Motor Control', desc: 'Servo library specifically optimized for ESP32 with hardware timers.', version: '0.13.0', installed: false, cat: 'Aktuator', tags: ['esp32servo', 'servo', 'esp32'] },
+    { name: 'IRremote', displayName: 'IRremote Infrared Receiver & Transmitter', desc: 'Send and receive infrared remote control signals.', version: '4.3.1', installed: false, cat: 'Sensor', tags: ['irremote', 'ir', 'infrared'] },
+    { name: 'WebSockets', displayName: 'WebSockets Server & Client', desc: 'WebSocket Server and Client for Arduino & ESP32.', version: '2.4.1', installed: false, cat: 'IoT', tags: ['websocket', 'websockets'] }
   ],
   python: [
     { name: 'robolab-client', desc: 'Python API for connecting and sending commands to RoboLab kits.', version: '1.0.4', installed: true },
@@ -3996,6 +4009,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             if (!existing.has((initPkg.name || '').toLowerCase())) {
               parsed.arduino.push(initPkg);
             }
+          });
+          parsed.arduino = parsed.arduino.map((p: any) => {
+            const found = INITIAL_PACKAGES.arduino.find((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
+            if (found) {
+              return {
+                ...p,
+                displayName: p.displayName || found.displayName,
+                cat: p.cat || found.cat,
+                desc: p.desc || found.desc,
+                tags: p.tags || found.tags
+              };
+            }
+            return p;
           });
         }
         return parsed;
@@ -9885,154 +9911,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 </div>
               </div>
 
-              {/* GitHub URL Install + ZIP Upload */}
-              <div className="rounded-2xl p-4 space-y-3" style={themeMode === 'light' ? {background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)'} : {background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)'}}>
-                <h3 className={`text-xs font-bold flex items-center gap-1.5 ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-400'}`}>
-                  <span className="text-emerald-450">↓</span> Install dari GitHub / ZIP
-                </h3>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="GitHub URL library (contoh: https://github.com/user/repo)"
-                    value={githubUrl}
-                    onChange={(e) => setGithubUrl(e.target.value)}
-                    className={`flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none font-mono transition border ${themeMode === 'light' ? 'bg-slate-200/50 border-slate-200 text-slate-850 focus:border-[var(--accent-primary)]' : 'bg-[#080910] border-slate-700 text-slate-200 focus:border-blue-500'}`}
-                  />
-                  <button
-                    onClick={async () => {
-                      const url = githubUrl.trim();
-                      if (!url) return;
-                      if (!url.startsWith('http')) {
-                        alert('URL tidak valid. Pastikan dimulai dengan https://github.com/...');
-                        return;
-                      }
-                      setIsInstallingGithub(true);
-                      const parts = url.split('/').filter(Boolean);
-                      let repoName = (parts[parts.length - 1] || 'library').replace(/\.git$/i, '');
-                      const authorName = parts.length >= 2 ? parts[parts.length - 2] : 'unknown';
-
-                      setInteractiveTerminalLogs((prev: any) => [
-                        ...prev,
-                        { text: `> Memulai instalasi library dari ${url}...`, type: 'output' },
-                      ]);
-
-                      const req = (window as any).__electronRequire || (window as any).require;
-                      let success = false;
-                      let installedParsedApi: any = undefined;
-                      if (req) {
-                        try {
-                          const res = await req('electron').ipcRenderer.invoke('install-lib-from-github', { githubUrl: url, userId: authUser?.id });
-                          if (res && res.success) {
-                            success = true;
-                            if (res.libName) repoName = res.libName;
-                            installedParsedApi = res.parsedApi;
-                            if (Array.isArray(res.examples) && res.examples.length > 0) {
-                              const newCards = res.examples.map((ex: any) => ({
-                                name: ex.name,
-                                board: ex.board || 'Arduino Uno',
-                                description: ex.description || `Contoh program ${ex.name} dari library ${ex.library}.`,
-                                iconColor: 'emerald',
-                                components: ['custom_lib'],
-                                libraryName: ex.library,
-                                category: 'Library Example',
-                                isLibraryExample: true,
-                                isCustom: true,
-                                isGitHubLib: true,
-                                ino: ex.code,
-                                xml: (ex.xml && ex.xml.includes('<statement name="STACK">')) ? ex.xml : (ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || installedParsedApi, ex.xml) || '') : ''),
-                                parsedApi: ex.parsedApi || installedParsedApi,
-                                py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || installedParsedApi) || `# Contoh Library ${ex.library}\n`) : ''
-                              }));
-                              setCustomLibProjects((prev: any[]) => {
-                                const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== (res.libName || repoName).toLowerCase());
-                                return [...newCards, ...existing];
-                              });
-                            }
-                            if (authUser?.id) {
-                              await saveUserCustomLibrary(authUser.id, {
-                                name: res.libName || repoName,
-                                source_type: 'github',
-                                source_url: url,
-                                version: 'latest-git',
-                                headers: res.headers || []
-                              });
-                            }
-                            await syncInstalledLibraries();
-                          }
-                        } catch (e: any) {
-                          console.warn('GitHub install error:', e);
-                        }
-                      } else {
-                        success = true;
-                        installedParsedApi = await inferLibraryApiWithGemini(repoName, url);
-                        if (authUser?.id) {
-                          await saveUserCustomLibrary(authUser.id, {
-                            name: repoName,
-                            source_type: 'github',
-                            source_url: url,
-                            version: 'latest-git',
-                            headers: []
-                          });
-                        }
-                      }
-
-                      if (!installedParsedApi || !Array.isArray(installedParsedApi.methods) || installedParsedApi.methods.length === 0) {
-                        const known = findKnownLibrary(repoName) || findKnownLibrary(url);
-                        if (known) {
-                          installedParsedApi = {
-                            name: repoName,
-                            className: known.className,
-                            mainHeader: known.mainHeader,
-                            constructors: known.constructors || [],
-                            pins: known.pins || [],
-                            constants: known.constants || [],
-                            methods: known.methods
-                          };
-                        }
-                      }
-
-                      if (success) {
-                        setPackages((prev: any) => ({
-                          ...prev,
-                          arduino: prev.arduino.some((p: any) => p.name.toLowerCase() === repoName.toLowerCase())
-                            ? prev.arduino.map((p: any) => p.name.toLowerCase() === repoName.toLowerCase() ? { ...p, installed: true, isCustom: true, userId: authUser?.id, parsedApi: installedParsedApi || p.parsedApi } : p)
-                            : [...prev.arduino, { name: repoName, desc: `GitHub Library: ${url} (by ${authorName})`, version: 'latest-git', installed: true, isCustom: true, userId: authUser?.id, parsedApi: installedParsedApi }]
-                        }));
-                        setTerminalLogs((prev: any) => [
-                          ...prev,
-                          { text: `[LIB] ✓ Library '${repoName}' berhasil diinstal!`, type: 'success' }
-                        ]);
-                        setInteractiveTerminalLogs((prev: any) => [
-                          ...prev,
-                          { text: `> ✓ Library '${repoName}' installed to Arduino/libraries/`, type: 'success' }
-                        ]);
-                        setGithubUrl('');
-                      } else {
-                        setTerminalLogs((prev: any) => [
-                          ...prev,
-                          { text: `[LIB] ❌ Gagal menginstal library dari ${url}. Cek log terminal.`, type: 'error' }
-                        ]);
-                      }
-                      setIsInstallingGithub(false);
-                    }}
-                    disabled={isInstallingGithub || !githubUrl.trim()}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition cursor-pointer select-none whitespace-nowrap hover:opacity-90 border ${
-                      themeMode === 'light'
-                        ? githubUrl.trim()
-                          ? 'text-white-force border-transparent'
-                          : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                        : githubUrl.trim()
-                          ? 'text-white border-transparent'
-                          : 'bg-slate-800/60 text-slate-500 border-slate-700/50 cursor-not-allowed'
-                    }`}
-                    style={githubUrl.trim() ? { background: 'var(--accent-gradient)' } : {}}
-                  >
-                    {isInstallingGithub ? '⟳ Installing...' : '↓ Clone & Install'}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">Masukkan URL repositori GitHub library Arduino (contoh: https://github.com/adafruit/Adafruit_SSD1306) untuk menginstal langsung.</p>
-              </div>
-
               {/* Category Tabs */}
               <div className={`flex gap-1 p-1 rounded-lg w-fit border ${themeMode === 'light' ? 'bg-slate-200/60 border-slate-200' : 'bg-[#0c0d12] border-slate-800'}`}>
                 {(['arduino', 'python', 'boards'] as const).map(tab => (
@@ -10062,74 +9940,210 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
               {/* Arduino Libraries */}
               {pkgTab === 'arduino' && (
-                <div className="space-y-2">
-                  {packages.arduino
-                    .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || p.desc.toLowerCase().includes(pkgSearch.toLowerCase()))
-                    .map((pkg: any) => (
-                      <div key={pkg.name} className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${themeMode === 'light' ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm' : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'}`}>
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>v{pkg.version}</span>
-                            {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
-                            {pkg.isCustom ? (
-                              <span className="text-[9px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-1.5 py-0.5 rounded font-medium">👤 Akun Anda</span>
-                            ) : (
-                              <span className="text-[9px] text-slate-400 bg-slate-800/40 border border-slate-700/40 px-1.5 py-0.5 rounded">📦 Bawaan</span>
-                            )}
-                          </div>
-                          <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {pkg.installed ? (
-                            <>
-                              <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Installed</span>
-                              </span>
-                              <button
-                                disabled={uninstallingMap[pkg.name]}
-                                onClick={() => handleUninstallPkg('arduino', pkg.name)}
-                                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
-                                title={`Hapus library ${pkg.name}`}
-                              >
-                                {uninstallingMap[pkg.name] ? (
-                                  <>
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Menghapus...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Hapus</span>
-                                  </>
-                                )}
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              disabled={installingMap[pkg.name]?.loading}
-                              onClick={() => handleInstallPkg('arduino', pkg.name)}
-                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
-                                installingMap[pkg.name]?.loading
-                                  ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
-                                  : 'text-white hover:opacity-90'
-                              }`}
-                              style={!installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
-                            >
-                              {installingMap[pkg.name]?.loading ? (
-                                <>
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
-                                </>
-                              ) : (
-                                'Install'
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                <div className="space-y-4">
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    {(['Semua', 'Sensor', 'Display', 'IoT', 'Aktuator'] as const).map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setLibCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer select-none whitespace-nowrap ${
+                          libCategoryFilter === cat
+                            ? 'text-white shadow-sm'
+                            : themeMode === 'light' ? 'bg-slate-200/60 text-slate-700 hover:bg-slate-200' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
+                        }`}
+                        style={libCategoryFilter === cat ? { background: 'var(--accent-gradient)' } : {}}
+                      >
+                        {cat === 'Semua' ? '🌟 Semua' : cat === 'Sensor' ? '🌡️ Sensor' : cat === 'Display' ? '🖥️ Display' : cat === 'IoT' ? '☁️ IoT & Cloud' : '⚙️ Aktuator'}
+                      </button>
                     ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    {(() => {
+                      const query = pkgSearch.toLowerCase().trim();
+                      const filterCat = libCategoryFilter;
+
+                      // Merge IOT_LIBRARY_CATALOG with any existing packages not in catalog
+                      const catalogMap = new Map<string, any>();
+                      IOT_LIBRARY_CATALOG.forEach(item => catalogMap.set(item.name.toLowerCase(), item));
+
+                      (packages.arduino || []).forEach((p: any) => {
+                        const key = p.name.toLowerCase();
+                        if (!catalogMap.has(key)) {
+                          catalogMap.set(key, {
+                            name: p.name,
+                            displayName: p.displayName || p.name,
+                            author: p.author || 'Custom Library',
+                            desc: p.desc || `Library kustom ${p.name}`,
+                            cat: p.cat || 'Lainnya',
+                            version: p.version || '1.0.0',
+                            githubUrl: p.githubUrl || '',
+                            tags: p.tags || [p.name.toLowerCase()]
+                          });
+                        }
+                      });
+
+                      const allItems = Array.from(catalogMap.values());
+
+                      const filtered = allItems.filter(item => {
+                        if (filterCat !== 'Semua') {
+                          if (filterCat === 'Sensor' && item.cat !== 'Sensor') return false;
+                          if (filterCat === 'Display' && item.cat !== 'Display') return false;
+                          if (filterCat === 'IoT' && item.cat !== 'IoT') return false;
+                          if (filterCat === 'Aktuator' && item.cat !== 'Aktuator') return false;
+                        }
+                        if (!query) return true;
+                        if (item.name.toLowerCase().includes(query)) return true;
+                        if ((item.displayName || '').toLowerCase().includes(query)) return true;
+                        if ((item.desc || '').toLowerCase().includes(query)) return true;
+                        if (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(query))) return true;
+                        return false;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-12 space-y-2">
+                            <div className="text-3xl">🔍</div>
+                            <p className={`text-sm font-semibold ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-300'}`}>
+                              Tidak ada library yang cocok dengan "{pkgSearch}"
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Coba kata kunci lain atau pilih kategori Semua.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      const getLibEmoji = (name: string, cat?: string) => {
+                        const lower = name.toLowerCase();
+                        if (lower.includes('dht') || lower.includes('pt100') || lower.includes('max31865')) return '🌡️';
+                        if (lower.includes('ultra') || lower.includes('newping') || lower.includes('vl53')) return '📏';
+                        if (lower.includes('ph') || lower.includes('ec') || lower.includes('tds')) return '💧';
+                        if (lower.includes('oled') || lower.includes('ssd1306') || lower.includes('lcd') || lower.includes('display')) return '🖥️';
+                        if (lower.includes('firebase') || lower.includes('blynk') || lower.includes('mqtt') || lower.includes('pubsub')) return '☁️';
+                        if (lower.includes('rfid') || lower.includes('rc522') || lower.includes('pn532')) return '🏷️';
+                        if (lower.includes('neopixel') || lower.includes('ws2812')) return '💡';
+                        if (lower.includes('servo') || lower.includes('stepper') || lower.includes('mp3') || lower.includes('dfplayer')) return '⚙️';
+                        if (cat === 'Sensor') return '📡';
+                        return '📦';
+                      };
+
+                      return filtered.map((lib) => {
+                        const isLibInstalled = (packages.arduino || []).some((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
+                        const isInstalling = installingLib === lib.name;
+                        const isUninstalling = !!uninstallingMap[lib.name];
+
+                        return (
+                          <div
+                            key={lib.name}
+                            className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${
+                              isLibInstalled
+                                ? themeMode === 'light'
+                                  ? 'bg-emerald-50/60 border-emerald-300 shadow-sm'
+                                  : 'bg-emerald-950/20 border-emerald-500/30'
+                                : themeMode === 'light'
+                                  ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                                  : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-white/10 border border-white/10 shadow-xs">
+                                {getLibEmoji(lib.name, lib.cat)}
+                              </div>
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                                    {lib.displayName || lib.name}
+                                  </span>
+                                  {lib.displayName && lib.displayName !== lib.name && (
+                                    <span className="text-[10px] font-mono text-slate-400">({lib.name})</span>
+                                  )}
+                                  {lib.cat && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                      {lib.cat}
+                                    </span>
+                                  )}
+                                  {lib.version && (
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>
+                                      v{lib.version}
+                                    </span>
+                                  )}
+                                  {isLibInstalled && (
+                                    <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded font-semibold">
+                                      ✓ Terpasang di Blok
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                                  {lib.desc}
+                                </p>
+                                <div className="flex items-center gap-2 pt-0.5">
+                                  <span className="text-[9px] text-slate-500 font-medium">by {lib.author || 'GitHub Community'}</span>
+                                  {lib.githubUrl && (
+                                    <a
+                                      href={lib.githubUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[9px] text-cyan-500 hover:text-cyan-400 underline flex items-center gap-0.5"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      GitHub ↗
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {isLibInstalled ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Terpasang</span>
+                                  </span>
+                                  <button
+                                    disabled={isUninstalling}
+                                    onClick={() => handleToggleLibraryBlock(lib, false)}
+                                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
+                                    title={`Hapus ${lib.name} dari blok kode`}
+                                  >
+                                    {isUninstalling ? (
+                                      <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Menghapus...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>Hapus</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  disabled={isInstalling}
+                                  onClick={() => handleToggleLibraryBlock(lib, true)}
+                                  className="text-xs font-semibold px-3.5 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 text-white hover:opacity-90 disabled:opacity-50"
+                                  style={{ background: 'var(--accent-gradient)' }}
+                                >
+                                  {isInstalling ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Menambahkan...</span>
+                                    </>
+                                  ) : (
+                                    <span>+ Tambah ke Blok</span>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 </div>
               )}
 
