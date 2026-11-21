@@ -6,7 +6,7 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
   const scene = new T.Scene();
   const camera = new T.PerspectiveCamera(36, 1, 0.1, 60);
-  scene.add(new T.HemisphereLight(0xf7efff, 0x4d2479, 2.5));
+  scene.add(new T.HemisphereLight(0xf2faff, 0x105389, 2.5));
   const light = new T.DirectionalLight(0xffffff, 2.3);
   light.position.set(-3, 5, 4);
   scene.add(light);
@@ -15,7 +15,7 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   scene.add(display);
   const frame = new T.Mesh(
     new RoundedBoxGeometry(6.12, 3.12, .23, 4, .10),
-    new T.MeshStandardMaterial({ color: 0xb397f5, roughness: .42 }),
+    new T.MeshStandardMaterial({ color: 0x6cc8ff, roughness: .42 }),
   );
   display.add(frame);
   const screen = new T.Mesh(
@@ -24,17 +24,6 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   );
   screen.position.z = .118;
   display.add(screen);
-
-  const pieces = [
-    new T.Mesh(new RoundedBoxGeometry(.49, .49, .49, 3, .10), new T.MeshStandardMaterial({ color: 0xffc757 })),
-    new T.Mesh(new T.TorusGeometry(.27, .089, 10, 30), new T.MeshStandardMaterial({ color: 0xff82bf })),
-    new T.Mesh(new T.OctahedronGeometry(.26), new T.MeshStandardMaterial({ color: 0x73f1d4 })),
-  ];
-  const positions = [[-2.44, 1.95, .28], [2.59, -1.91, .45], [2.55, 1.96, -.25]];
-  pieces.forEach((piece, i) => {
-    piece.position.set(positions[i][0], positions[i][1], positions[i][2]);
-    scene.add(piece);
-  });
 
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const loader = new T.TextureLoader();
@@ -46,23 +35,26 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   let ready = false;
   let pointerX = 0;
   let pointerY = 0;
+  let enteredAt = -Infinity;
 
   const render = (now: number) => {
     if (disposed || lost) return;
-    const t = motion.matches ? 0 : now / 1000;
-    display.rotation.set(.025 + (motion.matches ? 0 : pointerY * .09), -.065 + (motion.matches ? 0 : pointerX * .16), -.035);
-    display.position.y = Math.sin(t * 1.7) * .08;
-    for (const [i, piece] of pieces.entries()) {
-      piece.rotation.set(.4 + t * .35, .7 + t * .44, .15 + i * .45);
-      piece.position.y = positions[i][1] + Math.sin(t * 1.8 + i) * .12;
-    }
+    const animated = !motion.matches;
+    const elapsed = Math.max(0, now - enteredAt);
+    const entrance = animated ? (1 - Math.min(1, elapsed / 420)) ** 3 : 0;
+    display.rotation.set(
+      animated ? pointerY * .045 : 0,
+      animated ? pointerX * .07 + entrance * .12 : 0,
+      0,
+    );
+    display.position.z = -entrance * .6;
     renderer.render(scene, camera);
   };
   const resize = () => {
     const { clientWidth: width, clientHeight: height } = host;
     if (!width || !height || lost) return;
     camera.aspect = width / height;
-    camera.position.set(0, 0, Math.max(4.55, 6.75 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
+    camera.position.set(0, 0, Math.max(3.22, 6.32 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
     render(performance.now());
@@ -122,12 +114,13 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
           textures.set(url, texture);
         }
         const aspect = texture.image.width / texture.image.height;
-        const width = Math.min(5.88, 2.81 * aspect);
+        const width = Math.min(6.04, 3.03 * aspect);
         screen.scale.set(width / 5.88, (width / aspect) / (5.88 * 489 / 1024), 1);
         screen.material.map = texture;
         screen.material.needsUpdate = true;
         ready = true;
-        render(performance.now());
+        enteredAt = performance.now();
+        render(enteredAt);
         sync();
         onReadyChange(!lost);
       } catch {

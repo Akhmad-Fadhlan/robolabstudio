@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Blocks, BookOpen, ChevronLeft, ChevronRight, Cpu, FolderOpen, LoaderCircle, Maximize2, Terminal, X, Zap } from 'lucide-react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { ArrowRight, Blocks, BookOpen, ChevronLeft, ChevronRight, FolderOpen, LoaderCircle, Maximize2, Terminal, X, Zap } from 'lucide-react';
 import robolabLogo from '../assets/robolab-logo-only.png';
 import circuitImage from '../assets/showcase-circuit.png';
 import blocksImage from '../assets/showcase-blocks.png';
@@ -9,11 +9,11 @@ import workspaceImage from '../assets/showcase-workspace.webp';
 import './LoginPage.css';
 
 const previews = [
-  { image: circuitImage, label: 'Simulator', title: 'Coba rangkaianmu', description: 'Pasang komponen dan amati hasil simulasi ESP32.', alt: 'Simulator rangkaian dan board ESP32 di RoboLab Studio', icon: Zap },
-  { image: blocksImage, label: 'Blockly', title: 'Susun blok kodenya', description: 'Rangkai blok visual dan lihat kode yang dihasilkan.', alt: 'Editor Blockly dan panel kode di RoboLab Studio', icon: Blocks },
-  { image: projectsImage, label: 'Proyek', title: 'Pilih proyek pertamamu', description: 'Jelajahi contoh proyek, dari dimmer LED hingga pemindai rintangan.', alt: 'Katalog proyek di RoboLab Studio', icon: FolderOpen },
-  { image: learningImage, label: 'Belajar', title: 'Belajar langkah demi langkah', description: 'Ikuti materi Python dan MicroPython dengan contoh kode.', alt: 'Portal pembelajaran Python dan MicroPython', icon: BookOpen },
-  { image: workspaceImage, label: 'Workspace', title: 'Mulai proyek sendiri', description: 'Buat file baru atau buka proyek untuk melanjutkan eksperimen.', alt: 'Workspace untuk membuat atau membuka proyek', icon: Terminal },
+  { image: learningImage, label: 'Belajar', title: 'Mulai dari rasa ingin tahu', description: 'Ikuti contoh Python dan MicroPython untuk kenalan dengan cara kerja kode.', alt: 'Portal pembelajaran Python dan MicroPython', icon: BookOpen },
+  { image: projectsImage, label: 'Proyek', title: 'Pilih proyek pertamamu', description: 'Cari ide, dari mengatur terang LED sampai membuat pemindai rintangan.', alt: 'Katalog proyek di RoboLab Studio', icon: FolderOpen },
+  { image: blocksImage, label: 'Blockly', title: 'Susun blok kodenya', description: 'Sambungkan blok seperti puzzle dan lihat kode yang terbentuk.', alt: 'Editor Blockly dan panel kode di RoboLab Studio', icon: Blocks },
+  { image: circuitImage, label: 'Simulator', title: 'Lihat rangkaianmu beraksi', description: 'Pasang komponen virtual dan coba rangkaian ESP32 sebelum merakitnya.', alt: 'Simulator rangkaian dan board ESP32 di RoboLab Studio', icon: Zap },
+  { image: workspaceImage, label: 'Workspace', title: 'Mulai eksperimenmu sendiri', description: 'Buat file baru atau buka proyek untuk melanjutkan eksperimenmu.', alt: 'Workspace untuk membuat atau membuka proyek', icon: Terminal },
 ] as const;
 
 interface LoginPageProps {
@@ -51,17 +51,19 @@ const GoogleIcon: React.FC<{ size?: number }> = ({ size = 24 }) => (
 );
 
 export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
+  const signIn = useRef<HTMLButtonElement>(null);
   const scene = useRef<HTMLDivElement>(null);
   const showcase = useRef<ReturnType<typeof import('./loginShowcaseScene').mountLoginShowcase> | null>(null);
   const [selected, setSelected] = useState(0);
   const current = previews[selected];
+  const nextPreview = previews[selected + 1];
   const selectedImage = useRef(current.image);
   const [ready, setReady] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const startTouch = useRef<{ x: number; y: number } | null>(null);
 
   function selectPreview(index: number) {
-    const next = (index + previews.length) % previews.length;
+    const next = Math.max(0, Math.min(index, previews.length - 1));
     if (next === selected) return;
     selectedImage.current = previews[next].image;
     setSelected(next);
@@ -89,7 +91,7 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
   }, []);
 
   return (
-    <main className="rl-login">
+    <main className="rl-login" style={{ '--rl-backdrop': `url("${current.image}")` } as CSSProperties}>
       <div className="rl-login__layout">
         <section className="rl-login__auth" aria-labelledby="rl-login-title">
           <div className="rl-login__brand">
@@ -98,9 +100,9 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
           </div>
 
           <div className="rl-login__content">
-            <h1 id="rl-login-title">Ayo bikin<br /><em>robotmu!</em></h1>
+            <h1 id="rl-login-title">Ayo bikin <br /><em>robotmu!</em></h1>
             <p>Susun blok, coba rangkaian, dan lihat robotmu beraksi.</p>
-            <button id="btn-google-signin" className="rl-login__signin" type="button"
+            <button ref={signIn} id="btn-google-signin" className="rl-login__signin" type="button"
               disabled={loading} aria-busy={!!loading} onClick={() => void onSignIn()}>
               {loading ? <LoaderCircle className="rl-login__spinner" size={22} aria-hidden="true" /> : <GoogleIcon size={22} />}
               <span>{loading ? 'Menghubungkan ke Google…' : 'Lanjutkan dengan Google'}</span>
@@ -110,18 +112,15 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
             <p className="rl-login__account">Gunakan akun belajar.id atau akun Google pribadi.</p>
           </div>
 
-          <ul className="rl-login__features" aria-label="Aktivitas di RoboLab Studio">
-            <li><Blocks size={17} aria-hidden="true" /> Coding blok</li>
-            <li><Zap size={17} aria-hidden="true" /> Simulasi sirkuit</li>
-            <li><Cpu size={17} aria-hidden="true" /> Arduino &amp; ESP32</li>
-          </ul>
+          <a className="rl-login__explore" href="#rl-login-journey">Jelajahi lab dulu <ArrowRight size={17} aria-hidden="true" /></a>
         </section>
 
-        <section className="rl-login__lab" aria-label="Pratinjau RoboLab Studio">
-          <div className="rl-login__grid" aria-hidden="true" />
-          <div className="rl-login__orbit" aria-hidden="true" />
-          <div className="rl-login__orbit rl-login__orbit--outer" aria-hidden="true" />
-          <h2 className="rl-login__preview-title">{current.title}</h2>
+        <section id="rl-login-journey" className="rl-login__lab" aria-labelledby="rl-login-preview-title" tabIndex={-1}>
+          <div className="rl-login__chapter" aria-live="polite" aria-atomic="true">
+            <p>Jelajahi lab <span>·</span> {selected + 1} / {previews.length}</p>
+            <h2 id="rl-login-preview-title">{current.title}</h2>
+            <p>{current.description}</p>
+          </div>
           <div className="rl-login__stage"
             onTouchStart={event => {
               const touch = event.touches[0];
@@ -147,19 +146,25 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
             event.preventDefault();
             selectPreview(selected + (event.key === 'ArrowLeft' ? -1 : 1));
           }}>
-            <p className="rl-login__preview-description" aria-live="polite">{current.description}</p>
-            <div className="rl-login__tools">
-              <button type="button" aria-label="Fitur sebelumnya" onClick={() => selectPreview(selected - 1)}><ChevronLeft size={19} /></button>
-              <span aria-label={`Fitur ${selected + 1} dari ${previews.length}`}>{selected + 1} / {previews.length}</span>
-              <button type="button" aria-label="Fitur berikutnya" onClick={() => selectPreview(selected + 1)}><ChevronRight size={19} /></button>
-              <button type="button" onClick={() => dialog.current?.showModal()}><Maximize2 size={15} aria-hidden="true" /> Perbesar</button>
-            </div>
-            <div className="rl-login__switcher" role="group" aria-label="Pilih halaman pratinjau">
+            <div className="rl-login__switcher" role="group" aria-label="Pilih tahap perjalanan">
               {previews.map(({ label, icon: Icon }, index) => (
                 <button key={label} type="button" aria-pressed={selected === index} onClick={() => selectPreview(index)}>
                   <Icon size={16} aria-hidden="true" /> {label}
                 </button>
               ))}
+            </div>
+            <div className="rl-login__tools">
+              <button type="button" onClick={() => dialog.current?.showModal()}><Maximize2 size={17} aria-hidden="true" /> Perbesar</button>
+              <div className="rl-login__paging">
+                <button type="button" aria-label="Fitur sebelumnya" disabled={selected === 0} onClick={() => selectPreview(selected - 1)}><ChevronLeft size={21} /></button>
+                <button className="rl-login__next" type="button" onClick={() => {
+                  if (nextPreview) selectPreview(selected + 1);
+                  else signIn.current?.focus();
+                }}>
+                  {nextPreview ? nextPreview.label : 'Masuk ke lab'}
+                  {nextPreview ? <ChevronRight size={20} aria-hidden="true" /> : <ArrowRight size={18} aria-hidden="true" />}
+                </button>
+              </div>
             </div>
           </div>
           <dialog ref={dialog} className="rl-login__zoom" aria-label={current.label}>
