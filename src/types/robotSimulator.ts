@@ -407,7 +407,7 @@ export interface SensorPresetOption {
   id: string;
   label: string;
   pattern: string;
-  category: 'center' | 'center_left' | 'center_right' | 'left' | 'right' | 'wings' | 'all' | 'custom';
+  category: 'center' | 'center_left' | 'center_right' | 'left' | 'right' | 'wings' | 'all' | 'none' | 'custom';
   description?: string;
 }
 

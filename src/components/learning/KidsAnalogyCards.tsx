@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Compass, Lightbulb, Play, BookOpen, Layers, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Compass, Lightbulb, Play } from 'lucide-react';
 
 interface KidsAnalogyProps {
   category: 'fundamental' | 'micropython' | 'hardware';

@@ -1,3 +1,4 @@
+import { SERIAL_BAUD_RATES } from '../data/serialBaudRates';
 /**
  * RoboLab Studio - Python to Blockly XML Converter
  * Converts standard Python / MicroPython robocode commands back to Blockly workspace XML representation
@@ -269,7 +270,7 @@ function popStack(stack: StackEntry[], variables: Record<string, string>) {
     `;
   } else if (popped.type === 'while' || popped.type === 'until') {
     const mode = popped.type === 'until' ? 'UNTIL' : 'WHILE';
-    const condXml = parseExpression(popped.cond || 'True', variables);
+    const condXml = parseExpression(popped.cond || 'True', variables, true);
     xml = `
       <block type="controls_whileUntil">
         <field name="MODE">${mode}</field>
@@ -294,7 +295,7 @@ function popStack(stack: StackEntry[], variables: Record<string, string>) {
       </block>
     `;
   } else if (popped.type === 'if') {
-    const condXml = parseExpression(popped.cond || 'True', variables);
+    const condXml = parseExpression(popped.cond || 'True', variables, true);
     xml = `
       <block type="controls_if">
         <value name="IF0">
@@ -306,7 +307,7 @@ function popStack(stack: StackEntry[], variables: Record<string, string>) {
       </block>
     `;
   } else if (popped.type === 'elif') {
-    const condXml = parseExpression(popped.cond || 'True', variables);
+    const condXml = parseExpression(popped.cond || 'True', variables, true);
     const lastBlockIdx = parent.blocks.length - 1;
     if (lastBlockIdx >= 0 && parent.blocks[lastBlockIdx].includes('type="controls_if"')) {
       let ifBlockXml = parent.blocks[lastBlockIdx];
@@ -516,8 +517,6 @@ function parseStatement(line: string, variables: Record<string, string>): string
   const libInitObj = line.match(/^robot\.custom_lib_init\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["'](?:\s*,\s*["']([^"']*)["'])?\s*\)$/);
   if (libInitObj) {
     const cls = libInitObj[1].trim();
-    const inst = libInitObj[2].trim();
-    const args = (libInitObj[3] || '').trim().replace(/\\"/g, '"');
     const safeCls = cls.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
     return `
       <block type="custom_${safeCls}_init">
@@ -646,6 +645,15 @@ function parseStatement(line: string, variables: Record<string, string>): string
     }
   }
 
+  const serialBaud = line.match(/^robot\.serial_begin\(\s*(\d+)\s*\)$/);
+  if (serialBaud && SERIAL_BAUD_RATES.includes(Number(serialBaud[1]))) {
+    return `<block type="serial_begin"><field name="BAUD">${Number(serialBaud[1])}</field></block>`;
+  }
+  const microsecondsDelay = line.match(/^(?:time\.)?sleep_us\(\s*(\d+)\s*\)$/);
+  if (microsecondsDelay) {
+    return `<block type="arduino_delay_microseconds"><field name="US">${Number(microsecondsDelay[1])}</field></block>`;
+  }
+
   // 1. Delay: time.sleep(1.0), time.sleep_ms(500), sleep(500)
   let match = line.match(/^(?:await\s+)?(?:time|asyncio|uasyncio)\.sleep\(\s*(.+?)\s*\)$/);
   if (match) {
@@ -671,12 +679,16 @@ function parseStatement(line: string, variables: Record<string, string>): string
   // 2. Digital write: digital_write(2, "HIGH")
   match = line.match(/^(?:robot\.)?digital_write\(\s*([^,]+?)\s*,\s*(.+?)\s*\)$/) ||
           line.match(/^(?:machine\.)?Pin\(\s*([^,]+?)\s*,\s*(?:machine\.)?Pin\.OUT\s*\)\.value\(\s*([01])\s*\)$/) ||
-          line.match(/^pin([a-zA-Z0-9_]+)\.write_digital\(\s*([01])\s*\)$/);
+          line.match(/^pin([a-zA-Z0-9_]+)\.(?:write_digital|value)\(\s*(.+?)\s*\)$/);
   if (match) {
     const pin = resolvePinVariable(match[1], variables);
     let state = match[2].trim().replace(/^["']|["']$/g, '');
-    if (state === '1' || state === 'True' || state === 'true' || state === 'HIGH') state = 'HIGH';
-    else state = 'LOW';
+    if (/^(?:1|true|HIGH)$/i.test(state)) state = 'HIGH';
+    else if (/^(?:0|false|LOW)$/i.test(state)) state = 'LOW';
+    else return `<block type="pin_digital_write_value">
+      <field name="PIN">${escapeXml(pin)}</field>
+      <value name="VALUE">${parseExpression(state, variables)}</value>
+    </block>`;
     return `
       <block type="pin_digital_write">
         <field name="PIN">${escapeXml(pin)}</field>
@@ -1216,7 +1228,9 @@ function splitTopLevelArgs(argsStr: string): string[] {
   return result;
 }
 
-export function parseExpression(expr: string, variables: Record<string, string> = {}): string {
+export function parseExpression(expr: string, variables: Record<string, string> = {}, booleanContext = false): string {
+  if (/^(?:time\.)?ticks_ms\(\s*\)$/.test(expr.trim())) return '<block type="arduino_millis"></block>';
+  if (/^(?:time\.)?ticks_us\(\s*\)$/.test(expr.trim())) return '<block type="arduino_micros"></block>';
   expr = stripOuterParens(expr.trim());
   if (!expr) {
     return `<block type="math_number"><field name="NUM">0</field></block>`;
@@ -1368,8 +1382,8 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     return `
       <block type="logic_operation">
         <field name="OP">${op}</field>
-        <value name="A">${parseExpression(logicSplit.left, variables)}</value>
-        <value name="B">${parseExpression(logicSplit.right, variables)}</value>
+        <value name="A">${parseExpression(logicSplit.left, variables, true)}</value>
+        <value name="B">${parseExpression(logicSplit.right, variables, true)}</value>
       </block>
     `;
   }
@@ -1378,14 +1392,14 @@ export function parseExpression(expr: string, variables: Record<string, string> 
   if (expr.startsWith('not ')) {
     return `
       <block type="logic_negate">
-        <value name="BOOL">${parseExpression(expr.substring(4), variables)}</value>
+        <value name="BOOL">${parseExpression(expr.substring(4), variables, true)}</value>
       </block>
     `;
   }
   if (expr.startsWith('!') && !expr.startsWith('!=')) {
     return `
       <block type="logic_negate">
-        <value name="BOOL">${parseExpression(expr.substring(1), variables)}</value>
+        <value name="BOOL">${parseExpression(expr.substring(1), variables, true)}</value>
       </block>
     `;
   }
@@ -1424,7 +1438,7 @@ export function parseExpression(expr: string, variables: Record<string, string> 
     const rawPin = match ? match[1] : dReadPin!;
     const pin = resolvePinVariable(rawPin, variables);
     return `
-      <block type="pin_digital_read">
+      <block type="${booleanContext ? 'pin_digital_read' : 'pin_digital_read_value'}">
         <field name="PIN">${escapeXml(pin)}</field>
       </block>
     `;

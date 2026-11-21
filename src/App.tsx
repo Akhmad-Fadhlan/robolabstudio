@@ -1,3 +1,4 @@
+import { SERIAL_BAUD_RATES } from './data/serialBaudRates';
 import { BlocklyPreview } from './components/learning/BlocklyPreview';
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
 import type { LangCode } from './i18n';
@@ -6,18 +7,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu, Activity, ChevronRight, ChevronLeft, ChevronDown, BookOpen, 
   Plus, Search, Smartphone, X, Sliders, Download, 
-  File as FileIcon, FileText, Folder, Play, Square, RotateCcw, Blocks, Code,
+  File as FileIcon, FileText, Folder, Play, Square, RotateCcw, Code,
   FolderOpen, Check, Save, Upload, Terminal as TerminalIcon, Trash2,
   HelpCircle, Compass, ArrowRight, Copy, Loader2,
-  Info, MessageSquare, Package, Monitor, Lock, Clock, Star
+  Info, MessageSquare, Package, Lock, Clock, Star
 } from 'lucide-react';
 import { TopMenuBar } from './components/layout/TopMenuBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { TerminalPanel } from './components/layout/TerminalPanel';
 import { PythonLogo } from './components/icons/PythonLogo';
-import { ArduinoLogo } from './components/icons/ArduinoLogo';
-import { MicroPythonLogo } from './components/icons/MicroPythonLogo';
 import { BlockFieldGuide } from './components/learning/BlockFieldGuide';
 import { ProjectWorkshop } from './components/learning/ProjectWorkshop';
 import { LessonWiring } from './components/learning/LessonWiring';
@@ -65,10 +64,9 @@ import {
 import './App.css';
 import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
-import { convertArduinoCodeToBlocklyXmlWithGemini, inferLibraryApiWithGemini } from './services/geminiLibraryService';
+import { convertArduinoCodeToBlocklyXmlWithGemini } from './services/geminiLibraryService';
 import { findKnownLibrary } from './data/knownLibrarySignatures';
-import { IOT_LIBRARY_CATALOG, type IoTRepoLibrary } from './data/iotLibraryCatalog';
-import { parseArduinoZipArchive } from './services/zipLibraryService';
+import { IOT_LIBRARY_CATALOG } from './data/iotLibraryCatalog';
 
 export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'arduino'): boolean => {
   const trimmed = (code || '').trim();
@@ -109,10 +107,9 @@ export const isBareSkeletonCode = (code: string, lang: 'arduino' | 'python' = 'a
 };
 import { processAiMessage, DEFAULT_KILOCODE_CONFIG } from './services/kilocodeService';
 import type { KiloCodeConfig, ChatMessage } from './services/kilocodeService';
-import { checkTrialStatus, fetchUserCustomLibraries, saveUserCustomLibrary, deleteUserCustomLibrary } from './services/supabaseClient';
+import { checkTrialStatus, fetchUserCustomLibraries, deleteUserCustomLibrary } from './services/supabaseClient';
 import type { TrialStatus } from './services/supabaseClient';
 import {
-  isElectronEnv,
   getWebSerialPorts,
   requestWebSerialPort,
   executeWebHardwareAction,
@@ -3383,7 +3380,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [libSearchQuery, setLibSearchQuery] = useState('');
   const [libCategoryFilter, setLibCategoryFilter] = useState<'Semua' | 'Sensor' | 'Display' | 'IoT' | 'Aktuator'>('Semua');
   const [installingLib, setInstallingLib] = useState<string | null>(null);
-  const [liveSearchResults, setLiveSearchResults] = useState<Array<{ name: string; author: string; desc: string; cat: string; version: string }>>([]);
+  const [, setLiveSearchResults] = useState<Array<{ name: string; author: string; desc: string; cat: string; version: string }>>([]);
   const [isSearchingLibs, setIsSearchingLibs] = useState(false);
 
   useEffect(() => {
@@ -3496,7 +3493,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       return '';
     }
   });
-  const [filePaths, setFilePaths] = useState<{ [filename: string]: string }>({});
+  const [, setFilePaths] = useState<{ [filename: string]: string }>({});
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const [newFileName, setNewFileName] = useState('');
@@ -3825,7 +3822,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': BLANK_SIM_XML,
     };
   });
-  const [simViewMode, setSimViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
+  const [simViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
   const [simShowConsole, setSimShowConsole] = useState<boolean>(false);
   const [simResetKey, setSimResetKey] = useState<number>(0);
 
@@ -4069,9 +4066,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return INITIAL_PACKAGES;
   });
   const [pkgTab, setPkgTab] = useState<'arduino' | 'python' | 'boards'>('arduino');
-  const [githubUrl, setGithubUrl] = useState('');
-  const [isInstallingGithub, setIsInstallingGithub] = useState(false);
-  const [isSyncingLibs, setIsSyncingLibs] = useState(false);
   const [installingMap, setInstallingMap] = useState<Record<string, { loading: boolean; progress?: string }>>({});
   const [uninstallingMap, setUninstallingMap] = useState<{ [pkgName: string]: boolean }>({});
 
@@ -4254,7 +4248,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   // Sync installed libraries and board cores status from disk & cloud scoped to current user account
   const syncInstalledLibraries = useCallback(async () => {
-    setIsSyncingLibs(true);
     try {
       const req = (window as any).__electronRequire || (window as any).require;
       let installedLibsOnDisk: any[] = [];
@@ -4447,8 +4440,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       });
     } catch (err: any) {
       console.warn('[RoboLab] Failed to sync installed libs:', err);
-    } finally {
-      setIsSyncingLibs(false);
     }
   }, [authUser?.id, authUser?.name]);
 
@@ -5723,212 +5714,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   };
 
-  const handleImportZipLibrary = async () => {
-    const req = (window as any).__electronRequire || (window as any).require;
-
-    // Flow for Electron (Native OS dialog + background extraction)
-    if (req) {
-      try {
-        const electron = req('electron');
-        setTerminalLogs((prev: any) => [
-          ...prev,
-          { text: `📂 Membuka penjelajah berkas untuk memilih file ZIP library...`, type: 'info' }
-        ]);
-        const res = await electron.ipcRenderer.invoke('install-lib-from-zip', { userId: authUser?.id });
-        if (!res || !res.success) {
-          if (res?.error && res.error !== 'Canceled') {
-            setTerminalLogs((prev: any) => [
-              ...prev,
-              { text: `[ZIP IMPORT] ❌ Gagal menginstal file ZIP: ${res.error}`, type: 'error' }
-            ]);
-          }
-          return;
-        }
-
-        const installedName = res.libName || 'Custom_ZIP_Library';
-        let finalApi = res.parsedApi;
-        if (!finalApi || !Array.isArray(finalApi.methods) || finalApi.methods.length === 0) {
-          const known = findKnownLibrary(installedName);
-          if (known) {
-            finalApi = {
-              name: installedName,
-              className: known.className,
-              mainHeader: known.mainHeader,
-              constructors: known.constructors || [],
-              pins: known.pins || [],
-              constants: known.constants || [],
-              methods: known.methods
-            };
-          }
-        }
-
-        if (Array.isArray(res.examples) && res.examples.length > 0) {
-          const newCards = res.examples.map((ex: any) => ({
-            name: ex.name,
-            board: ex.board || 'Arduino Uno',
-            description: ex.description || `Contoh program ${ex.name} dari library ${ex.library || installedName}.`,
-            iconColor: 'emerald',
-            components: ['custom_lib'],
-            libraryName: ex.library || installedName,
-            category: 'Library Example',
-            isLibraryExample: true,
-            isCustom: true,
-            isGitHubLib: true,
-            ino: ex.code,
-            xml: (ex.xml && ex.xml.includes('<statement name="STACK">')) ? ex.xml : (ex.code ? (arduinoToBlocklyXml(ex.code, ex.parsedApi || finalApi, ex.xml) || '') : ''),
-            parsedApi: ex.parsedApi || finalApi,
-            py: ex.code ? (arduinoToPython(ex.code, ex.parsedApi || finalApi) || `# Contoh Library ${ex.library}\n`) : ''
-          }));
-          setCustomLibProjects((prev: any[]) => {
-            const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
-            return [...newCards, ...existing];
-          });
-        }
-
-        setPackages((prev: any) => ({
-          ...prev,
-          arduino: [
-            ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
-            {
-              name: installedName,
-              desc: `ZIP Library terpasang di akun Anda`,
-              version: '1.0.0-custom',
-              author: authUser?.name || 'Akun Anda',
-              installed: true,
-              isCustom: true,
-              userId: authUser?.id,
-              headers: res.headers || [],
-              parsedApi: finalApi || res.parsedApi
-            }
-          ]
-        }));
-
-        if (authUser?.id) {
-          await saveUserCustomLibrary(authUser.id, {
-            name: installedName,
-            source_type: 'zip',
-            version: '1.0.0-custom',
-            headers: res.headers || [],
-            parsed_api: finalApi || res.parsedApi
-          });
-        }
-
-        const methodCount = (finalApi?.methods || []).length;
-        setTerminalLogs((prev: any) => [
-          ...prev,
-          { text: `[ZIP IMPORT] ✓ Library '${installedName}' dari ZIP berhasil diekstrak dan diinstal! (${methodCount} blok method tersedia)`, type: 'success' }
-        ]);
-        await syncInstalledLibraries();
-        return;
-      } catch (e: any) {
-        console.warn('Electron ZIP Import error, falling back to browser picker:', e);
-      }
-    }
-
-    // Flow for Web Browser / Fallback: Opens Native File Picker via input[type="file"]
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.zip,application/zip,application/x-zip-compressed';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      input.remove();
-      if (!file) return;
-
-      setTerminalLogs((prev: any) => [
-        ...prev,
-        { text: `📦 Membaca dan mengekstrak berkas ZIP: ${file.name}...`, type: 'info' }
-      ]);
-
-      const parsed = await parseArduinoZipArchive(file, file.name);
-      if (!parsed.success) {
-        setTerminalLogs((prev: any) => [
-          ...prev,
-          { text: `[ZIP IMPORT] ❌ Gagal membaca ZIP: ${parsed.error || 'Format berkas tidak valid'}`, type: 'error' }
-        ]);
-        return;
-      }
-
-      const installedName = parsed.name;
-      let finalApi = parsed.parsedApi;
-      if (!finalApi || !Array.isArray(finalApi.methods) || finalApi.methods.length === 0) {
-        const known = findKnownLibrary(installedName);
-        if (known) {
-          finalApi = {
-            name: installedName,
-            className: known.className,
-            mainHeader: known.mainHeader,
-            constructors: known.constructors || [],
-            pins: known.pins || [],
-            constants: known.constants || [],
-            methods: known.methods
-          };
-        }
-      }
-
-      if (Array.isArray(parsed.examples) && parsed.examples.length > 0) {
-        const newCards = parsed.examples.map((ex: any) => ({
-          name: ex.name,
-          board: ex.board || 'Arduino Uno',
-          description: ex.description || `Contoh program ${ex.name} dari library ${installedName}.`,
-          iconColor: 'emerald',
-          components: ['custom_lib'],
-          libraryName: installedName,
-          category: 'Library Example',
-          isLibraryExample: true,
-          isCustom: true,
-          isGitHubLib: true,
-          ino: ex.code,
-          xml: ex.xml || (ex.code ? (arduinoToBlocklyXml(ex.code, finalApi) || '') : ''),
-          parsedApi: finalApi,
-          py: ex.py || (ex.code ? (arduinoToPython(ex.code, finalApi) || '') : '')
-        }));
-        setCustomLibProjects((prev: any[]) => {
-          const existing = prev.filter(p => (p.libraryName || '').toLowerCase() !== installedName.toLowerCase());
-          return [...newCards, ...existing];
-        });
-      }
-
-      setPackages((prev: any) => ({
-        ...prev,
-        arduino: [
-          ...prev.arduino.filter((p: any) => p.name.toLowerCase() !== installedName.toLowerCase()),
-          {
-            name: installedName,
-            desc: parsed.description || `ZIP Library: ${file.name}`,
-            version: parsed.version || '1.0.0-custom',
-            author: parsed.author || authUser?.name || 'Akun Anda',
-            installed: true,
-            isCustom: true,
-            userId: authUser?.id,
-            headers: parsed.headers || [],
-            parsedApi: finalApi
-          }
-        ]
-      }));
-
-      if (authUser?.id) {
-        await saveUserCustomLibrary(authUser.id, {
-          name: installedName,
-          source_type: 'zip',
-          version: parsed.version || '1.0.0-custom',
-          headers: parsed.headers || [],
-          parsed_api: finalApi
-        });
-      }
-
-      const methodCount = (finalApi?.methods || []).length;
-      setTerminalLogs((prev: any) => [
-        ...prev,
-        { text: `[ZIP IMPORT] ✓ Library '${installedName}' dari ZIP berhasil diekstrak dan diinstal! (${methodCount} blok method tersedia)`, type: 'success' }
-      ]);
-    };
-
-    input.click();
-  };
-
   const handleTerminalCommand = (e: React.FormEvent) => {
     e.preventDefault();
     if (!terminalInput.trim()) return;
@@ -6542,7 +6327,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
 
         // 2. Prints — support end="" and multiline args
-        const cppPrintMatch = trimmed.match(/Serial\.print(ln)?\(\s*(.*?)\s*\)/);
+        const cppPrintMatch = trimmed.match(/^Serial\.print(ln)?\(\s*(.*)\s*\)\s*;?$/);
         if (trimmed.startsWith('print(')) {
           // Extract full argument string between the outer parentheses
           let parenDepth = 0;
@@ -6607,6 +6392,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const pythonDelayMatch = trimmed.match(/time\.sleep\(\s*([0-9.]+)\s*\)/);
         const arduinoDelayMatch = trimmed.match(/delay\(\s*([0-9.]+)\s*\)/);
         const microbitSleepMatch = trimmed.match(/^sleep\(\s*([0-9.]+)\s*\)/);
+        const microseconds = trimmed.match(/(?:delayMicroseconds|time\.sleep_us)\(\s*(\d+)\s*\)/);
+        if (microseconds) {
+          queue.push({ type: 'delay', value: Number(microseconds[1]) / 1000 });
+          continue;
+        }
         if (pythonDelayMatch) {
           queue.push({ type: 'delay', value: parseFloat(pythonDelayMatch[1]) * 1000 });
           continue;
@@ -6624,10 +6414,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const pythonDigitalWriteMatch =
           trimmed.match(/robot\.digital_write\(\s*([a-zA-Z0-9_]+)\s*,\s*(['"]?)([a-zA-Z0-9_]+)\2\s*\)/) ||
           trimmed.match(/(?:machine\.)?Pin\(\s*([a-zA-Z0-9_]+)(?:\s*,\s*(?:machine\.)?Pin\.OUT)?\s*\)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
-          trimmed.match(/([a-zA-Z0-9_]+)\.value\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
+          trimmed.match(/^([a-zA-Z0-9_]+)\.value\(\s*(.+)\s*\)$/) ||
           trimmed.match(/([a-zA-Z0-9_]+)\.write_digital\(\s*([a-zA-Z0-9_]+)\s*\)/) ||
           trimmed.match(/([a-zA-Z0-9_]+)\.(on|off|high|low)\(\s*\)/);
-        const arduinoDigitalWriteMatch = trimmed.match(/digitalWrite\(\s*([a-zA-Z0-9_]+)\s*,\s*(.+?)\s*\);?/);
+        const arduinoDigitalWriteMatch = trimmed.match(/^digitalWrite\(\s*([a-zA-Z0-9_]+)\s*,\s*(.+)\s*\)\s*;?$/);
         const toneMatch = trimmed.match(/tone\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)(?:\s*,\s*([a-zA-Z0-9_]+))?\s*\);?/);
         const noToneMatch = trimmed.match(/noTone\(\s*([a-zA-Z0-9_]+)\s*\);?/);
         const pinModeMatch = trimmed.match(/pinMode\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\);?/);
@@ -7125,8 +6915,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     const executionVars: { [key: string]: any } = {};
 
+    const simulationStartedAt = performance.now();
     const resolveSensorReads = (expr: string): string => {
-      let replaced = expr;
+      const elapsed = performance.now() - simulationStartedAt;
+      let replaced = expr
+        .replace(/\b(?:millis|time\.ticks_ms)\(\s*\)/g, String(Math.floor(elapsed)))
+        .replace(/\b(?:micros|time\.ticks_us)\(\s*\)/g, String(Math.floor(elapsed * 1000)));
       
       // 1. analogRead / analog_read / micro:bit pin.read_analog / ESP32 ADC.read
       while (replaced.includes('analogRead') || replaced.includes('analog_read') || replaced.includes('read_analog') || replaced.includes('ADC(')) {
@@ -7160,7 +6954,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
         const cleanPin = pin.replace(/^[DPG]/, '');
         const pinVal = pinStatesRef.current[pin] ?? pinStatesRef.current[cleanPin] ?? pinStatesRef.current['D' + cleanPin] ?? pinStatesRef.current['P' + cleanPin] ?? pinStatesRef.current['G' + cleanPin];
-        const isHigh = pinVal === 'HIGH' || pinVal === 1 || pinVal === '1' || pinVal === true || pinVal === 'true';
+        const isHigh = ['HIGH', '1', 'true'].includes(String(pinVal));
         const isPullup = executionVars[`__pullup_${pin}`] || executionVars[`__pullup_${cleanPin}`] || pullupPins.has(pin) || pullupPins.has(cleanPin);
         let val = isHigh ? 1 : 0;
         if (isPullup) {
@@ -9269,7 +9063,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             {/* Component list badge preview if present */}
                             {proj.components && proj.components.length > 0 && (
                               <div className="flex flex-wrap gap-1 mb-3">
-                                {proj.components.map(comp => (
+                                {proj.components.map((comp: string) => (
                                   <span key={comp} className={`text-[8px] border px-1.5 py-0.5 rounded uppercase ${themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-white/5 border-white/10 text-slate-400'}`}>
                                     {comp}
                                   </span>
@@ -10598,6 +10392,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
+                          showRobotPlan={simulatorMode === 'robot'}
                           installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                             name: p.name,
                             parsedApi: p.parsedApi,
@@ -10660,7 +10455,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           }}
                           themeMode={themeMode}
                           robotHardwareConfig={robotHardwareConfig}
-                          activeRobotHighlight={activeRobotHighlight}
+                          activeRobotHighlight={activeRobotHighlight ?? undefined}
                           onRobotPlansExtracted={(extractedPlans, extractedActiveId, hwPatch) => {
                             setRobotPlans(extractedPlans);
                             setActiveRobotPlanId(extractedActiveId);
@@ -11732,13 +11527,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       color: themeMode === 'light' ? '#1e293b' : '#e2e8f0',
                       border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.1)'
                     }}
-                    defaultValue="115200"
+                    value={serialBaudrate}
+                    onChange={event => setSerialBaudrate(Number(event.target.value))}
                   >
-                    <option value="9600">9600 bps</option>
-                    <option value="19200">19200 bps</option>
-                    <option value="38400">38400 bps</option>
-                    <option value="57600">57600 bps</option>
-                    <option value="115200">115200 bps</option>
+                    {SERIAL_BAUD_RATES.map(baud => <option key={baud} value={baud}>{baud} bps</option>)}
                   </select>
                 </div>
 

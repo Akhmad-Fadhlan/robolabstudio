@@ -283,30 +283,6 @@ export async function requestWebSerialPort(usbVendorId?: number): Promise<WebSer
 }
 
 /**
- * Safely releases any active browser WebSerial monitor reader lock and closes activeMonitorPort.
- */
-async function releaseBrowserSerialMonitorLocks(_closePort = true): Promise<void> {
-  await stopWebSerialMonitor();
-}
-
-/**
- * Fast, zero-delay check to open a Web SerialPort without breaking transient user gesture activation.
- */
-async function tryFastOpenSerialPort(rawPort: any, baudRate = 115200): Promise<boolean> {
-  if (!rawPort) return false;
-  if (rawPort.readable && rawPort.writable && !rawPort.readable.locked && !rawPort.writable.locked) {
-    return true;
-  }
-  try {
-    await rawPort.open({ baudRate });
-    return true;
-  } catch (err: any) {
-    const msg = String(err?.message || err || '');
-    return Boolean(msg.includes('already open') && rawPort.readable && rawPort.writable);
-  }
-}
-
-/**
  * Attempts to open a Web SerialPort with automatic stream lock cleanup and progressive retry.
  * Handles Windows WCH CH340 (CH341SER.SYS) driver teardown delays cleanly.
  */

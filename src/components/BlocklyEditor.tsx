@@ -2,7 +2,8 @@ import { BlocklyPreview } from './learning/BlocklyPreview';
 import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
-import { Play, Square, RotateCcw, Trash2, Blocks } from 'lucide-react';
+import { Play, Square, RotateCcw, Trash2 } from 'lucide-react';
+import { SERIAL_BAUD_RATES } from '../data/serialBaudRates';
 import { findKnownLibrary } from '../data/knownLibrarySignatures';
 import {
   type RobotHardwareConfig,
@@ -21,7 +22,6 @@ import {
   getDefaultSensorPattern,
   getSensorPresetOptions,
   findMatchingSensorPreset,
-  type SensorPresetOption,
   getBoardPinOptions,
   generateRobotPlanArduinoCode,
   generateRobotPlanPythonCode,
@@ -596,6 +596,26 @@ try {
       "tooltip": "Read binary state (HIGH/LOW) from a GPIO pin",
       "helpUrl": ""
     },
+    {
+      type: 'pin_digital_read_value',
+      message0: 'Nilai digital pin %1',
+      args0: [{ type: 'field_input', name: 'PIN', text: '4' }],
+      output: 'Number',
+      colour: '#9966FF',
+      tooltip: 'Menghasilkan angka 1 saat HIGH dan 0 saat LOW. Bisa disimpan ke variabel, dicetak, atau dibandingkan dengan angka.',
+    },
+    {
+      type: 'pin_digital_write_value',
+      message0: 'Tulis ke pin digital %1 nilai %2',
+      args0: [
+        { type: 'field_input', name: 'PIN', text: '9' },
+        { type: 'input_value', name: 'VALUE', check: 'Number' },
+      ],
+      previousStatement: null,
+      nextStatement: null,
+      colour: '#9966FF',
+      tooltip: 'Gunakan nilai dari variabel atau pembacaan pin. 0 menghasilkan LOW dan 1 menghasilkan HIGH.',
+    },
     // 4. Sensors
     {
       "type": "sensor_ultrasonic",
@@ -731,6 +751,42 @@ try {
       "colour": "#9966FF",
       "tooltip": "Read analog value (0-1023 / 0-4095) from an analog pin",
       "helpUrl": ""
+    },
+    {
+      type: 'arduino_millis',
+      message0: 'Waktu sejak board menyala (ms)',
+      output: 'Number',
+      colour: '#FF4081',
+      tooltip: 'Jumlah milidetik sejak program mulai. Simpan bacaan awal lalu hitung selisihnya untuk membuat timer tanpa delay.',
+    },
+    {
+      type: 'arduino_micros',
+      message0: 'Waktu sejak board menyala (µs)',
+      output: 'Number',
+      colour: '#FF4081',
+      tooltip: 'Jumlah mikrodetik sejak program mulai. 1.000 µs sama dengan 1 ms.',
+    },
+    {
+      type: 'arduino_delay_microseconds',
+      message0: 'Tunggu %1 µs',
+      args0: [{ type: 'field_number', name: 'US', value: 10, min: 0, max: 16383, precision: 1 }],
+      previousStatement: null,
+      nextStatement: null,
+      colour: '#FF4081',
+      tooltip: 'Jeda singkat dalam mikrodetik. Gunakan blok delay milidetik untuk jeda yang lebih lama.',
+    },
+    {
+      type: 'serial_begin',
+      message0: 'Atur baud rate Serial %1',
+      args0: [{
+        type: 'field_dropdown',
+        name: 'BAUD',
+        options: SERIAL_BAUD_RATES.map(baud => [String(baud), String(baud)]),
+      }],
+      previousStatement: null,
+      nextStatement: null,
+      colour: '#4CBFE6',
+      tooltip: 'Pasang di Setup Arduino. Samakan kecepatannya dengan pilihan baud rate pada Serial Monitor.',
     },
     // 9. Serial Print
     {
@@ -1914,7 +1970,7 @@ interface BlocklyEditorProps {
   board?: string;
   onCodeChange: (code: string, otherCode?: string) => void;
   onCollapse?: () => void;
-  installedLibraries?: (string | { name: string; parsedApi?: any; headers?: string[]; isCustom?: boolean })[];
+  installedLibraries?: (string | { name: string; parsedApi?: any; headers?: string[]; isCustom?: boolean; mainHeader?: string; className?: string })[];
   isSyncWithBlocks?: boolean;
   workspaceXml?: string | null;
   onWorkspaceChange?: (xmlText: string) => void;
@@ -1926,6 +1982,7 @@ interface BlocklyEditorProps {
   themeMode?: 'dark' | 'light';
   onMicrobitPreview?: (frames: string[]) => void;
   compact?: boolean;
+  showRobotPlan?: boolean;
   robotHardwareConfig?: RobotHardwareConfig;
   activeRobotHighlight?: ActiveExecutionHighlight;
   onRobotPlansExtracted?: (
@@ -1991,7 +2048,7 @@ export function getLibraryIcon(libName: string, category: string = ''): string {
   return '📦';
 }
 
-export function formatFriendlyMethodLabel(methodName: string, returnType: string = 'void'): string {
+export function formatFriendlyMethodLabel(methodName: string, _returnType: string = 'void'): string {
   const lower = methodName.toLowerCase();
   if (lower === 'begin' || lower === 'init') return 'Mulai Sensor (begin)';
   if (lower === 'update') return 'Perbarui Pembacaan (update)';
@@ -2593,7 +2650,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   isSyncWithBlocks = true,
   workspaceXml = null,
   onWorkspaceChange,
-  activeFile,
   isRunning = false,
   onRunSimulator,
   onStopSimulator,
@@ -2601,6 +2657,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   themeMode = 'dark',
   onMicrobitPreview,
   compact = false,
+  showRobotPlan = false,
   robotHardwareConfig,
   activeRobotHighlight,
   onRobotPlansExtracted,
@@ -2717,7 +2774,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         ) || null;
     }
 
-    if (targetBlock) {
+    if (targetBlock instanceof Blockly.BlockSvg) {
       const svg = targetBlock.getSvgRoot();
       if (svg) {
         svg.classList.add(
@@ -2804,7 +2861,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     if (t.includes('logic')) return 'cat-logic';
     if (t.includes('loop')) return 'cat-loop';
     if (t.includes('math')) return 'cat-math';
-    if (t.includes('text')) return 'cat-text';
+    if (t.includes('text') || t === 'serial') return 'cat-text';
     if (t.includes('variable')) return 'cat-variables';
     if (t.includes('func') || t.includes('fung')) return 'cat-functions';
     if (t.includes('keypad') || t.includes('keyboard')) return 'cat-keypad';
@@ -3398,13 +3455,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             if (!generatedCode.includes('#include <Wire.h>')) generatedCode += '#include <Wire.h>\n';
             if (!generatedCode.includes('#include <Adafruit_Sensor.h>')) generatedCode += '#include <Adafruit_Sensor.h>\n';
           }
-          const matchedLib = (installedLibraries || []).find((lib: any) => {
-            const api = lib?.parsedApi;
+          const matchedLibrary = (installedLibraries || []).find(lib => {
+            const api = typeof lib === 'object' ? lib.parsedApi : undefined;
             if (!api) return false;
             return (api.className && api.className.toLowerCase() === cls.toLowerCase()) ||
               (Array.isArray(api.classes) && api.classes.some((c: string) => c.toLowerCase() === cls.toLowerCase())) ||
               (Array.isArray(api.headers) && api.headers.some((h: string) => h.toLowerCase() === `${cls.toLowerCase()}.h`));
           });
+          const matchedLib = typeof matchedLibrary === 'object' ? matchedLibrary : undefined;
           const targetHeader = matchedLib?.parsedApi?.mainHeader || `${cls}.h`;
           if (!generatedCode.includes(`#include <${targetHeader}>`) && !generatedCode.includes(`#include "${targetHeader}"`)) {
             generatedCode += `#include <${targetHeader}>\n`;
@@ -3812,12 +3870,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const inputs = new Set<string>();
       workspace.getAllBlocks(false).forEach(block => {
         if (!isBlockActive(block)) return;
-        if (block.type === 'pin_digital_write' || block.type === 'pin_analog_write') {
+        if (block.type === 'pin_digital_write' || block.type === 'pin_digital_write_value' || block.type === 'pin_analog_write') {
           const pin = block.getFieldValue('PIN');
           if (pin && (!isNaN(Number(pin)) || /^A\d+$/.test(pin))) {
             outputs.add(pin);
           }
-        } else if (block.type === 'pin_digital_read' || block.type === 'pin_analog_read') {
+        } else if (block.type === 'pin_digital_read' || block.type === 'pin_digital_read_value' || block.type === 'pin_analog_read') {
           const pin = block.getFieldValue('PIN');
           if (pin && (!isNaN(Number(pin)) || /^A\d+$/.test(pin))) {
             inputs.add(pin);
@@ -3836,7 +3894,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
       // Render Setup
       generatedCode += 'void setup() {\n';
-      generatedCode += '  Serial.begin(115200);\n';
+      const hasSerialBegin = workspace.getBlocksByType('serial_begin', false).some(isBlockActive);
+      if (!hasSerialBegin) generatedCode += '  Serial.begin(115200);\n';
       
       // Auto-generated pinMode declarations
       if (outputs.size > 0 || inputs.size > 0) {
@@ -3992,10 +4051,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const inputs = new Set<string>();
         workspace.getAllBlocks(false).forEach(block => {
           if (!isBlockActive(block)) return;
-          if (block.type === 'pin_digital_write' || block.type === 'pin_analog_write') {
+          if (block.type === 'pin_digital_write' || block.type === 'pin_digital_write_value' || block.type === 'pin_analog_write') {
             const pin = block.getFieldValue('PIN');
             if (pin) outputs.add(pin);
-          } else if (block.type === 'pin_digital_read' || block.type === 'pin_analog_read') {
+          } else if (block.type === 'pin_digital_read' || block.type === 'pin_digital_read_value' || block.type === 'pin_analog_read') {
             const pin = block.getFieldValue('PIN');
             if (pin) inputs.add(pin);
           }
@@ -4271,7 +4330,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
     let xml = `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-      <category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
+      ${showRobotPlan ? `<category name="Robot Plan" colour="#f97316" css-container="cat-robot-plan" css-row="cat-robot-plan">
         <block type="robot_hw_setup"></block>
         <block type="robot_plan_container">
           <field name="PLAN_ID">1</field>
@@ -4384,7 +4443,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="robot_run_plan">
           <field name="PLAN_ID">1</field>
         </block>
-      </category>
+      </category>` : ''}
       <category name="Logic" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
         <block type="controls_if"></block>
         <block type="robolab_logic_compare"></block>
@@ -4433,9 +4492,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       <category name="Text" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
         <block type="text"></block>
         <block type="text_join"></block>
+      </category>
+      <category name="Serial" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
+        ${codeType === 'arduino' ? '<block type="serial_begin"></block>' : ''}
         <block type="arduino_serial_print"></block>
         <block type="arduino_serial_print_inline"></block>
         <block type="arduino_serial_write"></block>
+        <block type="arduino_serial_available"></block>
+        <block type="arduino_serial_read"></block>
       </category>
       <category name="Variables" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
       </category>
@@ -4448,21 +4512,21 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="arduino_define_const"></block>
         <block type="arduino_pin_mode"></block>
         <block type="pin_digital_write"></block>
+        <block type="pin_digital_write_value"><value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block>
+        <block type="pin_digital_read_value"></block>
         <block type="pin_digital_read"></block>
         <block type="pin_analog_write"></block>
         <block type="pin_analog_read"></block>
       </category>
       <category name="Time" colour="#FF4081" css-container="cat-time" css-row="cat-time">
         <block type="arduino_delay"></block>
+        <block type="arduino_delay_microseconds"></block>
+        <block type="arduino_millis"></block>
+        <block type="arduino_micros"></block>
       </category>
       <category name="Arduino" colour="#14B8A6" css-container="cat-arduino" css-row="cat-arduino">
         <block type="arduino_setup"></block>
         <block type="arduino_loop"></block>
-        <block type="arduino_serial_print"></block>
-        <block type="arduino_serial_print_inline"></block>
-        <block type="arduino_serial_write"></block>
-        <block type="arduino_serial_available"></block>
-        <block type="arduino_serial_read"></block>
         <block type="arduino_pulsein"></block>
         <block type="arduino_tone"></block>
         <block type="arduino_notone"></block>
@@ -4607,13 +4671,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     });
 
     if (customLibs.length > 0) {
-      // Universal Library Blocks Category
-      xml += `<category name="📚 Library Kustom" colour="#8B5CF6" css-row="cat-default">`;
-      xml += `<block type="custom_library_init"></block>`;
-      xml += `<block type="custom_library_call"></block>`;
-      xml += `<block type="custom_library_call_val"></block>`;
-      xml += `</category>`;
-
       const escapeXmlVal = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       customLibs.forEach(lib => {
         const libName = (typeof lib === "string" ? lib : (lib as any)?.name) || "CustomLib";
@@ -4797,7 +4854,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       setTimeout(() => updateToolboxUI(), 50);
       setTimeout(() => updateToolboxUI(), 200);
     }
-  }, [installedLibrariesStr, board, robotHardwareConfig?.sensorCount, updateToolboxUI]);
+  }, [installedLibrariesStr, board, codeType, showRobotPlan, robotHardwareConfig?.sensorCount, updateToolboxUI]);
 
   useEffect(() => {
     if (!blocklyDivRef.current) return;
@@ -5311,7 +5368,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (lang === 'arduino') return val === 'TRUE' ? 'true' : 'false';
       return val === 'TRUE' ? 'True' : 'False';
     }
-    if (block.type === 'pin_digital_read') {
+    if (block.type === 'arduino_millis') return lang === 'arduino' ? 'millis()' : 'time.ticks_ms()';
+    if (block.type === 'arduino_micros') return lang === 'arduino' ? 'micros()' : 'time.ticks_us()';
+    if (block.type === 'pin_digital_read' || block.type === 'pin_digital_read_value') {
       const pin = block.getFieldValue('PIN');
       if (lang === 'arduino') return `digitalRead(${pin})`;
       if (board === 'BBC micro:bit') return `pin${pin}.read_digital()`;
@@ -5768,7 +5827,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     };
 
     while (currentBlock) {
-      if (currentBlock.disabled || (typeof (currentBlock as any).isEnabled === 'function' && !(currentBlock as any).isEnabled())) {
+      if (!currentBlock.isEnabled()) {
         currentBlock = currentBlock.getNextBlock();
         continue;
       }
@@ -5778,6 +5837,23 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}delay(${ms});\n`;
         } else {
           code += `${indent}time.sleep(${parseFloat(ms) / 1000.0})\n`;
+        }
+      } else if (currentBlock.type === 'arduino_delay_microseconds') {
+        const us = currentBlock.getFieldValue('US');
+        code += lang === 'arduino' ? `${indent}delayMicroseconds(${us});\n` : `${indent}time.sleep_us(${us})\n`;
+      } else if (currentBlock.type === 'serial_begin') {
+        const baud = currentBlock.getFieldValue('BAUD');
+        code += lang === 'arduino'
+          ? `${indent}Serial.begin(${baud}UL);\n`
+          : `${indent}pass  # Serial.begin hanya mengatur port pada Arduino.\n`;
+      } else if (currentBlock.type === 'pin_digital_write_value') {
+        const pin = currentBlock.getFieldValue('PIN');
+        const value = getBlockValue(currentBlock.getInputTargetBlock('VALUE')!, lang) || '0';
+        if (lang === 'arduino') {
+          code += `${indent}digitalWrite(${pin}, ${value});\n`;
+        } else {
+          const method = board === 'BBC micro:bit' ? 'write_digital' : 'value';
+          code += `${indent}pin${pin}.${method}(${value})\n`;
         }
       } else if (currentBlock.type === 'pin_digital_write') {
         const pin = currentBlock.getFieldValue('PIN');
@@ -6453,9 +6529,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             const pField = currentBlock.getFieldValue('PIN') || currentBlock.getFieldValue('PARAM');
             params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
           } else if (meta.params && meta.params.length > 1) {
+            const methodBlock = currentBlock;
             meta.params.forEach((_: any, idx: number) => {
-              const pBlock = currentBlock.getInputTargetBlock(`PARAM${idx}`);
-              const pField = currentBlock.getFieldValue(`PARAM${idx}`);
+              const pBlock = methodBlock.getInputTargetBlock(`PARAM${idx}`);
+              const pField = methodBlock.getFieldValue(`PARAM${idx}`);
               params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
             });
           }

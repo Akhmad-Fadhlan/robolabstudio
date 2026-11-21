@@ -148,7 +148,9 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
           texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
           textures.set(url, texture);
         }
-        const aspect = texture.image.width / texture.image.height;
+        const image = texture.image;
+        if (!(image instanceof HTMLImageElement) || image.height === 0) return;
+        const aspect = image.width / image.height;
         const width = Math.min(6.04, 3.03 * aspect);
         screen.scale.set(width / 5.88, (width / aspect) / (5.88 * 489 / 1024), 1);
         screen.material.map = texture;

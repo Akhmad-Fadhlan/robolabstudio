@@ -421,7 +421,6 @@ export const PwmHardwareVisualizer: React.FC = () => {
             {/* Draw 3 PWM periods */}
             {[0, 100, 200].map(offset => {
               const highWidth = Math.max(2, Math.min(98, (dutyPct / 100) * 100));
-              const lowWidth = 100 - highWidth;
               return (
                 <path
                   key={offset}

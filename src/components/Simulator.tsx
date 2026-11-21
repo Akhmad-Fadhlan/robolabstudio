@@ -1104,9 +1104,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   // Auto-detect components based on code
   useEffect(() => {
     if (!activeCode) return;
-    const isArduino = board === 'Arduino Uno';
-    const isMicrobit = board === 'BBC micro:bit';
-    const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
 
     const codeUpper = activeCode.toUpperCase();
     const detected: string[] = [];
@@ -1234,15 +1231,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const dht11Components = activeComponents.filter(c => simulatedType(c) === 'dht11');
   const rfidComponents = activeComponents.filter(c => getBaseComponentType(c) === 'rfid');
 
-  const hasServo = servoComponents.length > 0;
-  const hasUltrasonic = ultrasonicComponents.length > 0;
-  const hasLed = ledComponents.length > 0;
-  const hasPot = potComponents.length > 0;
-  const hasButton = buttonComponents.length > 0;
-  const hasLcd = lcdComponents.length > 0;
-  const hasMotor = motorComponents.length > 0;
-  const hasDht11 = dht11Components.length > 0;
-  const hasRfid = rfidComponents.length > 0;
 
   const checkMotorWiring = (id: string = 'motor'): boolean => {
     const pinPos = getInstancePinId(id, 'MOTOR_POS');
@@ -1251,7 +1239,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
     const negWire = wires.find(w => w.to === pinNeg || w.from === pinNeg);
     return !!posWire && !!negWire;
   };
-  const isMotorWired = checkMotorWiring('motor');
 
   const gndPins = [
     'GND', 'GND_L', 'GND_R', 'GND_T', 'GND_B', 'PAD_GND', 'GND_M', 'G_M', 'GND_L2', 'GND_R2',
@@ -1694,26 +1681,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
     }
   }, [catalogInputLevels, activeComponents, wires, wokwiPins, board, isRunning, onPinStateChange]);
 
-  const ledAnodePin = getConnectedMcuPin('LED_A');
-  const ledCathodePin = getConnectedMcuPin('LED_K');
-  
   const checkLedPinMatch = (targetPin: Pin | null, _instanceId: string = 'led'): boolean => {
     if (!targetPin) return false;
     return targetPin.type === 'mcu' && !gndPins.includes(targetPin.id) && !powerPins.includes(targetPin.id);
   };
-
-  const isLedActiveHighWired = ledAnodePin !== null && 
-                               ledCathodePin !== null && 
-                               gndPins.includes(ledCathodePin.id) &&
-                               checkLedPinMatch(ledAnodePin);
-
-  const isLedActiveLowWired = ledAnodePin !== null && 
-                              ledCathodePin !== null && 
-                              powerPins.includes(ledAnodePin.id) &&
-                              !gndPins.includes(ledCathodePin.id) &&
-                              checkLedPinMatch(ledCathodePin);
-
-  const isLedWired = isLedActiveHighWired || isLedActiveLowWired;
 
   const getPinBrightness = (pin: Pin, activeLow: boolean = false): number => {
     if (!pinStates) return 0;
@@ -1751,26 +1722,12 @@ export const Simulator: React.FC<SimulatorProps> = ({
     return 0.0;
   };
 
-  const targetLedMcuPin = isLedActiveLowWired ? ledCathodePin : ledAnodePin;
-  const ledBrightness = isRunning && isLedWired && targetLedMcuPin ? getPinBrightness(targetLedMcuPin, isLedActiveLowWired) : 0.0;
-
-  const servoSigPin = getConnectedMcuPin('SERVO_SIG');
-  const servoVccPin = getConnectedMcuPin('SERVO_VCC');
-  const servoGndPin = getConnectedMcuPin('SERVO_GND');
-
-  const checkServoPinMatch = (targetSigPin: Pin | null = servoSigPin, _instanceId: string = 'servo'): boolean => {
+  const checkServoPinMatch = (targetSigPin: Pin | null): boolean => {
     if (!targetSigPin) return false;
     return targetSigPin.type === 'mcu' && !gndPins.includes(targetSigPin.id) && !powerPins.includes(targetSigPin.id);
   };
 
-  const isServoWired = servoSigPin !== null && 
-                       servoVccPin !== null && 
-                       servoGndPin !== null && 
-                       gndPins.includes(servoGndPin.id) &&
-                       powerPins.includes(servoVccPin.id) &&
-                       checkServoPinMatch();
-
-  const getServoAngle = (targetSigPin: Pin | null = servoSigPin, wired: boolean = isServoWired): number => {
+  const getServoAngle = (targetSigPin: Pin | null, wired: boolean): number => {
     if (!wired || !isRunning || !targetSigPin) return 90;
     
     const resolveAngle = (rawVal: number): number => {
@@ -1801,7 +1758,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
     return robotCommand === 'LEFT' ? 45 : robotCommand === 'RIGHT' ? 135 : 90;
   };
 
-  const servoAngle = getServoAngle();
 
   const checkUltrasonicWiring = (id: string): boolean => {
     const trigPin = getConnectedMcuPin(getInstancePinId(id, 'SR04_TRIG'));
@@ -1835,7 +1791,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
     return sigPin.type === 'mcu' && !gndPins.includes(sigPin.id) && !powerPins.includes(sigPin.id);
   };
 
-  const isButtonWired = checkBtnWiring();
 
   const checkDhtWiring = (id: string): boolean => {
     const dataPin = getConnectedMcuPin(getInstancePinId(id, 'DHT11_DATA'));
@@ -1847,18 +1802,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const isDhtWired = dht11Components.some(checkDhtWiring);
-
-  const checkLcdWiring = (): boolean => {
-    const gndPin = getConnectedMcuPin('LCD_GND');
-    const vccPin = getConnectedMcuPin('LCD_VCC');
-    const sdaPin = getConnectedMcuPin('LCD_SDA');
-    const sclPin = getConnectedMcuPin('LCD_SCL');
-    
-    if (!gndPin || !vccPin || !sdaPin || !sclPin) return false;
-    return gndPins.includes(gndPin.id) && powerPins.includes(vccPin.id);
-  };
-
-  const isLcdWired = checkLcdWiring();
 
   // Convert client coordinate and apply Snapping (lock onto nearby pin when mouse is close)
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
@@ -2082,7 +2025,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
     { value: '#f8fafc', label: 'White (Neutral)' }
   ];
 
-  // Component wiring states for visual feedback (isLedWired, isServoWired, isUltrasonicWired, isPotWired, and isButtonWired are declared above)
 
   // Dynamic values
   const currentDistance = isUltrasonicWired ? Math.round(sensorData.distance ?? 42) : 0;
@@ -2832,7 +2774,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                             gndPin !== null && 
                             gndPins.includes(gndPin.id) &&
                             powerPins.includes(vccPin.id) &&
-                            checkServoPinMatch(sigPin, id);
+                            checkServoPinMatch(sigPin);
             const angle = getServoAngle(sigPin, isWired);
             const label = id.includes('_') ? `Servo #${id.split('_')[1]}` : 'Servo SG90';
             const compColor = getComponentColor(id, '#3b82f6');
@@ -3648,7 +3590,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               if (raw === undefined) return 0;
               return gndPins.includes(common.id) ? level : powerPins.includes(common.id) ? 1 - level : 0;
             };
-            const displayState = model === 'led' ? {value: wired && (level === 'HIGH' || typeof level === 'number' && level > 0)}
+            const displayState: Record<string, boolean | number> | undefined = model === 'led' ? {value: wired && (level === 'HIGH' || typeof level === 'number' && level > 0)}
               : model === 'servo' ? { angle: getServoAngle(signal, wired && !!supply && powerPins.includes(supply.id)) }
               : model === 'button' ? { pressed: !!pressedButtons[id] }
               : model === 'pot' ? { value: extraPotValues[id] ?? potValue } : tag === 'wokwi-rgb-led' ? { ledRed: channelLevel('R'), ledGreen: channelLevel('G'), ledBlue: channelLevel('B') }

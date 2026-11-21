@@ -376,8 +376,9 @@ function buildArduinoConvertContext(globalLines: string[], setupLines: string[],
   return { variables, pinConstants, servoPins, dhtConfig, neoConfig, blynkConfig, userGlobalInits, defineStatements, libInstantiations, instanceToClass, includeHeaders };
 }
 
-function convertCppExpr(expr: string, pinConstants: Record<string, string>, instanceToClass: Record<string, string> = {}): string {
+function convertCppExpr(expr: string, pinConstants: Record<string, string>, _instanceToClass: Record<string, string> = {}): string {
   let res = expr.trim();
+  res = res.replace(/\bmillis\(\s*\)/g, 'time.ticks_ms()').replace(/\bmicros\(\s*\)/g, 'time.ticks_us()');
   res = res.replace(/digitalRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `digital_read(${pinConstants[p] || p})`);
   res = res.replace(/analogRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `analog_read(${pinConstants[p] || p})`);
   res = res.replace(/touchRead\(\s*([a-zA-Z0-9_]+)\s*\)/g, (_, p) => `touch_read(${pinConstants[p] || p})`);
@@ -421,7 +422,8 @@ function convertCppCondition(cond: string, pinConstants: Record<string, string>,
 function convertCtoPython(
   cLines: string[],
   ctx: ReturnType<typeof buildArduinoConvertContext>,
-  indentOffset: number = 0
+  indentOffset = 0,
+  preserveBaudRate = false
 ): string[] {
   const pyLines: string[] = [];
   let indentLevel = indentOffset;
@@ -438,15 +440,6 @@ function convertCtoPython(
 
   let skipWifiConnectLoop = false;
   let wifiLoopBraceDepth = 0;
-
-  let detectedSsPin = '10';
-  for (const rawLine of cLines) {
-    const sm = rawLine.match(/MFRC522DriverPinSimple\s+ss_pin\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
-    if (sm) {
-      detectedSsPin = resolvePin(sm[1]);
-      break;
-    }
-  }
 
   for (let idx = 0; idx < cLines.length; idx++) {
     let trimmed = stripCppLineComment(cLines[idx]).trim();
@@ -498,6 +491,12 @@ function convertCtoPython(
       const pin = resolvePin(pinModeMatch[1]);
       const mode = pinModeMatch[2].trim();
       emitLine(`robot.pin_mode(${pin}, "${mode}")`);
+      continue;
+    }
+
+    const serialBegin = trimmed.match(/^Serial\.begin\(\s*(\d+)(?:[uU][lL]?)?\s*\)$/);
+    if (preserveBaudRate && serialBegin) {
+      emitLine(`robot.serial_begin(${serialBegin[1]})`);
       continue;
     }
 
@@ -556,7 +555,7 @@ function convertCtoPython(
     const singleIfMatch = !hasOpeningBrace ? trimmed.match(/^if\s*\(([^)]+)\)\s+(.+)$/) : null;
     if (singleIfMatch) {
       emitLine(`if ${convertCppCondition(singleIfMatch[1], pinConstants)}:`);
-      const innerPy = convertCtoPython([singleIfMatch[2]], ctx, indentLevel + 1);
+      const innerPy = convertCtoPython([singleIfMatch[2]], ctx, indentLevel + 1, preserveBaudRate);
       pyLines.push(...innerPy);
       continue;
     }
@@ -658,6 +657,12 @@ function convertCtoPython(
       continue;
     }
 
+    const microsecondsDelay = trimmed.match(/^delayMicroseconds\(\s*(.+?)\s*\)$/);
+    if (microsecondsDelay) {
+      emitLine(`time.sleep_us(${convertCppExpr(microsecondsDelay[1], pinConstants)})`);
+      continue;
+    }
+
     // 2. digitalWrite(pin, state)
     m = trimmed.match(/^digitalWrite\(\s*([^,]+?)\s*,\s*(.+?)\s*\)$/);
     if (m) {
@@ -665,7 +670,8 @@ function convertCtoPython(
       let state = m[2].trim();
       if (state === '1' || state === 'true' || state === 'HIGH') state = 'HIGH';
       else if (state === '0' || state === 'false' || state === 'LOW') state = 'LOW';
-      emitLine(`digital_write(${pin}, "${state}")`);
+      const value = state === 'HIGH' || state === 'LOW' ? `"${state}"` : convertCppExpr(state, pinConstants);
+      emitLine(`digital_write(${pin}, ${value})`);
       continue;
     }
 
@@ -970,9 +976,9 @@ export function arduinoToBlocklyXml(code: string, parsedApi?: any, precomputedXm
     setupPyLines.push(`robot.custom_lib_init("${libInst.className}", "${libInst.instanceName}", "${libInst.args.replace(/"/g, '\\"')}")`);
   }
   setupPyLines.push(...ctx.userGlobalInits);
-  setupPyLines.push(...convertCtoPython(setupLines, ctx));
+  setupPyLines.push(...convertCtoPython(setupLines, ctx, 0, true));
 
-  const loopPyLines = convertCtoPython(loopLines, ctx);
+  const loopPyLines = convertCtoPython(loopLines, ctx, 0, true);
 
   const setupInner = pythonBodyToBlocksXml(setupPyLines.join('\n'), ctx.variables);
   const loopInner = pythonBodyToBlocksXml(loopPyLines.join('\n'), ctx.variables);
@@ -993,7 +999,7 @@ export function arduinoToBlocklyXml(code: string, parsedApi?: any, precomputedXm
 
   // Render any BLYNK_WRITE(V0) callback blocks
   blynkBlocks.forEach((bBlock, idx) => {
-    const bPy = convertCtoPython(bBlock.lines, ctx);
+    const bPy = convertCtoPython(bBlock.lines, ctx, 0, true);
     const bInner = pythonBodyToBlocksXml(bPy.join('\n'), ctx.variables);
     finalXml += `<block type="blynk_on_write" x="40" y="${440 + idx * 180}">`;
     finalXml += `<field name="VPIN">${escapeXml(bBlock.vpin)}</field>`;

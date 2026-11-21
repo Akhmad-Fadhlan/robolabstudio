@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Play,
-  Square,
   RotateCcw,
   Camera,
   Maximize2,
@@ -13,9 +11,6 @@ import {
   Cpu,
   Zap,
   Trash2,
-  Flag,
-  MapPin,
-  Navigation,
   Sparkles,
   CheckCircle2,
   OctagonAlert,
@@ -69,12 +64,10 @@ const TRACK_H = 800;
 
 export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   isRunning,
-  onToggleRun,
   hardwareConfig,
   onChangeHardwareConfig,
   plans,
   activePlanId,
-  onChangePlans,
   onSyncToCodeAndBlocks,
   onHighlightChange,
   code = '',
@@ -130,7 +123,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   const [activeDrawer, setActiveDrawer] = useState<'none' | 'hardware' | 'pid' | 'pdf_samples'>('none');
 
   // Robot live state
-  const [robotPose, setRobotPose] = useState<{ x: number; y: number; theta: number }>({
+  const [, setRobotPose] = useState<{ x: number; y: number; theta: number }>({
     x: 155,
     y: 665,
     theta: -Math.PI / 2,
@@ -433,7 +426,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       const sinT = Math.sin(rTheta);
 
       for (let i = 0; i < count; i++) {
-        const frac = count === 1 ? 0 : i / (count - 1) - 0.5;
+        const frac = count <= 1 ? 0 : i / (count - 1) - 0.5;
         const ly = frac * sSpan;
         const lx = 35 - Math.abs(frac) * 5;
         const sx = Math.round(rx + (lx * cosT - ly * sinT) * rScale);
@@ -1550,7 +1543,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       // 6. Front Sensor Array LEDs ('0' = Green Glow on Line, 'X' = Red Off Line)
       const sCount = hardwareConfig.sensorCount;
       for (let i = 0; i < sCount; i++) {
-        const frac = sCount === 1 ? 0 : i / (sCount - 1) - 0.5;
+        const frac = sCount <= 1 ? 0 : i / (sCount - 1) - 0.5;
         // Slight arc along the front wing nose
         const ly = frac * sSpan;
         const lx = 35 - Math.abs(frac) * 5;

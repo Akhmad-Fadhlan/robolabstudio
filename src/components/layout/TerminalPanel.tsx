@@ -5,6 +5,7 @@ import {
   ChevronRight, Wifi, WifiOff
 } from 'lucide-react';
 import type { KiloCodeConfig, ChatMessage } from '../../services/kilocodeService';
+import { SERIAL_BAUD_RATES } from '../../data/serialBaudRates';
 import { DATASHEET_DATABASE } from '../../data/datasheetDb';
 import type { ComponentDatasheet } from '../../data/datasheetDb';
 import {
@@ -486,8 +487,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     className={`appearance-none px-3 py-1.5 text-xs font-semibold rounded-lg outline-none cursor-pointer border transition-all
                       ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-400 focus:border-indigo-500' : 'bg-[#0c0e16] border-slate-700 text-slate-200 hover:border-slate-500'}`}
                   >
-                    <option value="9600">9600 baud</option>
-                    <option value="115200">115200 baud</option>
+                    {SERIAL_BAUD_RATES.map(baud => <option key={baud} value={baud}>{baud} baud</option>)}
                   </select>
                   <button
                     onClick={async () => {
