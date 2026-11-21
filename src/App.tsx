@@ -3946,6 +3946,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   
   // Shared Virtual WiFi simulator state
   const [isWifiConnected, setIsWifiConnected] = useState<boolean>(false);
+  const networkEnabled = useRef(false);
+  const updateSimulatorNetwork = (enabled: boolean) => {
+    networkEnabled.current = enabled && navigator.onLine;
+    setIsWifiConnected(networkEnabled.current);
+  };
+  useEffect(() => {
+    const offline = () => updateSimulatorNetwork(false);
+    window.addEventListener('offline', offline);
+    return () => window.removeEventListener('offline', offline);
+  }, []);
   const [selectedWifi, setSelectedWifi] = useState<string>('');
   const [wifiPassword, setWifiPassword] = useState<string>('');
 
@@ -4665,7 +4675,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setBlynkVirtualPins({});
       blynkAuthTokenRef.current = null;
       lastRealBlynkValuesRef.current = {};
-      setIsWifiConnected(false);
+      updateSimulatorNetwork(false);
       if (blynkTcpClientRef.current) {
         try { blynkTcpClientRef.current.destroy(); } catch (e) {}
         blynkTcpClientRef.current = null;
@@ -6104,7 +6114,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (line === undefined) continue;
         const originalLine = line; // keep original for # Servo detection
         let clean = line;
-        if (clean.includes('//')) clean = clean.split('//')[0];
+        clean = clean.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/.*$/g, token => token.startsWith('//') ? '' : token);
         const trimmedBeforeHash = clean.trim();
         // Check for #define before stripping #
         const defineMatch = trimmedBeforeHash.match(/^#define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(.+)$/);
@@ -6119,6 +6129,26 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const hashIdx = clean.indexOf('#');
         if (hashIdx >= 0) clean = clean.slice(0, hashIdx);
         const trimmed = clean.trim();
+        const wifiStart = trimmed.match(/^(?:WiFi\.begin|robot\.wifi_connect|(?:wlan|sta|station)\.connect)\(\s*([^,]+),/);
+        if (wifiStart && !trimmed.startsWith('client.connect')) {
+          queue.push({ type: 'wifi_start', value: wifiStart[1] });
+          continue;
+        }
+        const pythonGet = trimmed.match(/robot\.http_get\(([^)]+)\)/);
+        const pythonPost = trimmed.match(/robot\.http_post\(([^,]+),\s*["']([^"']+)["'],\s*(.+)\)/);
+        if (pythonGet || pythonPost) {
+          queue.push({ type: 'http_fetch', value: pythonPost
+            ? { url: pythonPost[1], method: 'POST', contentType: pythonPost[2], payload: pythonPost[3].replace(/\)$/, '') }
+            : { url: pythonGet![1], method: 'GET' } });
+          continue;
+        }
+        const inlineUrl = trimmed.match(/String _u = (.+?); HTTPClient http;/);
+        if (inlineUrl) {
+          const post = trimmed.match(/http\.POST\((.*?)\);/);
+          queue.push({ type: 'http_fetch', value: { url: inlineUrl[1], method: post ? 'POST' : 'GET', payload: post?.[1], contentType: trimmed.match(/addHeader\("Content-Type", "([^"]+)"\)/)?.[1] } });
+          continue;
+        }
+
         if (!trimmed || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
           continue;
         }
@@ -7043,7 +7073,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const creds = extractBlynkCredentials(activeCodeText, '', '', '');
       const targetSsid = creds.ssid || 'Local_WiFi';
       const targetPass = creds.pass || '12345678';
-      setIsWifiConnected(true);
+      updateSimulatorNetwork(true);
       setSelectedWifi(targetSsid);
       setWifiPassword(targetPass);
       if (creds.token && creds.token.length >= 15) {
@@ -7610,14 +7640,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         const targetSsid = creds.ssid || 'Local_WiFi';
         const targetPass = creds.pass || '12345678';
 
-        setIsWifiConnected(true);
+        updateSimulatorNetwork(true);
         setSelectedWifi(targetSsid);
         setWifiPassword(targetPass);
         setBlynkStatus('connecting');
 
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[WIFI SIMULATOR] 🌐 Virtual WiFi Auto-Connected to "${targetSsid}" (Password: "${targetPass}")`, type: 'stdout' },
+          { text: `[WIFI SIMULATOR] 🌐 Virtual WiFi Auto-Connected to "${targetSsid}"`, type: 'stdout' },
           { text: `[WIFI SIMULATOR] IP Address: 192.168.1.105 (Signal: -52 dBm)`, type: 'stdout' }
         ]);
 
@@ -7653,6 +7683,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           });
         }
         next();
+      } else if (item.type === 'wifi_start') {
+        setSelectedWifi(String(evalExpr(item.value, executionVars)));
+        updateSimulatorNetwork(true);
+        setTerminalLogs(prev => [...prev, {text: navigator.onLine ? 'WiFi virtual menggunakan jaringan browser. Jalankan HTTP untuk menguji endpoint.' : 'Browser offline.', type: 'info'}]);
+        next();
+      } else if (['http_get','http_post','http_fetch'].includes(item.type) && (!networkEnabled.current || !navigator.onLine)) {
+        executionVars.httpCode = -1;
+        executionVars.payload = '';
+        setTerminalLogs(prev => [...prev, {text: 'HTTP dibatalkan. Aktifkan WiFi pada program atau panel simulator.', type: 'error'}]);
+        next();
       } else if (item.type === 'http_begin') {
         executionVars['__http_url'] = item.value.url;
         setTerminalLogs(prev => [
@@ -7661,13 +7701,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         ]);
         next();
       } else if (item.type === 'http_get' || (item.type === 'http_fetch' && item.value.method === 'GET')) {
-        const targetUrl = resolveSensorReads(String(item.value?.url || executionVars['__http_url'] || 'http://httpbin.org/get')).replace(/^['"]|['"]$/g, '');
+        const targetUrl = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
         setTerminalLogs(prev => [
           ...prev,
           { text: `[HTTPClient GET 🌐] Sending GET request to ${targetUrl}...`, type: 'stdout' }
         ]);
         
-        fetch(targetUrl)
+        Promise.resolve().then(() => new URL(targetUrl).href).then(url => fetch(url))
           .then(async res => {
             const bodyText = await res.text();
             executionVars['httpCode'] = res.status;
@@ -7675,7 +7715,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             executionVars['__http_response'] = bodyText;
             setTerminalLogs(prev => [
               ...prev,
-              { text: `[HTTPClient GET 200 OK] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
+              { text: `[HTTPClient GET] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
             ]);
             next();
           })
@@ -7690,7 +7730,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           });
         return; // async step
       } else if (item.type === 'http_post' || (item.type === 'http_fetch' && item.value.method === 'POST')) {
-        const targetUrl = resolveSensorReads(String(item.value?.url || executionVars['__http_url'] || 'http://httpbin.org/post')).replace(/^['"]|['"]$/g, '');
+        const targetUrl = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
         const rawPayload = resolveSensorReads(String(item.value?.payload || '{}'));
         const evaluatedPayload = evalExpr(rawPayload, executionVars);
         const payloadStr = typeof evaluatedPayload === 'object' ? JSON.stringify(evaluatedPayload) : String(evaluatedPayload).replace(/^['"]|['"]$/g, '');
@@ -7700,11 +7740,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           { text: `[HTTPClient POST 🌐] Sending POST to ${targetUrl} (Body: ${payloadStr})...`, type: 'stdout' }
         ]);
 
-        fetch(targetUrl, {
+        Promise.resolve().then(() => fetch(new URL(targetUrl).href, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': item.value?.contentType || 'application/json' },
           body: payloadStr
-        })
+        }))
           .then(async res => {
             const bodyText = await res.text();
             executionVars['httpCode'] = res.status;
@@ -7712,7 +7752,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             executionVars['__http_response'] = bodyText;
             setTerminalLogs(prev => [
               ...prev,
-              { text: `[HTTPClient POST 200 OK] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
+              { text: `[HTTPClient POST] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
             ]);
             next();
           })
@@ -10680,7 +10720,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       blynkVirtualPins={blynkVirtualPins}
                       onBlynkVirtualWrite={handleBlynkVirtualWrite}
                       isWifiConnected={isWifiConnected}
-                      onWifiConnectedChange={setIsWifiConnected}
+                      onWifiConnectedChange={updateSimulatorNetwork}
                       selectedWifi={selectedWifi}
                       onSelectedWifiChange={setSelectedWifi}
                       wifiPassword={wifiPassword}
@@ -11536,7 +11576,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               blynkVirtualPins={blynkVirtualPins}
               onBlynkVirtualWrite={handleBlynkVirtualWrite}
               isWifiConnected={isWifiConnected}
-              onWifiConnectedChange={setIsWifiConnected}
+              onWifiConnectedChange={updateSimulatorNetwork}
               selectedWifi={selectedWifi}
               onSelectedWifiChange={setSelectedWifi}
               wifiPassword={wifiPassword}

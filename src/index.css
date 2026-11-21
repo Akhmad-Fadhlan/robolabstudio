@@ -2351,3 +2351,22 @@ rect[display="none"],
   visibility: hidden !important;
   opacity: 0 !important;
 }
+
+/* Learning navigation uses a paired surface and ink for every accent hue. */
+nav[aria-label="Jalur belajar"] button {
+  color: #f8fafc;
+  background: #1e293b;
+}
+.theme-light nav[aria-label="Jalur belajar"] button {
+  color: #172136;
+  background: #f1f5f9;
+}
+nav[aria-label="Jalur belajar"] button[aria-pressed="true"],
+.theme-light nav[aria-label="Jalur belajar"] button[aria-pressed="true"] {
+  color: white;
+  background: color-mix(in srgb, var(--accent-primary) 48%, #101827);
+}
+nav[aria-label="Jalur belajar"] button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

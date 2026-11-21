@@ -838,8 +838,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
         }
       } catch (err) {
         console.log("Could not scan wifi", err);
-        setWifiNetworks(['Wokwi-GUEST', 'Simulator-Net']);
-        setSelectedWifi('Wokwi-GUEST');
+        setWifiNetworks(['Jaringan browser']);
+        setSelectedWifi('Jaringan browser');
         setIsScanningWifi(false);
       }
     };
@@ -847,11 +847,11 @@ export const Simulator: React.FC<SimulatorProps> = ({
   }, []);
 
   const handleWifiConnectToggle = () => {
-    const nextState = !isWifiConnected;
+    const nextState = !isWifiConnected && navigator.onLine;
     setIsWifiConnected(nextState);
     if (nextState) {
       localStorage.setItem('simulatorWifiSSID', selectedWifi);
-      localStorage.setItem('simulatorWifiPwd', wifiPassword);
+      localStorage.removeItem('simulatorWifiPwd');
     } else {
       localStorage.removeItem('simulatorWifiSSID');
       localStorage.removeItem('simulatorWifiPwd');
@@ -1933,13 +1933,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const handleAddComponent = (compType: string) => {
     if (!compType) return;
     const baseType = getBaseComponentType(compType);
-    let newId = baseType;
+    const prefix = compType.startsWith("button_") ? compType : baseType;
+    let newId = prefix;
     if (activeComponents.includes(newId)) {
       let idx = 2;
-      while (activeComponents.includes(`${baseType}_${idx}`)) {
+      while (activeComponents.includes(`${prefix}_${idx}`)) {
         idx++;
       }
-      newId = `${baseType}_${idx}`;
+      newId = `${prefix}_${idx}`;
     }
 
     // Offset position for new instance
@@ -2975,7 +2976,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
             const gndPin = getConnectedMcuPin(pinGnd);
             const isWired = sigPin !== null && gndPin !== null && gndPins.includes(gndPin.id) && checkBtnWiring(id);
             const isPressed = id === 'button' ? buttonPressed : (pressedButtons[id] || false);
-            const label = id.includes('_') ? `Button #${id.split('_')[1]}` : 'Button';
+            const contactLabel = id.startsWith('button_reed') ? 'Reed switch' : id.startsWith('button_limit') ? 'Limit switch' : id.startsWith('button_tilt') ? 'Tilt switch' : '';
+            const label = contactLabel || (id.includes('_') ? `Button #${id.split('_')[1]}` : 'Button');
             const compColor = getComponentColor(id, '#eab308');
 
             return (
@@ -2992,7 +2994,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                 filter="url(#shadow3d)"
               >
                 {/* Push Button PNG Image */}
-                <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />
+                {contactLabel ? <g><rect x="12" y="25" width="96" height="70" rx="10" fill="#12354a"/><path d={isPressed ? 'M35 70 H85' : 'M35 70 L70 48 M78 70 H85'} stroke="white" strokeWidth="4"/><text x="60" y="42" textAnchor="middle" fill="white" fontSize="11">{contactLabel}</text></g> : <image href="./pushButton.png" xlinkHref="./pushButton.png" x="0" y="0" width="120" height="120" />}
 
                 {/* Pin indicator dots */}
                 <circle cx="35" cy="95" r="3" fill={isWired ? compColor : "#fef08a"} stroke="#ffffff" strokeWidth="1" />
@@ -3965,6 +3967,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <option value="led" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔴 Red LED Bulb</option>
               <option value="servo" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>⚙️ SG90 Servo Motor</option>
               <option value="ultrasonic" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔊 HC-SR04 Ultrasonic</option>
+              <option value="button_reed">Reed switch · kontak magnet</option>
+              <option value="button_limit">Limit switch · batas gerak</option>
+              <option value="button_tilt">Tilt switch · kemiringan</option>
               <option value="pot" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🎛️ Rotary Potentiometer</option>
               <option value="button" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔘 Tactile Push Button</option>
               <option value="lcd" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>📺 16x2 OLED LCD Screen</option>
