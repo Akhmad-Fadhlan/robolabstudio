@@ -25,20 +25,39 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   screen.position.z = .118;
   display.add(screen);
 
-  // A small robot peeks over the preview frame.
-  const buddy = new T.Group();
-  const shell = new T.Mesh(
-    new RoundedBoxGeometry(.78, .53, .32, 4, .11),
-    new T.MeshStandardMaterial({ color: 0xe0f2fe }),
-  );
-  buddy.add(shell);
-  for (const x of [-.17, .17]) {
-    const eye = new T.Mesh(new T.SphereGeometry(.065, 12, 8), new T.MeshBasicMaterial({ color: 0x075985 }));
-    eye.position.set(x, .03, .16);
-    buddy.add(eye);
+  const head = new T.Group();
+  head.position.set(0, 2.15, -.42);
+  display.add(head);
+
+  function part(parent: T.Group, size: [number, number, number], position: [number, number, number], color: number, radius: number) {
+    const mesh = new T.Mesh(
+      new RoundedBoxGeometry(...size, 4, radius),
+      new T.MeshStandardMaterial({ color, roughness: .34 }),
+    );
+    mesh.position.set(...position);
+    parent.add(mesh);
+    return mesh;
   }
-  buddy.position.set(2.32, 1.58, .22);
-  display.add(buddy);
+
+  const porcelain = 0xe5f5ff;
+  const ocean = 0x167bbb;
+  const visor = 0x102c46;
+  part(head, [2.38, 1.26, .76], [0, 0, 0], porcelain, .32);
+  part(head, [1.98, .85, .23], [0, .01, .35], visor, .25);
+  part(head, [.36, .08, .08], [0, -.18, .48], 0x63e6ff, .035);
+  part(head, [.1, .29, .1], [.66, .69, 0], ocean, .04);
+  part(head, [.23, .23, .23], [.66, .87, 0], 0xffbe49, .11);
+  part(display, [3.25, 1.65, .68], [0, 1.06, -.85], ocean, .4);
+  for (const side of [-1, 1]) {
+    part(head, [.23, .3, .11], [side * .49, .09, .46], 0x96edff, .1);
+    part(head, [.24, .55, .48], [side * 1.16, 0, -.04], ocean, .1);
+    const arm = part(display, [2.05, .46, .46], [side * 2.37, 1.09, -.53], porcelain, .2);
+    arm.rotation.z = -side * .3;
+    part(display, [.48, .71, .62], [side * 3.18, .82, -.02], ocean, .18);
+    for (const y of [.67, .91]) {
+      part(display, [.32, .19, .28], [side * 3.17, y, .21], porcelain, .08);
+    }
+  }
 
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const loader = new T.TextureLoader();
@@ -63,14 +82,14 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
       0,
     );
     display.position.z = -entrance * .6;
-    buddy.rotation.z = animated ? .08 + Math.sin(now / 1050) * .08 : .08;
+    head.rotation.z = animated ? .035 * Math.sin(now / 1300) : 0;
     renderer.render(scene, camera);
   };
   const resize = () => {
     const { clientWidth: width, clientHeight: height } = host;
     if (!width || !height || lost) return;
     camera.aspect = width / height;
-    camera.position.set(0, 0, Math.max(4.22, 6.65 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
+    camera.position.set(0, .73, Math.max(5.18, 7.4 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
     render(performance.now());
