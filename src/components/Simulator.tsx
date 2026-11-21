@@ -205,6 +205,7 @@ interface SimulatorProps {
   onSyncRobotToCodeAndBlocks?: (hw: RobotHardwareConfig, plans: RobotPlan[], activePlanId: number) => void;
   onRobotHighlightChange?: (highlight: ActiveExecutionHighlight) => void;
   onToggleRun?: () => void;
+  onRobotRunComplete?: () => void;
 }
 
 interface Pin {
@@ -362,6 +363,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
   onSyncRobotToCodeAndBlocks,
   onRobotHighlightChange,
   onToggleRun,
+  onRobotRunComplete,
 }) => {
   const isLight = themeMode === 'light';
   const [localSimMode, setLocalSimMode] = useState<'robot' | 'circuit'>('circuit');
@@ -2221,6 +2223,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           <RobotArena3D
             isRunning={isRunning}
             onToggleRun={onToggleRun}
+            onRunComplete={onRobotRunComplete}
             hardwareConfig={robotHw}
             onChangeHardwareConfig={setRobotHw}
             plans={robotPlans}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  Play,
+  Square,
   RotateCcw,
   Camera,
   Maximize2,
@@ -19,6 +21,7 @@ import {
   type RobotHardwareConfig,
   type RobotPlan,
   type RobotPlanStep,
+  type PlanActionType,
   type ActiveExecutionHighlight,
   type RobotMcuId,
   type SensorCount,
@@ -37,6 +40,7 @@ import {
 interface RobotArena3DProps {
   isRunning: boolean;
   onToggleRun?: () => void;
+  onRunComplete?: () => void;
   hardwareConfig: RobotHardwareConfig;
   onChangeHardwareConfig: (next: RobotHardwareConfig) => void;
   plans: RobotPlan[];
@@ -64,17 +68,20 @@ const TRACK_H = 800;
 
 export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   isRunning,
+  onToggleRun,
+  onRunComplete,
   hardwareConfig,
   onChangeHardwareConfig,
   plans,
   activePlanId,
+  onChangePlans,
   onSyncToCodeAndBlocks,
   onHighlightChange,
   code = '',
   theme = 'dark',
 }) => {
   const isLight = theme === 'light';
-  const [cameraMode, setCameraMode] = useState<CameraViewMode>('3d_persp');
+  const [cameraMode, setCameraMode] = useState<CameraViewMode>('2d_top');
   const [camYaw, setCamYaw] = useState<number>(-0.32); // radians
   const [camPitch, setCamPitch] = useState<number>(0.78); // tilt
   const [camZoom, setCamZoom] = useState<number>(1.0);
@@ -85,19 +92,19 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     { id: 'empty', name: 'Arena Kosong (Gambar Sendiri)', type: 'empty' },
     {
       id: 'oval',
-      name: 'Track 1: Basic Oval & Checkpoint (PDF)',
+      name: 'Oval latihan',
       type: 'oval',
       pdfUrl: '/tracks/track-basic-oval.pdf',
     },
     {
       id: 'maze',
-      name: 'Track 2: Perempatan & Maze Plan (PDF)',
+      name: 'Labirin perempatan',
       type: 'maze',
       pdfUrl: '/tracks/track-perempatan-maze.pdf',
     },
     {
       id: 'pro',
-      name: 'Track 3: Kompetisi Pro Hitam/Putih (PDF)',
+      name: 'Lintasan kompetisi',
       type: 'pro',
       pdfUrl: '/tracks/track-lomba-pro.pdf',
     },
@@ -120,7 +127,28 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   const [initialHeadingDeg, setInitialHeadingDeg] = useState<number>(-90); // -90 = facing UP
 
   // Active configuration modals / drawers
-  const [activeDrawer, setActiveDrawer] = useState<'none' | 'hardware' | 'pid' | 'pdf_samples'>('none');
+  const [activeDrawer, setActiveDrawer] = useState<'none' | 'hardware' | 'pid' | 'pdf_samples' | 'plan'>('none');
+
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [startStep, setStartStep] = useState<number | null>(null);
+  const [results, setResults] = useState<{ trackId: string; planId: number; seconds: number }[]>([]);
+  const currentPlan = React.useMemo(() => {
+    const parsed = plans.length ? null : parseRobotPlansFromCode(code, hardwareConfig.sensorCount);
+    const available = plans.length ? plans : parsed?.plans ?? [];
+    const planId = activePlanId || parsed?.activePlanId || 1;
+    return available.find(plan => plan.planId === planId) ?? available[0];
+  }, [plans, activePlanId, code, hardwareConfig.sensorCount]);
+  const steps = currentPlan?.items.filter(item => item.type === 'step') ?? [];
+  const chosenStep = steps.some(step => step.index === startStep) ? startStep : null;
+  const trackResults = results.filter(result => result.trackId === selectedTrackId && result.planId === currentPlan?.planId);
+
+  const editStep = (position: number, patch: Partial<Pick<RobotPlanStep, 'action' | 'speedL' | 'speedR'>>) => {
+    if (!currentPlan || isRunning) return;
+    const items = currentPlan.items.map((item, index) =>
+      index === position && item.type === 'step' ? { ...item, ...patch } : item
+    );
+    onChangePlans(plans.map(plan => plan.planId === currentPlan.planId ? { ...plan, items } : plan), currentPlan.planId);
+  };
 
   // Robot live state
   const [, setRobotPose] = useState<{ x: number; y: number; theta: number }>({
@@ -154,6 +182,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   const trackSurfaceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackImageDataRef = useRef<ImageData | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const canvas = viewportCanvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   // Mutable simulation physics state inside RAF
   const simStateRef = useRef({
@@ -347,6 +389,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   // Adjust default Start/Finish when switching preset track
   const handleSelectTrack = (id: string) => {
     setSelectedTrackId(id);
+    if (id !== 'empty' && !['oval', 'maze', 'pro'].includes(id)) return;
+    setInitialHeadingDeg(-90);
     if (id === 'oval') {
       setStartPos({ x: 205, y: 645 });
       setFinishPos({ x: 985, y: 175 });
@@ -544,6 +588,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   useEffect(() => {
     if (isRunning) {
       const rad = (initialHeadingDeg * Math.PI) / 180;
+      const cursor = chosenStep === null ? 0 : (currentPlan?.items.findIndex(item => item.type === 'step' && item.index === chosenStep) ?? 0);
       simStateRef.current = {
         x: startPos.x,
         y: startPos.y,
@@ -551,7 +596,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         elapsedMs: 0,
         encL: 0,
         encR: 0,
-        itemCursor: 0,
+        itemCursor: Math.max(0, cursor),
         subStage: 'WAIT_TRIGGER',
         stageStartMs: 0,
         stageStartEncL: 0,
@@ -562,6 +607,13 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         finished: false,
       };
       trailRef.current = [{ x: startPos.x, y: startPos.y }];
+      setPlacementTool('none');
+      setActiveDrawer('none');
+      setExecStatus({ stepIndex: null, stage: 'READY', message: 'Robot mulai bergerak', stoppedByInterrupt: false });
+      setSimElapsedSec(0);
+      setEncoderLeft(0);
+      setEncoderRight(0);
+      setLiveSpeeds({ l: 0, r: 0 });
     } else {
       onHighlightChange?.({
         running: false,
@@ -578,15 +630,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     let rafId: number;
     let lastTime = performance.now();
 
-    // Determine active plan (from props or parsed from code)
-    const parsedFromCode = parseRobotPlansFromCode(code, hardwareConfig.sensorCount);
-    const effectivePlans = plans.length > 0 ? plans : parsedFromCode?.plans || [];
-    const targetPlanId = activePlanId || parsedFromCode?.activePlanId || 1;
-    const currentPlan =
-      effectivePlans.find((p) => p.planId === targetPlanId) || effectivePlans[0] || null;
-
     const tick = (now: number) => {
-      const dtMs = Math.min(40, Math.max(4, now - lastTime));
+      const dtMs = Math.min(40, Math.max(4, now - lastTime)) * playbackRate;
       lastTime = now;
 
       const s = simStateRef.current;
@@ -639,7 +684,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             nextItem?.type === 'stop_here' && nextItem.stage === 'SPEED_A';
 
           const sensors = sampleSensorsAtPose(s.x, s.y, s.theta, step.lineColor);
-          setSensorReadings(sensors);
+          setSensorReadings(previous =>
+            previous.length === sensors.length && previous.every((value, index) => value === sensors[index])
+              ? previous : sensors
+          );
 
           let cmdSpeedL = 0;
           let cmdSpeedR = 0;
@@ -745,8 +793,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 cmdSpeedL = step.speedL;
                 cmdSpeedR = step.speedR;
               } else {
-                cmdSpeedL = -Math.abs(step.speedL || 140);
-                cmdSpeedR = Math.abs(step.speedR || 140);
+                cmdSpeedL = -Math.abs(step.speedL);
+                cmdSpeedR = Math.abs(step.speedR);
               }
             } else if (step.action === 'RIGHT') {
               // Belok kanan: roda kiri maju, roda kanan mundur/lambat
@@ -754,12 +802,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 cmdSpeedL = step.speedL;
                 cmdSpeedR = step.speedR;
               } else {
-                cmdSpeedL = Math.abs(step.speedL || 140);
-                cmdSpeedR = -Math.abs(step.speedR || 140);
+                cmdSpeedL = Math.abs(step.speedL);
+                cmdSpeedR = -Math.abs(step.speedR);
               }
             } else if (step.action === 'MUNDUR') {
-              cmdSpeedL = -Math.abs(step.speedL || 140);
-              cmdSpeedR = -Math.abs(step.speedR || 140);
+              cmdSpeedL = -Math.abs(step.speedL);
+              cmdSpeedR = -Math.abs(step.speedR);
             } else {
               // MAJU
               if (step.pidId > 0) {
@@ -788,14 +836,14 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             let prevL = step.speedL || 140;
             let prevR = step.speedR || 140;
             if (step.action === 'LEFT') {
-              prevL = -Math.abs(step.speedL || 140);
-              prevR = Math.abs(step.speedR || 140);
+              prevL = -Math.abs(step.speedL);
+              prevR = Math.abs(step.speedR);
             } else if (step.action === 'RIGHT') {
-              prevL = Math.abs(step.speedL || 140);
-              prevR = -Math.abs(step.speedR || 140);
+              prevL = Math.abs(step.speedL);
+              prevR = -Math.abs(step.speedR);
             } else if (step.action === 'MUNDUR') {
-              prevL = -Math.abs(step.speedL || 140);
-              prevR = -Math.abs(step.speedR || 140);
+              prevL = -Math.abs(step.speedL);
+              prevR = -Math.abs(step.speedR);
             } else if (step.action === 'PAUSE') {
               prevL = 0;
               prevR = 0;
@@ -931,6 +979,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           // Check auto-finish proximity
           if (autoFinish && Math.hypot(s.x - finishPos.x, s.y - finishPos.y) < 38) {
             s.finished = true;
+            if (chosenStep === null) {
+              setResults(previous => [
+                { trackId: selectedTrackId, planId: currentPlan.planId, seconds: s.elapsedMs / 1000 },
+                ...previous.slice(0, 29),
+              ]);
+            }
             setExecStatus({
               stepIndex: step.index,
               stage: 'FINISH',
@@ -943,16 +997,23 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           setSimElapsedSec(s.elapsedMs / 1000);
           setEncoderLeft(Math.round(s.encL));
           setEncoderRight(Math.round(s.encR));
-          setLiveSpeeds({ l: Math.round(cmdSpeedL), r: Math.round(cmdSpeedR) });
+          setLiveSpeeds(s.finished ? { l: 0, r: 0 } : { l: Math.round(cmdSpeedL), r: Math.round(cmdSpeedR) });
         }
       } else if (!isRunning) {
         // Sample sensors passively when idle so LEDs react as user moves robot
         const passiveSensors = sampleSensorsAtPose(s.x, s.y, s.theta, 'HITAM');
-        setSensorReadings(passiveSensors);
+        setSensorReadings(previous =>
+          previous.length === passiveSensors.length && previous.every((value, index) => value === passiveSensors[index])
+            ? previous : passiveSensors
+        );
       }
 
-      // Render 3D / 2D Viewport
+      // Render the final frame and let the workspace release its running state.
       renderArenaViewport();
+      if (isRunning && s.finished && onRunComplete) {
+        onRunComplete();
+        return;
+      }
       rafId = requestAnimationFrame(tick);
     };
 
@@ -1579,9 +1640,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [
     isRunning,
-    plans,
-    activePlanId,
-    code,
+    currentPlan,
+    chosenStep,
+    selectedTrackId,
+    playbackRate,
     hardwareConfig,
     cameraMode,
     camYaw,
@@ -1593,11 +1655,13 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     sensorReadings,
     sampleSensorsAtPose,
     onHighlightChange,
+    onRunComplete,
     isLight,
   ]);
 
   // Convert click on canvas to exact 2D track coordinates (inverting the 3D/2D camera floor projection)
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isRunning) return;
     if (placementTool === 'none') return;
     const canvas = viewportCanvasRef.current;
     if (!canvas) return;
@@ -1707,6 +1771,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   };
 
   const boardPins = getBoardPinOptions(hardwareConfig.mcu);
+  const controlStyle = `min-h-9 rounded-lg border px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 ${isLight ? 'border-slate-300 bg-white text-slate-800' : 'border-slate-600 bg-slate-800 text-slate-100'}`;
 
   return (
     <div
@@ -1714,7 +1779,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         isFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full relative'
       } flex flex-col ${
         isLight ? 'bg-slate-50 text-slate-800' : 'bg-[#060d18] text-slate-100'
-      } select-none overflow-hidden transition-colors`}
+      } select-none overflow-y-auto transition-colors`}
     >
       {/* Hidden File Input for PDF / Track Upload */}
       <input
@@ -1725,6 +1790,61 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         className="hidden"
       />
 
+      <header className={`shrink-0 border-b px-3 py-3 ${isLight ? 'border-sky-100 bg-white' : 'border-slate-700 bg-slate-900'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-black tracking-tight">Arena Line Follower</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
+              aria-expanded={activeDrawer === 'plan'} className={controlStyle}>
+              Langkah Plan
+            </button>
+            <button type="button" onClick={() => resetRobotToStart()} disabled={isRunning}
+              title="Kembalikan robot ke titik Start" className={`inline-flex items-center gap-1 ${controlStyle}`}>
+              <RotateCcw className="size-3.5" /> Ulang posisi
+            </button>
+            {onToggleRun && (
+              <button type="button" disabled={!isRunning && !steps.length} onClick={onToggleRun}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white disabled:opacity-50 ${isRunning ? 'bg-rose-700 hover:bg-rose-800' : 'bg-blue-700 hover:bg-blue-800'}`}>
+                {isRunning ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
+                {isRunning ? 'Berhenti' : 'Jalankan'}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <label className="grid min-w-0 gap-1 font-semibold">Lintasan
+            <select value={selectedTrackId} disabled={isRunning} onChange={event => handleSelectTrack(event.target.value)} className={controlStyle}>
+              {tracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 font-semibold">Plan
+            <select value={currentPlan?.planId ?? ''} disabled={isRunning || !plans.length} onChange={event => {
+              setStartStep(null);
+              onChangePlans(plans, Number(event.target.value));
+            }} className={controlStyle}>
+              {!currentPlan && <option value="">Belum ada Plan</option>}
+              {(plans.length ? plans : currentPlan ? [currentPlan] : []).map(plan => <option key={plan.planId} value={plan.planId}>Plan {plan.planId}</option>)}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 font-semibold">Mulai dari langkah
+            <select value={chosenStep ?? ''} disabled={isRunning || !steps.length} onChange={event => setStartStep(event.target.value === '' ? null : Number(event.target.value))}
+              title="Posisi robot tetap di titik Start. Atur titik Start pada Pengaturan arena." className={controlStyle}>
+              <option value="">Awal Plan</option>
+              {steps.map((step, index) => <option key={index} value={step.index}>Langkah {step.index}</option>)}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 font-semibold">Laju simulasi
+            <select value={playbackRate} onChange={event => setPlaybackRate(Number(event.target.value))} className={controlStyle}>
+              <option value={0.25}>0,25× · Amati sensor</option>
+              <option value={0.5}>0,5× · Pelan</option>
+              <option value={1}>1× · Normal</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <details className={`shrink-0 border-b ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold">Pengaturan arena</summary>
       {/* ── COMPACT KIDS-FRIENDLY TOP TOOLBAR (Row 1: Track + Robot Setup + PID + Sync) ── */}
       <div
         className={`flex flex-wrap items-center justify-between gap-1 px-2.5 py-1 border-b text-xs shrink-0 transition-colors ${
@@ -1734,25 +1854,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         }`}
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`text-[11px] font-extrabold ${isLight ? 'text-sky-600' : 'text-sky-400'}`}>
-            🗺️ Arena:
-          </span>
-          <select
-            value={selectedTrackId}
-            onChange={(e) => handleSelectTrack(e.target.value)}
-            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold outline-none cursor-pointer border transition-colors ${
-              isLight
-                ? 'bg-slate-100 text-slate-800 border-slate-300 hover:border-sky-500'
-                : 'bg-[#111e34] text-slate-100 border-slate-700 hover:border-sky-400'
-            }`}
-          >
-            {tracks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-
           <button
             type="button"
             onClick={() => pdfInputRef.current?.click()}
@@ -1877,6 +1978,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             ↻ Putar
           </button>
 
+          <label className="inline-flex min-h-8 items-center gap-2 px-2 font-semibold">
+            Zoom
+            <input type="range" min={0.55} max={2.2} step={0.05} value={camZoom}
+              onChange={event => setCamZoom(Number(event.target.value))} className="w-20 accent-sky-600" />
+          </label>
           <button
             type="button"
             onClick={() => {
@@ -1993,18 +2099,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>°</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => resetRobotToStart()}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-                : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
-            }`}
-          >
-            <RotateCcw className="w-3 h-3" /> Reset Posisi
-          </button>
-
           {selectedTrackId === 'empty' && customSegments.length > 0 && (
             <button
               type="button"
@@ -2049,8 +2143,51 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         </div>
       </div>
 
+      </details>
+
       {/* ── MAIN 3D ARENA VIEWPORT (100% Unobstructed Track!) ── */}
       <div className="relative flex-1 w-full min-h-[220px] overflow-hidden">
+        {activeDrawer === 'plan' && (
+          <section aria-label="Langkah Plan" className={`absolute inset-x-2 top-2 z-30 max-h-[calc(100%-1rem)] overflow-auto rounded-2xl border p-3 shadow-xl ${isLight ? 'border-sky-200 bg-white' : 'border-slate-600 bg-slate-900'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-extrabold">{currentPlan ? `Langkah Plan ${currentPlan.planId}` : 'Langkah Plan'}</h3>
+              <button type="button" onClick={() => setActiveDrawer('none')} className={controlStyle}>Tutup</button>
+            </div>
+            <p className="my-2 text-xs">Ubah gerakan dan tenaga motor kiri/kanan. Pilih langkah awal di atas untuk mencoba bagian tertentu.</p>
+            {currentPlan ? (
+              <table className="w-full text-left text-xs">
+                <thead><tr><th scope="col">Langkah</th><th scope="col">Gerakan</th><th scope="col">PWM kiri</th><th scope="col">PWM kanan</th></tr></thead>
+                <tbody>
+                  {currentPlan.items.map((item, position) => {
+                    if (item.type === 'stop_here') return <tr key={position}><td colSpan={4} className="py-1.5 font-semibold">Berhenti di tahap {item.stage}</td></tr>;
+                    const active = isRunning && execStatus.stepIndex === item.index;
+                    return <tr key={item.blockId ?? position} aria-current={active ? 'step' : undefined}
+                      className={active ? isLight ? 'bg-sky-100' : 'bg-sky-900' : undefined}>
+                      <th scope="row" className="px-1 py-1">{item.index}</th>
+                      <td className="py-1"><select aria-label={`Gerakan langkah ${item.index}`} value={item.action}
+                          disabled={isRunning || !plans.length}
+                          onChange={event => editStep(position, { action: event.target.value as PlanActionType })} className={controlStyle}>
+                        <option value="MAJU">Maju</option><option value="MUNDUR">Mundur</option>
+                        <option value="LEFT">Belok kiri</option><option value="RIGHT">Belok kanan</option><option value="PAUSE">Jeda</option>
+                      </select></td>
+                      {(['speedL', 'speedR'] as const).map((side, index) => <td key={side} className="px-1 py-1">
+                        <input type="number" min={-255} max={255} aria-label={`PWM ${index === 0 ? 'kiri' : 'kanan'} langkah ${item.index}`}
+                          key={item[side]} defaultValue={item[side]} disabled={isRunning || !plans.length} className={`${controlStyle} w-14 sm:w-16`}
+                          onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                          onBlur={event => {
+                            const input = event.currentTarget;
+                            const value = Number.isFinite(input.valueAsNumber) ? Math.min(255, Math.max(-255, Math.round(input.valueAsNumber))) : item[side];
+                            input.value = String(value);
+                            if (value !== item[side]) editStep(position, { [side]: value });
+                          }} />
+                      </td>)}
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            ) : <p className="text-xs">Susun Plan di editor blok untuk mulai.</p>}
+          </section>
+        )}
         {/* Floating Collapsible Drawers with Close Button */}
         {activeDrawer === 'pdf_samples' && (
           <div
@@ -2590,6 +2727,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           ref={viewportCanvasRef}
           width={1280}
           height={760}
+          aria-label="Lintasan robot"
           onClick={handleCanvasClick}
           onMouseDown={(e) => {
             if (placementTool !== 'none') return;
@@ -2643,6 +2781,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             : 'bg-[#0a1324] border-slate-800/90 text-slate-100'
         }`}
       >
+        {trackResults.length > 0 && (
+          <p className="w-full text-xs font-semibold">
+            Finis terakhir: {trackResults[0].seconds.toFixed(2)} dtk · Terbaik sesi ini: {Math.min(...trackResults.map(result => result.seconds)).toFixed(2)} dtk
+          </p>
+        )}
         {/* Left: Timer, RPM & Motor Speeds */}
         <div className="flex flex-wrap items-center gap-1.5">
           <div

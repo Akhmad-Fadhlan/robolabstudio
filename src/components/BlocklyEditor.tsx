@@ -48,7 +48,7 @@ const registerRobotPlanBlocks = () => {
       const intOpts: [string, string][] = pins.interruptPins.map((p) => [p, p]);
 
       this.appendDummyInput()
-        .appendField('⚙️ Setup Robot │ Motor PWM L')
+        .appendField('Robot Setup │ Left Motor PWM')
         .appendField(new Blockly.FieldDropdown(pwmOpts), 'PWM_L')
         .appendField('PWM R')
         .appendField(new Blockly.FieldDropdown(pwmOpts), 'PWM_R')
@@ -85,7 +85,7 @@ const registerRobotPlanBlocks = () => {
           ]),
           'HAS_ENCODER'
         )
-        .appendField('Pin Enc L/R')
+        .appendField('Encoder Pins L/R')
         .appendField(new Blockly.FieldDropdown(intOpts), 'ENC_L')
         .appendField(new Blockly.FieldDropdown(intOpts), 'ENC_R');
       this.setPreviousStatement(true, null);
@@ -116,10 +116,10 @@ const registerRobotPlanBlocks = () => {
         String(i + 1),
       ]);
       this.appendDummyInput()
-        .appendField('📋 Buat')
+        .appendField('Create')
         .appendField(new Blockly.FieldDropdown(planOpts), 'PLAN_ID')
-        .appendField('— Susun Urutan Index Step Robot');
-      this.appendStatementInput('STEPS').setCheck(null).appendField('Langkah');
+        .appendField('— Arrange Robot Steps');
+      this.appendStatementInput('STEPS').setCheck(null).appendField('Steps');
       this.setColour('#f97316');
       this.setTooltip('Wadah Plan 1 sampai 10 berisi urutan Index Step robot dan Stop Disini');
     },
@@ -133,7 +133,7 @@ const registerRobotPlanBlocks = () => {
         String(i + 1),
       ]);
       this.appendDummyInput()
-        .appendField('🚀 Jalankan')
+        .appendField('Run')
         .appendField(new Blockly.FieldDropdown(planOpts), 'PLAN_ID');
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
@@ -149,24 +149,24 @@ const registerRobotPlanBlocks = () => {
         const curCount = activeRobotHwConfig?.sensorCount || 6;
         const opts = getSensorPresetOptions(curCount);
         const list: [string, string][] = opts.map((opt) => [
-          `${opt.label} [${opt.pattern}]`,
+          `Pattern [${opt.pattern}]`,
           opt.pattern,
         ]);
         const curVal = this?.getValue?.();
         if (curVal && !opts.some((o) => o.pattern === curVal)) {
-          list.push([`Pola [${curVal}]`, curVal]);
+          list.push([`Pattern [${curVal}]`, curVal]);
         }
         return list;
       });
 
       this.appendDummyInput()
-        .appendField('🔢 Index')
+        .appendField('Step Index')
         .appendField(new Blockly.FieldNumber(0, 0, 99, 1), 'INDEX')
-        .appendField('│ Jika')
+        .appendField('│ When')
         .appendField(
           new Blockly.FieldDropdown([
             ['🎯 Sensor', 'SENSOR'],
-            ['⚡ Motion (Tanpa Sensor)', 'MOTION'],
+            ['Motion (No Sensor)', 'MOTION'],
           ]),
           'TRIG_MODE'
         )
@@ -180,49 +180,49 @@ const registerRobotPlanBlocks = () => {
           ]),
           'LOGIC_OP'
         )
-        .appendField('│ Aksi')
+        .appendField('│ Action')
         .appendField(
           new Blockly.FieldDropdown([
-            ['⬆️ Maju', 'MAJU'],
-            ['⬇️ Mundur', 'MUNDUR'],
-            ['↩️ Left (Kiri)', 'LEFT'],
-            ['↪️ Right (Kanan)', 'RIGHT'],
+            ['Forward', 'MAJU'],
+            ['Reverse', 'MUNDUR'],
+            ['Turn Left', 'LEFT'],
+            ['Turn Right', 'RIGHT'],
             ['⏸️ Pause', 'PAUSE'],
           ]),
           'ACTION'
         )
         .appendField(new Blockly.FieldNumber(100, 0, 20000, 10), 'TRIG_VAL')
         .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
-        .appendField('│ Break')
+        .appendField('│ Brake')
         .appendField(new Blockly.FieldNumber(0, 0, 1000, 5), 'BRAKE');
 
       this.appendDummyInput()
         .appendField('   ⚙️ Speed L')
-        .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_L')
+        .appendField(new Blockly.FieldNumber(160, -255, 255, 1), 'SPEED_L')
         .appendField('Speed R')
-        .appendField(new Blockly.FieldNumber(160, -255, 255, 5), 'SPEED_R')
-        .appendField('│ Kontrol')
+        .appendField(new Blockly.FieldNumber(160, -255, 255, 1), 'SPEED_R')
+        .appendField('│ Control')
         .appendField(
           new Blockly.FieldDropdown([
-            ['PID 1 (Halus)', '1'],
-            ['PID 2 (Standar)', '2'],
-            ['PID 3 (Tikungan)', '3'],
-            ['PID 4 (Cepat)', '4'],
-            ['PID 5 (Presisi)', '5'],
-            ['Tanpa PID', '0'],
+            ['PID 1 (Smooth)', '1'],
+            ['PID 2 (Standard)', '2'],
+            ['PID 3 (Turns)', '3'],
+            ['PID 4 (Fast)', '4'],
+            ['PID 5 (Precision)', '5'],
+            ['No PID', '0'],
           ]),
           'PID_ID'
         )
-        .appendField('│ ➡️ Lanjut Speed A')
+        .appendField('│ Follow at Speed A')
         .appendField(new Blockly.FieldNumber(120, -255, 255, 5), 'SPEED_A')
         .appendField('Timer')
         .appendField(new Blockly.FieldNumber(120, 0, 10000, 10), 'TIMER_VAL')
         .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TIMER_UNIT')
-        .appendField('│ Garis')
+        .appendField('│ Line')
         .appendField(
           new Blockly.FieldDropdown([
-            ['⬛ Hitam', 'HITAM'],
-            ['⬜ Putih', 'PUTIH'],
+            ['Black', 'HITAM'],
+            ['White', 'PUTIH'],
           ]),
           'LINE_COLOR'
         );
@@ -240,11 +240,11 @@ const registerRobotPlanBlocks = () => {
   Blockly.Blocks['robot_plan_stop'] = {
     init: function (this: Blockly.Block) {
       this.appendDummyInput()
-        .appendField('🛑 Stop Disini (Interrupt Robot) │ Berhenti pada Tahap:')
+        .appendField('Stop Robot at Stage')
         .appendField(
           new Blockly.FieldDropdown([
-            ['Tahap Action (Sebelum Speed A)', 'ACTION'],
-            ['Tahap Speed A (Setelah Timer Speed A)', 'SPEED_A'],
+            ['Action (Before Speed A)', 'ACTION'],
+            ['Speed A (After Its Timer)', 'SPEED_A'],
           ]),
           'STOP_STAGE'
         );
@@ -264,7 +264,7 @@ const PLUS_ELSEIF_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2
 
 const PLUS_ELSE_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='55' height='20' viewBox='0 0 55 20'><rect x='0' y='0' width='55' height='20' rx='10' fill='%233b82f6'/><path d='M7 10h6M10 7v6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='18' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>+ else</text></svg>";
 
-const MINUS_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='55' height='20' viewBox='0 0 55 20'><rect x='0' y='0' width='55' height='20' rx='10' fill='%23ef4444'/><path d='M7 10h6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='17' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>hapus</text></svg>";
+const MINUS_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='55' height='20' viewBox='0 0 55 20'><rect x='0' y='0' width='55' height='20' rx='10' fill='%23ef4444'/><path d='M7 10h6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/><text x='17' y='14' fill='%23ffffff' font-size='11' font-family='sans-serif' font-weight='bold'>remove</text></svg>";
 
 
 // Custom controls_if block with direct + else if, + else, and hapus buttons
@@ -277,9 +277,9 @@ Blockly.Blocks['controls_if'] = {
 
     this.appendValueInput('IF0')
       .setCheck('Boolean')
-      .appendField(Blockly.Msg['CONTROLS_IF_MSG_IF'] || 'jika');
+      .appendField(Blockly.Msg['CONTROLS_IF_MSG_IF'] || 'if');
     this.appendStatementInput('DO0')
-      .appendField(Blockly.Msg['CONTROLS_IF_MSG_THEN'] || 'maka');
+      .appendField(Blockly.Msg['CONTROLS_IF_MSG_THEN'] || 'do');
 
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
@@ -342,9 +342,9 @@ Blockly.Blocks['controls_if'] = {
       if (!this.getInput(`IF${i}`)) {
         this.appendValueInput(`IF${i}`)
           .setCheck('Boolean')
-          .appendField(Blockly.Msg['CONTROLS_IF_MSG_ELSEIF'] || 'lain jika');
+          .appendField(Blockly.Msg['CONTROLS_IF_MSG_ELSEIF'] || 'else if');
         this.appendStatementInput(`DO${i}`)
-          .appendField(Blockly.Msg['CONTROLS_IF_MSG_THEN'] || 'maka');
+          .appendField(Blockly.Msg['CONTROLS_IF_MSG_THEN'] || 'do');
       }
     }
     let i = this.elseifCount_ + 1;
@@ -356,7 +356,7 @@ Blockly.Blocks['controls_if'] = {
 
     if (this.elseCount_) {
       const elseInput = this.appendStatementInput('ELSE')
-        .appendField(Blockly.Msg['CONTROLS_IF_MSG_ELSE'] || 'lainnya');
+        .appendField(Blockly.Msg['CONTROLS_IF_MSG_ELSE'] || 'else');
       if (elseConnection && elseInput.connection) {
         elseConnection.reconnect(this, 'ELSE');
       }
@@ -598,15 +598,15 @@ try {
     },
     {
       type: 'pin_digital_read_value',
-      message0: 'Nilai digital pin %1',
+      message0: 'digitalRead pin %1 (0 or 1)',
       args0: [{ type: 'field_input', name: 'PIN', text: '4' }],
       output: 'Number',
       colour: '#9966FF',
-      tooltip: 'Menghasilkan angka 1 saat HIGH dan 0 saat LOW. Bisa disimpan ke variabel, dicetak, atau dibandingkan dengan angka.',
+      tooltip: 'Returns 1 for HIGH or 0 for LOW. Use it as a number in a variable, comparison, or serial output.',
     },
     {
       type: 'pin_digital_write_value',
-      message0: 'Tulis ke pin digital %1 nilai %2',
+      message0: 'digitalWrite pin %1 value %2',
       args0: [
         { type: 'field_input', name: 'PIN', text: '9' },
         { type: 'input_value', name: 'VALUE', check: 'Number' },
@@ -614,7 +614,7 @@ try {
       previousStatement: null,
       nextStatement: null,
       colour: '#9966FF',
-      tooltip: 'Gunakan nilai dari variabel atau pembacaan pin. 0 menghasilkan LOW dan 1 menghasilkan HIGH.',
+      tooltip: 'Write a numeric value to the pin: 0 for LOW or 1 for HIGH.',
     },
     // 4. Sensors
     {
@@ -754,30 +754,30 @@ try {
     },
     {
       type: 'arduino_millis',
-      message0: 'Waktu sejak board menyala (ms)',
+      message0: 'millis()',
       output: 'Number',
       colour: '#FF4081',
-      tooltip: 'Jumlah milidetik sejak program mulai. Simpan bacaan awal lalu hitung selisihnya untuk membuat timer tanpa delay.',
+      tooltip: 'Returns the milliseconds since the program started.',
     },
     {
       type: 'arduino_micros',
-      message0: 'Waktu sejak board menyala (µs)',
+      message0: 'micros()',
       output: 'Number',
       colour: '#FF4081',
-      tooltip: 'Jumlah mikrodetik sejak program mulai. 1.000 µs sama dengan 1 ms.',
+      tooltip: 'Returns the microseconds since the program started.',
     },
     {
       type: 'arduino_delay_microseconds',
-      message0: 'Tunggu %1 µs',
+      message0: 'delayMicroseconds %1 µs',
       args0: [{ type: 'field_number', name: 'US', value: 10, min: 0, max: 16383, precision: 1 }],
       previousStatement: null,
       nextStatement: null,
       colour: '#FF4081',
-      tooltip: 'Jeda singkat dalam mikrodetik. Gunakan blok delay milidetik untuk jeda yang lebih lama.',
+      tooltip: 'Pauses in microseconds. Use delay() for longer waits.',
     },
     {
       type: 'serial_begin',
-      message0: 'Atur baud rate Serial %1',
+      message0: 'Serial.begin baud rate %1',
       args0: [{
         type: 'field_dropdown',
         name: 'BAUD',
@@ -786,7 +786,7 @@ try {
       previousStatement: null,
       nextStatement: null,
       colour: '#4CBFE6',
-      tooltip: 'Pasang di Setup Arduino. Samakan kecepatannya dengan pilihan baud rate pada Serial Monitor.',
+      tooltip: 'Place in setup() and choose the same baud rate in the Serial Monitor.',
     },
     // 9. Serial Print
     {
@@ -1704,10 +1704,10 @@ const LIBRARY_SIGNATURES: Array<{
     categoryName: 'Display (LCD I2C)',
     colour: '#f2c94c',
     blocks: [
-      { type: 'lib_display_begin',   message: 'LCD I2C Mulai (Begin)',              isStatement: true },
+      { type: 'lib_display_begin',   message: 'LCD I2C Begin',              isStatement: true },
       { type: 'lib_display_clear',   message: 'LCD I2C Bersihkan Layar (Clear)',    isStatement: true },
       { type: 'lib_display_print',   message: 'LCD I2C Cetak %1',                   inputs: [{ name: 'TEXT', type: 'input_value' }], isStatement: true },
-      { type: 'lib_display_setcursor', message: 'LCD I2C Atur Kursor Kolom %1 Baris %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
+      { type: 'lib_display_setcursor', message: 'LCD I2C Set Cursor Column %1 Row %2', inputs: [{ name: 'X', type: 'field_number', value: 0 }, { name: 'Y', type: 'field_number', value: 0 }], isStatement: true },
     ],
   },
   {
@@ -1769,11 +1769,11 @@ const LIBRARY_SIGNATURES: Array<{
     categoryName: 'PN532 RFID / NFC',
     colour: '#06b6d4',
     blocks: [
-      { type: 'lib_rfid_i2c_begin',  message: 'PN532 RFID Mulai (I2C) SDA Pin %1 SCL Pin %2', inputs: [{ name: 'SDA', type: 'field_input', text: '21' }, { name: 'SCL', type: 'field_input', text: '22' }], isStatement: true },
-      { type: 'lib_rfid_begin',      message: 'PN532 RFID Mulai IRQ Pin %1 Reset Pin %2', inputs: [{ name: 'IRQ', type: 'field_input', text: '2' }, { name: 'RESET', type: 'field_input', text: '3' }], isStatement: true },
-      { type: 'lib_rfid_print_uid',  message: 'PN532 Tampilkan UID Kartu Terdeteksi ke Serial', isStatement: true },
-      { type: 'lib_rfid_iscard',     message: 'PN532 Kartu Terdeteksi? (Boolean)', isValue: true },
-      { type: 'lib_rfid_read',       message: 'PN532 Baca UID Kartu (Teks HEX)', isValue: true },
+      { type: 'lib_rfid_i2c_begin',  message: 'PN532 RFID Begin (I2C) SDA Pin %1 SCL Pin %2', inputs: [{ name: 'SDA', type: 'field_input', text: '21' }, { name: 'SCL', type: 'field_input', text: '22' }], isStatement: true },
+      { type: 'lib_rfid_begin',      message: 'PN532 RFID Begin IRQ Pin %1 Reset Pin %2', inputs: [{ name: 'IRQ', type: 'field_input', text: '2' }, { name: 'RESET', type: 'field_input', text: '3' }], isStatement: true },
+      { type: 'lib_rfid_print_uid',  message: 'PN532 Print Card UID to Serial', isStatement: true },
+      { type: 'lib_rfid_iscard',     message: 'PN532 Card Detected? (Boolean)', isValue: true },
+      { type: 'lib_rfid_read',       message: 'PN532 Read Card UID (Hex)', isValue: true },
     ],
   },
   {
@@ -1838,7 +1838,7 @@ function registerLibraryBlocks(sig: typeof LIBRARY_SIGNATURES[0]) {
 Blockly.Blocks['lib_rfid_i2c_begin'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("PN532 RFID Mulai (I2C) SDA Pin")
+      .appendField("PN532 RFID Begin (I2C) SDA Pin")
       .appendField(new Blockly.FieldTextInput("21"), "SDA")
       .appendField("SCL Pin")
       .appendField(new Blockly.FieldTextInput("22"), "SCL");
@@ -1853,7 +1853,7 @@ Blockly.Blocks['lib_rfid_i2c_begin'] = {
 Blockly.Blocks['lib_rfid_begin'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("PN532 RFID Mulai IRQ Pin")
+      .appendField("PN532 RFID Begin IRQ Pin")
       .appendField(new Blockly.FieldTextInput("2"), "IRQ")
       .appendField("Reset Pin")
       .appendField(new Blockly.FieldTextInput("3"), "RESET");
@@ -1868,7 +1868,7 @@ Blockly.Blocks['lib_rfid_begin'] = {
 Blockly.Blocks['lib_rfid_print_uid'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("PN532 Tampilkan UID Kartu Terdeteksi ke Serial");
+      .appendField("PN532 Print Card UID to Serial");
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour("#06b6d4");
@@ -1880,7 +1880,7 @@ Blockly.Blocks['lib_rfid_print_uid'] = {
 Blockly.Blocks['lib_rfid_iscard'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("PN532 Kartu Terdeteksi? (Boolean)");
+      .appendField("PN532 Card Detected? (Boolean)");
     this.setOutput(true, null);
     this.setColour("#06b6d4");
     this.setTooltip("Mengembalikan true jika kartu atau tag RFID / NFC terdeteksi di dekat reader PN532");
@@ -1891,7 +1891,7 @@ Blockly.Blocks['lib_rfid_iscard'] = {
 Blockly.Blocks['lib_rfid_read'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("PN532 Baca UID Kartu (Teks HEX)");
+      .appendField("PN532 Read Card UID (Hex)");
     this.setOutput(true, null);
     this.setColour("#06b6d4");
     this.setTooltip("Mengembalikan nomor UID kartu RFID / NFC dalam format teks heksadesimal (contoh: 53 7A 92 1F)");
@@ -1903,7 +1903,7 @@ Blockly.Blocks['lib_rfid_read'] = {
 Blockly.Blocks['mfrc522_begin'] = {
   init: function (this: any) {
     this.appendDummyInput()
-      .appendField("RFID Mulai SS/SDA Pin")
+      .appendField("RFID Begin SS/SDA Pin")
       .appendField(new Blockly.FieldTextInput("10"), "SS_PIN");
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
@@ -1913,7 +1913,7 @@ Blockly.Blocks['mfrc522_begin'] = {
 };
 Blockly.Blocks['mfrc522_is_card'] = {
   init: function (this: any) {
-    this.appendDummyInput().appendField("RFID Kartu Terdeteksi?");
+    this.appendDummyInput().appendField("RFID Card Detected?");
     this.setOutput(true, null);
     this.setColour("#06b6d4");
     (this as any)._robolabRegistered = true;
@@ -1921,7 +1921,7 @@ Blockly.Blocks['mfrc522_is_card'] = {
 };
 Blockly.Blocks['mfrc522_read_serial'] = {
   init: function (this: any) {
-    this.appendDummyInput().appendField("RFID Baca Kartu Serial");
+    this.appendDummyInput().appendField("RFID Read Card Serial");
     this.setOutput(true, null);
     this.setColour("#06b6d4");
     (this as any)._robolabRegistered = true;
@@ -1929,7 +1929,7 @@ Blockly.Blocks['mfrc522_read_serial'] = {
 };
 Blockly.Blocks['mfrc522_get_uid'] = {
   init: function (this: any) {
-    this.appendDummyInput().appendField("RFID Baca Data UID Kartu");
+    this.appendDummyInput().appendField("RFID Read Card UID");
     this.setOutput(true, null);
     this.setColour("#06b6d4");
     (this as any)._robolabRegistered = true;
@@ -1937,7 +1937,7 @@ Blockly.Blocks['mfrc522_get_uid'] = {
 };
 Blockly.Blocks['mfrc522_print_uid'] = {
   init: function (this: any) {
-    this.appendDummyInput().appendField("RFID Tampilkan UID ke Serial");
+    this.appendDummyInput().appendField("RFID Print UID to Serial");
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour("#06b6d4");
@@ -1946,7 +1946,7 @@ Blockly.Blocks['mfrc522_print_uid'] = {
 };
 Blockly.Blocks['mfrc522_halt'] = {
   init: function (this: any) {
-    this.appendDummyInput().appendField("RFID Hentikan Kartu");
+    this.appendDummyInput().appendField("RFID Halt Card");
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour("#06b6d4");
@@ -2048,52 +2048,6 @@ export function getLibraryIcon(libName: string, category: string = ''): string {
   return '📦';
 }
 
-export function formatFriendlyMethodLabel(methodName: string, _returnType: string = 'void'): string {
-  const lower = methodName.toLowerCase();
-  if (lower === 'begin' || lower === 'init') return 'Mulai Sensor (begin)';
-  if (lower === 'update') return 'Perbarui Pembacaan (update)';
-  if (lower === 'setpin') return 'Atur Pin Sensor';
-  if (lower === 'settemperature') return 'Atur Suhu Air (°C)';
-  if (lower === 'setaref') return 'Atur Tegangan Aref (V)';
-  if (lower === 'setadcrange') return 'Atur Resolusi ADC';
-  if (lower === 'gettdsvalue') return 'Baca Nilai TDS Air (ppm)';
-  if (lower === 'getkvalue') return 'Baca Faktor Kalibrasi K';
-  if (lower === 'readph') return 'Baca Nilai pH (0-14)';
-  if (lower === 'readec') return 'Baca Nilai EC (ms/cm)';
-  if (lower === 'calibration' || lower === 'calibrate') return 'Kalibrasi Sensor';
-  if (lower === 'readrange' || lower === 'readrangecontinuousmillimeters') return 'Baca Jarak Laser (mm)';
-  if (lower === 'ping_cm' || lower === 'ping') return 'Baca Jarak Pantul (cm)';
-  if (lower === 'ping_in') return 'Baca Jarak Pantul (inci)';
-  if (lower === 'get_units' || lower === 'getunits') return 'Baca Berat Beban (Gram)';
-  if (lower === 'tare') return 'Nolkan Timbangan (Tare)';
-  if (lower === 'isready' || lower === 'is_ready') return 'Sensor Siap? (Ready)';
-  if (lower === 'cleardisplay' || lower === 'clear') return 'Bersihkan Layar (Clear)';
-  if (lower === 'display') return 'Render Tampilan Layar (Display)';
-  if (lower === 'stop') return 'Hentikan (Stop)';
-  if (lower === 'reset') return 'Reset Sensor';
-  if (lower === 'play') return 'Putar Lagu (Play)';
-  if (lower === 'pause') return 'Jeda Lagu (Pause)';
-
-  if (lower.startsWith('get') || lower.startsWith('read')) {
-    const rawName = methodName.replace(/^(?:get|read)_?/i, '');
-    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
-    return `Baca Nilai ${cleanWord}`;
-  }
-  if (lower.startsWith('set')) {
-    const rawName = methodName.replace(/^set_?/i, '');
-    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
-    return `Atur ${cleanWord}`;
-  }
-  if (lower.startsWith('is') || lower.startsWith('has') || lower.startsWith('check')) {
-    const rawName = methodName.replace(/^(?:is|has|check)_?/i, '');
-    const cleanWord = rawName.replace(/([A-Z])/g, ' $1').trim();
-    return `Cek ${cleanWord}?`;
-  }
-
-  const cleanWord = methodName.replace(/([A-Z])/g, ' $1').trim();
-  return `${cleanWord} (${methodName})`;
-}
-
 export const registerCustomLibBlocks = (
   prefix: string,
   libName: string,
@@ -2133,7 +2087,7 @@ export const registerCustomLibBlocks = (
   if (!Blockly.Blocks[typeInitObj]) {
     Blockly.Blocks[typeInitObj] = {
       init: function () {
-        this.appendDummyInput().appendField(`${icon} Inisialisasi Objek Sensor ${categoryTitle}`);
+        this.appendDummyInput().appendField(`${icon} Create Sensor Object ${categoryTitle}`);
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
         this.setColour(col);
@@ -2158,13 +2112,12 @@ export const registerCustomLibBlocks = (
     const safeM = m.name.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_');
     const blockType = `${prefix}_${safeM}`;
     if (!Blockly.Blocks[blockType]) {
-      const friendlyLabel = m.label || formatFriendlyMethodLabel(m.name, m.returnType);
       const isVoid = m.returnType === 'void';
       const paramCount = Array.isArray(m.params) ? m.params.length : 0;
 
       Blockly.Blocks[blockType] = {
         init: function () {
-          const title = `${icon} ${categoryTitle}: ${friendlyLabel}`;
+          const title = `${icon} ${categoryTitle}: ${m.name}`;
           if (isVoid) {
             this.setPreviousStatement(true, null);
             this.setNextStatement(true, null);
@@ -2204,7 +2157,7 @@ export const registerCustomLibBlocks = (
               });
             }
           }
-          this.setTooltip(m.doc || `${friendlyLabel} (${libName}.${m.name})`);
+          this.setTooltip(m.doc || `${libName}.${m.name}()`);
         }
       };
       (Blockly.Blocks[blockType] as any)._libMeta = {
@@ -2267,7 +2220,7 @@ export const registerCustomLibBlocks = (
   if (!Blockly.Blocks[typeBegin]) {
     Blockly.Blocks[typeBegin] = {
       init: function () {
-        this.appendDummyInput().appendField(`${libName} Inisialisasi`);
+        this.appendDummyInput().appendField(`${libName} Begin`);
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
         this.setColour('#6366f1');
@@ -2280,7 +2233,7 @@ export const registerCustomLibBlocks = (
     Blockly.Blocks[typeBeginPin] = {
       init: function () {
         this.appendDummyInput()
-          .appendField(`${libName} Inisialisasi Pin`)
+          .appendField(`${libName} Begin on Pin`)
           .appendField(new Blockly.FieldTextInput('2'), 'PIN');
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
@@ -2294,7 +2247,7 @@ export const registerCustomLibBlocks = (
     Blockly.Blocks[typeInitPin] = {
       init: function () {
         this.appendDummyInput()
-          .appendField(`${libName} Hubungkan Pin`)
+          .appendField(`${libName} Attach Pin`)
           .appendField(new Blockly.FieldTextInput('2'), 'PIN');
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
@@ -2307,7 +2260,7 @@ export const registerCustomLibBlocks = (
   if (!Blockly.Blocks[typeRead]) {
     Blockly.Blocks[typeRead] = {
       init: function () {
-        this.appendDummyInput().appendField(`${libName} Baca Nilai`);
+        this.appendDummyInput().appendField(`${libName} Read Value`);
         this.setOutput(true, 'Number');
         this.setColour('#6366f1');
         this.setTooltip(`Baca nilai dari ${libName}`);
@@ -2319,7 +2272,7 @@ export const registerCustomLibBlocks = (
     Blockly.Blocks[typeReadFunc] = {
       init: function () {
         this.appendDummyInput()
-          .appendField(`${libName} Baca`)
+          .appendField(`${libName} Read`)
           .appendField(new Blockly.FieldTextInput('read'), 'FUNC');
         this.appendValueInput('PARAM').appendField('Param');
         this.setOutput(true, 'Number');
@@ -2361,8 +2314,8 @@ export const registerCustomLibBlocks = (
   if (!Blockly.Blocks[typeWrite]) {
     Blockly.Blocks[typeWrite] = {
       init: function () {
-        this.appendDummyInput().appendField(`${libName} Tulis / Write`);
-        this.appendValueInput('VAL').appendField('Nilai');
+        this.appendDummyInput().appendField(`${libName} Write`);
+        this.appendValueInput('VAL').appendField('Value');
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
         this.setColour('#6366f1');
@@ -2417,7 +2370,7 @@ export const registerCustomLibBlocks = (
     Blockly.Blocks[typeReset] = {
       init: function () {
         this.appendDummyInput()
-          .appendField(`${libName} Aksi`)
+          .appendField(`${libName} Action`)
           .appendField(new Blockly.FieldTextInput('reset'), 'ACTION');
         this.setPreviousStatement(true, null);
         this.setNextStatement(true, null);
@@ -2439,7 +2392,7 @@ export const ensureCustomBlocks = (xmlText?: string | null) => {
     Blockly.Blocks['custom_library_init'] = {
       init: function () {
         this.appendDummyInput()
-          .appendField('📚 Objek Library')
+          .appendField('Library Object')
           .appendField(new Blockly.FieldTextInput('NewPing'), 'CLASS')
           .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
           .appendField('(')
@@ -2456,7 +2409,7 @@ export const ensureCustomBlocks = (xmlText?: string | null) => {
     Blockly.Blocks['custom_library_call'] = {
       init: function () {
         this.appendDummyInput()
-          .appendField('⚡ Panggil')
+          .appendField('Call')
           .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
           .appendField('.')
           .appendField(new Blockly.FieldTextInput('ping_cm'), 'METHOD')
@@ -2474,7 +2427,7 @@ export const ensureCustomBlocks = (xmlText?: string | null) => {
     Blockly.Blocks['custom_library_call_val'] = {
       init: function () {
         this.appendDummyInput()
-          .appendField('📊 Nilai')
+          .appendField('Return Value')
           .appendField(new Blockly.FieldTextInput('sonar'), 'INSTANCE')
           .appendField('.')
           .appendField(new Blockly.FieldTextInput('ping_cm'), 'METHOD')

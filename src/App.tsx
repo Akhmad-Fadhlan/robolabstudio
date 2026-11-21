@@ -3842,22 +3842,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setSimResetKey((prev) => prev + 1);
   }, []);
 
-  const handleSimulatorModeChange = useCallback(
-    (nextMode: 'robot' | 'circuit') => {
-      setSimulatorMode(nextMode);
-      clearSimulatorBlockWorkspace();
-    },
-    [clearSimulatorBlockWorkspace]
-  );
-
-  const prevSimTabRef = useRef(currentTab);
-  useEffect(() => {
-    if (prevSimTabRef.current !== 'simulator' && currentTab === 'simulator') {
-      clearSimulatorBlockWorkspace();
-    }
-    prevSimTabRef.current = currentTab;
-  }, [currentTab, clearSimulatorBlockWorkspace]);
-
   const syncRobotToSimulatorWorkspace = useCallback(
     (
       nextHw: RobotHardwareConfig,
@@ -3891,6 +3875,36 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     },
     []
   );
+
+  const simulatorWorkspaces = useRef<Partial<Record<'robot' | 'circuit', {
+    files: typeof simFiles;
+    xmls: typeof simWorkspaceXmls;
+    sync: typeof simSyncStatuses;
+    board: string;
+    activeFile: string;
+  }>>>({});
+
+  const handleSimulatorModeChange = (nextMode: 'robot' | 'circuit') => {
+    if (simulatorMode === nextMode) return;
+    if (isRunningRef.current) handleStopCode();
+    setActiveRobotHighlight(null);
+    simulatorWorkspaces.current[simulatorMode] = {
+      files: simFiles, xmls: simWorkspaceXmls, sync: simSyncStatuses, board: simBoard, activeFile: simActiveFile,
+    };
+    setSimulatorMode(nextMode);
+    const saved = simulatorWorkspaces.current[nextMode];
+    if (saved) {
+      setSimFiles(saved.files);
+      setSimWorkspaceXmls(saved.xmls);
+      setSimSyncStatuses(saved.sync);
+      setSimBoard(saved.board);
+      setSimActiveFile(saved.activeFile);
+      setSimResetKey(previous => previous + 1);
+    } else if (nextMode === 'robot') {
+      setSimActiveFile('firmware/main.ino');
+      syncRobotToSimulatorWorkspace(robotHardwareConfig, robotPlans, activeRobotPlanId, true);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('robolab_sim_board', simBoard);
@@ -8218,6 +8232,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     } catch(e) {}
   };
 
+  const completeRobotRun = useCallback(() => {
+    isRunningRef.current = false;
+    setIsRunning(false);
+  }, []);
+
+  const toggleRobotRun = () => {
+    if (isRunningRef.current) {
+      completeRobotRun();
+      setActiveRobotHighlight(null);
+    } else if (trialStatus.isExpired) {
+      setPaywallFeature('Simulator');
+      setShowPaywallModal(true);
+    } else {
+      isRunningRef.current = true;
+      setIsRunning(true);
+    }
+  };
+
   // Ctrl+S to save active file
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -10317,30 +10349,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     </select>
                   </div>
 
-                  {/* Jalankan Robot action button */}
-                  {isRunning ? (
-                    <button
-                      onClick={handleStopCode}
-                      className="px-3.5 py-1 text-xs font-extrabold rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/25 flex items-center gap-1.5 transition cursor-pointer select-none"
-                    >
-                      <Square className="w-3 h-3 fill-current" /> Stop Robot
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        const codeToRun = simFiles[simActiveFile] || '';
-                        if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
-                          handleRunPython(codeToRun);
-                        } else {
-                          handleRunCode(codeToRun);
-                        }
-                      }}
-                      className="px-3.5 py-1 text-xs font-extrabold rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition cursor-pointer select-none"
-                    >
-                      <span>🤖 Jalankan Robot</span>
-                    </button>
-                  )}
-
                   {/* Reset Simulator Workspace Code */}
                   <button
                     onClick={() => {
@@ -10377,11 +10385,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 </div>
               </div>
 
-              {/* Main Simulator Workspace Content: Left (Spacious Code/Blockly ~56%) + Right (Compact Simulator ~44%) */}
-              <div className="flex-1 min-w-0 min-h-0 flex gap-3 overflow-hidden">
-                {/* LEFT PANE: Isolated Simulator Code / Blockly Workspace (Circuit uses original 42% layout; Robot uses spacious 56% layout) */}
+              {/* Simulator workspace */}
+              <div className={`flex-1 min-w-0 min-h-0 flex gap-3 ${simulatorMode === 'robot' ? 'flex-col overflow-y-auto xl:flex-row xl:overflow-hidden' : 'overflow-hidden'}`}>
+                {/* Simulator Blockly and code editor */}
                 {simViewMode !== 'circuit' && (
-                  <div className={`${simulatorMode === 'circuit' ? 'w-[42%] min-w-[340px]' : 'w-[56%] min-w-[420px]'} h-full flex flex-col gap-2 min-h-0 flex-shrink-0`}>
+                  <div className={`${simulatorMode === 'circuit' ? 'h-full w-[42%] min-w-[340px]' : 'order-2 h-[680px] w-full xl:order-none xl:h-full xl:w-[42%] xl:min-w-[340px]'} flex flex-col gap-2 min-h-0 flex-shrink-0`}>
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                     {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
@@ -10440,6 +10448,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           isRunning={isRunning}
                           onMicrobitPreview={(frames) => setMicrobitFrames(frames)}
                           onRunSimulator={(code) => {
+                            if (simulatorMode === 'robot') {
+                              toggleRobotRun();
+                              return;
+                            }
                             const isArduinoSketch = code.includes('void loop') || code.includes('void setup') || code.includes('digitalWrite');
                             if (isArduinoSketch) {
                               handleRunCode(code);
@@ -10563,7 +10575,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 )}
 
                 {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
-                <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
+                <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${simulatorMode === 'robot' ? 'order-1 min-h-[520px] xl:order-none xl:min-h-0' : ''}`}>
                   <div className={`flex-1 min-w-0 min-h-0 relative rounded-3xl overflow-hidden border shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))] ${themeMode === 'light' ? 'border-[var(--theme-border,rgba(186,230,253,0.9))] bg-white/95 backdrop-blur-md' : 'border-slate-800 bg-slate-950'}`}>
                     <Simulator
                       isExpanded={true}
@@ -10611,26 +10623,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           robotHardwareConfig,
                           nextPlans,
                           nextActiveId ?? activeRobotPlanId,
-                          false
+                          true
                         );
                       }}
                       onSyncRobotToCodeAndBlocks={(hw, nextPlans, nextActiveId) => {
                         syncRobotToSimulatorWorkspace(hw, nextPlans, nextActiveId, true);
                       }}
                       onRobotHighlightChange={setActiveRobotHighlight}
-                      onToggleRun={() => {
-                        if (isRunning) {
-                          handleStopCode();
-                          setActiveRobotHighlight(null);
-                        } else {
-                          const codeToRun = simFiles[simActiveFile] || '';
-                          if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
-                            handleRunPython(codeToRun);
-                          } else {
-                            handleRunCode(codeToRun);
-                          }
-                        }
-                      }}
+                      onToggleRun={toggleRobotRun}
+                      onRobotRunComplete={completeRobotRun}
                     />
                   </div>
 
