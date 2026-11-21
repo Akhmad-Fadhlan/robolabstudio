@@ -1,3 +1,4 @@
+const guideImages = Object.fromEntries(Object.entries(import.meta.glob('../assets/lessons/blocks/*.png', { eager: true, import: 'default' })).map(([path, image]) => [path.split('/').pop()!.replace('.png', ''), image as string]));
 import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
@@ -2620,7 +2621,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
   const [guideOpen,setGuideOpen] = React.useState(false);
   const [guideFilter,setGuideFilter] = React.useState('');
-  const [guideEntries,setGuideEntries] = React.useState<{label:string;category:string;help:string}[]>([]);
+  const [guideEntries,setGuideEntries] = React.useState<{type:string;label:string;category:string;help:string}[]>([]);
   const [blockHelp,setBlockHelp] = React.useState('');
   const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -4726,7 +4727,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const label = item.toString(100);
           const inputs = item.inputList.filter(input=>input.connection).map(input=>input.name).filter(Boolean);
           const hint = item.outputConnection ? 'Sisipkan ke isian nilai.' : item.previousConnection ? 'Sambungkan ke urutan perintah.' : 'Gunakan sebagai awal susunan.';
-          entries.push({label,category:category.getAttribute('name') || '',help:[item.getTooltip(),hint,inputs.length ? 'Isian: '+inputs.join(', ') : ''].filter(Boolean).join(' ')});
+          entries.push({type,label,category:category.getAttribute('name') || '',help:[item.getTooltip(),hint,inputs.length ? 'Isian: '+inputs.join(', ') : ''].filter(Boolean).join(' ')});
           item.dispose(false);
         }
       }
@@ -6941,7 +6942,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 overflow-auto rounded-xl bg-white text-slate-800 shadow-lg p-4">
         <header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>
         <input autoFocus placeholder="Cari label, fungsi, atau kategori" aria-label="Cari di kamus blok" value={guideFilter} onChange={e=>setGuideFilter(e.target.value)} className="w-full my-3 border rounded-lg p-2"/>
-        {guideEntries.filter(e=>[e.label,e.category,e.help].join(' ').toLowerCase().includes(guideFilter.toLowerCase())).map((e,i)=><article className="border-t py-2 text-sm" key={i}><small className="text-sky-700">{e.category}</small><h3 className="font-bold">{e.label}</h3><p>{e.help}</p></article>)}
+        {guideEntries.filter(e=>[e.label,e.category,e.help].join(' ').toLowerCase().includes(guideFilter.toLowerCase())).map((e,i)=><article className="border-t py-2 text-sm" key={i}><small className="text-sky-700">{e.category}</small>{guideImages[e.type] && <img className="my-2 max-h-24 max-w-full object-contain" loading="lazy" src={guideImages[e.type]} alt={e.label} />}<h3 className="font-bold">{e.label}</h3><p>{e.help}</p></article>)}
       </section>}
       {blockHelp && <p role="status" className="px-4 py-2 bg-sky-50 text-sky-950 text-xs leading-relaxed">{blockHelp}</p>}
       <div className="flex-1 w-full relative z-10 overflow-hidden">

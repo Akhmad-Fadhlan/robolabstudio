@@ -565,7 +565,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     </button>
                   </form>
                 </div>
-                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto ${isLight ? 'bg-slate-900 text-emerald-400 border-slate-700' : 'bg-[#070810] text-emerald-400 border-slate-800'}`}>
+                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto ${isLight ? 'bg-slate-50 text-emerald-800 border-slate-200' : 'bg-[#070810] text-emerald-400 border-slate-800'}`}>
                   <pre className="whitespace-pre-wrap">{serialRawOutput || 'Belum ada data Serial...'}</pre>
                 </div>
               </div>
@@ -574,9 +574,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             {/* TERMINAL SHELL */}
             {terminalTab === 'terminal' && (
               <div className="absolute inset-0 flex flex-col gap-2 p-3">
-                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto space-y-1 ${isLight ? 'bg-slate-900 text-slate-100 border-slate-700' : 'bg-[#070810] text-slate-100 border-slate-800'}`}>
+                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto space-y-1 ${isLight ? 'bg-slate-50 text-slate-800 border-slate-200' : 'bg-[#070810] text-slate-100 border-slate-800'}`}>
                   {interactiveTerminalLogs.map((log, i) => (
-                    <div key={i} className={`flex items-start gap-2 ${log.type === 'input' ? 'text-sky-400 font-bold' : log.type === 'error' ? 'text-rose-400' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-300'}`}>
+                    <div key={i} className={`terminal-log flex items-start gap-2 ${log.type === 'input' ? 'text-sky-400 font-bold' : log.type === 'error' ? 'text-rose-400' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-300'}`}>
                       <span className="text-slate-500">{log.type === 'input' ? '❯' : '·'}</span>
                       <span className="whitespace-pre-wrap">{log.text}</span>
                     </div>
