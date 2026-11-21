@@ -1,4 +1,5 @@
-import { writeMicrobitProgram } from './microbitUpload';
+import { canFlashMicrobitViaUsb, flashMicrobitViaUsb } from './microbitWebUsb';
+import { MicrobitReplUnavailableError, writeMicrobitProgram } from './microbitUpload';
 // ============================================================================
 // RoboLab Studio — Web Serial API & Cloud Compiler Service (Schematik.io Style)
 // Enables direct browser-to-hardware communication (Verify, Upload, Flash
@@ -1496,34 +1497,56 @@ export async function executeWebHardwareAction(params: {
   onLog: HardwareLogCallback;
   onProgress?: (pct: number) => void;
   onPortSelected?: (newAddress: string) => void;
-}): Promise<{ success: boolean; error?: string; selectedPort?: string }> {
+}): Promise<{ success: boolean; error?: string; selectedPort?: string; hexDownloaded?: boolean; flashedViaWebUsb?: boolean }> {
   const { board, port, action, fileExt, files, onLog, onProgress, onPortSelected } = params;
   const boardLower = board.toLowerCase();
   const isPython = fileExt === 'py';
   const isLocalComPort = Boolean(port && /^COM\d+$/i.test(port));
 
-  if (boardLower.includes('micro:bit') && action === 'flash-firmware') {
-    const error = 'Pasang firmware MicroPython awal dari editor resmi micro:bit lewat drive MICROBIT. Setelah itu gunakan Upload di RoboLab.';
-    onLog({ text: error, type: 'info' });
-    return { success: false, error };
-  }
-
-  if (boardLower.includes('micro:bit') && action === 'upload') {
+  if (boardLower.includes('micro:bit') && action !== 'verify') {
     const code = files['main.py'] ?? files['python/main.py'] ?? Object.entries(files).find(([name]) => name.endsWith('.py'))?.[1] ?? '';
-    if (!code.trim()) {
+
+    async function prepareHex() {
+      try {
+        const { downloadMicrobitHex } = await import('./microbitHex');
+        await downloadMicrobitHex(code);
+        onProgress?.(100);
+        onLog({ text: 'robolab-microbit.hex siap. Salin file ini ke drive MICROBIT dan tunggu LED transfer berhenti berkedip. File memuat firmware dan program Anda.', type: 'info' });
+        return { success: false, hexDownloaded: true };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        onLog({ text: `Gagal menyiapkan Universal Hex: ${error}`, type: 'error' });
+        return { success: false, error };
+      }
+    }
+
+    if (action === 'upload' && !code.trim()) {
       const error = 'Program MicroPython kosong.';
       onLog({ text: error, type: 'error' });
       return { success: false, error };
     }
 
+    if (canFlashMicrobitViaUsb()) {
+      try {
+        onLog({ text: 'Pilih micro:bit pada dialog USB. RoboLab akan mengirim firmware dan program.', type: 'info' });
+        await flashMicrobitViaUsb(code, onProgress);
+        onLog({ text: 'micro:bit mengonfirmasi flash selesai dan telah di-reset.', type: 'success' });
+        return { success: true, flashedViaWebUsb: true };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        onLog({ text: `Upload WebUSB gagal: ${error}`, type: 'error' });
+        return { success: false, error };
+      }
+    }
+
+    if (action === 'flash-firmware') return prepareHex();
     await stopWebSerialMonitor();
     const ports = (await listBrowserAuthorizedSerialPorts()).filter(entry => entry.usbVendorId === 0x0d28);
     const target = ports.find(entry => entry.address === port)
       ?? (ports.length === 1 ? ports[0] : await requestWebSerialPort(0x0d28));
     if (!target?.rawPort) {
-      const error = 'Pilih port USB micro:bit untuk melanjutkan upload.';
-      onLog({ text: error, type: 'error' });
-      return { success: false, error };
+      onLog({ text: 'Port USB micro:bit belum dipilih. Menyiapkan file untuk drive MICROBIT…', type: 'info' });
+      return prepareHex();
     }
     onPortSelected?.(target.address);
     try {
@@ -1534,6 +1557,10 @@ export async function executeWebHardwareAction(params: {
       onLog({ text: 'main.py terverifikasi dan micro:bit telah restart.', type: 'success' });
       return { success: true, selectedPort: target.address };
     } catch (err) {
+      if (err instanceof MicrobitReplUnavailableError) {
+        onLog({ text: `${err.message} Menyiapkan firmware dan program untuk drive MICROBIT…`, type: 'info' });
+        return prepareHex();
+      }
       const error = err instanceof Error ? err.message : String(err);
       onLog({ text: error, type: 'error' });
       return { success: false, error, selectedPort: target.address };

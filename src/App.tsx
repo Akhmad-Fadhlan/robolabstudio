@@ -8040,7 +8040,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         action === 'verify'
           ? 'Compiling sketch via Cloud Compiler...'
           : action === 'upload'
-          ? 'Compiling & uploading via Web Serial...'
+          ? board === 'BBC micro:bit' ? 'Menunggu koneksi USB micro:bit…' : 'Compiling & uploading via Web Serial...'
           : 'Flashing Firmware via Web Serial...'
       );
 
@@ -8077,7 +8077,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           refreshPorts();
         }
 
-        if (webRes.success) {
+        if (webRes.hexDownloaded) {
+          setBuildStatusText('Salin robolab-microbit.hex ke drive MICROBIT');
+        } else if (webRes.success) {
           setBuildStatusText(
             action === 'verify'
               ? 'Compilation Successful'
@@ -8086,10 +8088,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               : 'Firmware Flashed Successfully 🎉'
           );
           if (action === 'upload') {
-            const statusMsg = '📡 Program sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.';
+            const statusMsg = webRes.flashedViaWebUsb
+              ? 'Firmware dan program telah dikirim. Lihat hasilnya pada micro:bit.'
+              : 'Program telah dikirim ke board. Buka Serial Monitor untuk melihat output.';
             setTerminalLogs(prev => [...prev, { text: statusMsg, type: 'info' }]);
             setInteractiveTerminalLogs(prev => [...prev, { text: statusMsg, type: 'output' }]);
-            setTimeout(async () => {
+            if (!webRes.flashedViaWebUsb) setTimeout(async () => {
               const targetPortAddr = webRes.selectedPort || port;
               const started = await startWebSerialMonitor(
                 targetPortAddr,

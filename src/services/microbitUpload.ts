@@ -1,3 +1,5 @@
+export class MicrobitReplUnavailableError extends Error {}
+
 interface MicrobitSerialPort {
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
@@ -45,7 +47,11 @@ export async function writeMicrobitProgram(port: MicrobitSerialPort, source: str
     await pause(150);
     response = '';
     await send('\r\x01');
-    await waitFor(/raw REPL[^\r\n]*[\r\n]+>/i, 'MicroPython tidak merespons. Pastikan firmware MicroPython sudah terpasang pada micro:bit.');
+    try {
+      await waitFor(/raw REPL[^\r\n]*[\r\n]+>/i, 'MicroPython tidak merespons lewat serial.');
+    } catch (error) {
+      throw new MicrobitReplUnavailableError(error instanceof Error ? error.message : String(error));
+    }
 
     async function run(command: string) {
       response = '';
