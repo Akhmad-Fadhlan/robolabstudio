@@ -376,13 +376,11 @@ export async function checkAndBindDevice(
 ): Promise<DeviceBindingResult> {
   const cacheKey = `${userId}:${deviceId}`;
   if (inFlightChecks.has(cacheKey)) {
-    console.log('[RoboLab Auth] Returning existing in-flight check promise for key:', cacheKey);
     return inFlightChecks.get(cacheKey)!;
   }
 
   const promise = (async (): Promise<DeviceBindingResult> => {
     try {
-      console.log('[RoboLab Auth] checkAndBindDevice execution started', { userId, deviceId, deviceInfo });
 
       // 1. Check if this device_id already exists in the table
       const { data: existing, error: fetchError } = await supabase
@@ -391,7 +389,6 @@ export async function checkAndBindDevice(
         .eq('device_id', deviceId)
         .maybeSingle();
 
-      console.log('[RoboLab Auth] fetch result:', { existing, fetchError });
 
       if (fetchError) {
         const msg = fetchError.message || fetchError.code || JSON.stringify(fetchError);
@@ -406,7 +403,6 @@ export async function checkAndBindDevice(
             .from('device_bindings')
             .update({ last_seen: new Date().toISOString() })
             .eq('device_id', deviceId);
-          console.log('[RoboLab Auth] Device already bound to same user, access granted.');
           return { ok: true };
         } else {
           // Different user on same device → blocked
@@ -420,7 +416,6 @@ export async function checkAndBindDevice(
       }
 
       // 2. Device not registered yet → insert new binding
-      console.log('[RoboLab Auth] New device, inserting binding...');
       const { error: insertError } = await supabase.from('device_bindings').insert({
         user_id: userId,
         device_id: deviceId,
@@ -435,7 +430,6 @@ export async function checkAndBindDevice(
           (insertError.message && insertError.message.includes('duplicate key value violates unique constraint'));
 
         if (isDuplicateKey) {
-          console.log('[RoboLab Auth] Unique constraint hit, re-verifying binding ownership...');
           const { data: reFetch } = await supabase
             .from('device_bindings')
             .select('user_id, user_email')
@@ -443,7 +437,6 @@ export async function checkAndBindDevice(
             .maybeSingle();
 
           if (reFetch && reFetch.user_id === userId) {
-            console.log('[RoboLab Auth] Race condition resolved: device is bound to current user.');
             return { ok: true };
           } else {
             console.warn('[RoboLab Auth] Device taken (duplicate key constraint):', reFetch?.user_email);
@@ -460,7 +453,6 @@ export async function checkAndBindDevice(
         return { ok: false, reason: 'db_error', message: `Gagal menyimpan device: ${msg}` };
       }
 
-      console.log('[RoboLab Auth] Device binding saved successfully.');
       return { ok: true };
     } finally {
       inFlightChecks.delete(cacheKey);
@@ -685,7 +677,6 @@ export async function deleteUserCustomLibrary(userId: string, libName: string): 
           .delete()
           .in('id', idsToDelete);
         if (!delErr) {
-          console.log(`[RoboLab] Successfully deleted custom library rows from DB:`, idsToDelete);
           deletedAny = true;
         } else {
           console.warn('[RoboLab] deleteUserCustomLibrary in(id) notice:', delErr.message);

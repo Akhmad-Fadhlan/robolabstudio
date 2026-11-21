@@ -22,7 +22,6 @@ try {
     } catch (_) {}
 
     const sendUpdateStatus = (status, payload = {}) => {
-      console.log(`[RoboLab AutoUpdater] ${status}:`, payload);
       const wins = BrowserWindow.getAllWindows();
       if (wins.length > 0 && !wins[0].isDestroyed()) {
         wins[0].webContents.send('auto-update-status', { status, ...payload });
@@ -1256,7 +1255,6 @@ let lastCompiledHashes = {};
 try {
   if (fs.existsSync(_hashCachePath)) {
     lastCompiledHashes = JSON.parse(fs.readFileSync(_hashCachePath, 'utf-8'));
-    console.log('[RoboLab] Loaded compile hash cache from disk:', Object.keys(lastCompiledHashes));
   }
 } catch (_) { lastCompiledHashes = {}; }
 
@@ -1675,7 +1673,6 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
           try {
             fs.writeFileSync(targetPath, auxContent, 'utf-8');
             hashContent += `\n// --- ${baseName} ---\n` + auxContent;
-            console.log(`[RoboLab] Wrote auxiliary build file: ${baseName}`);
           } catch (err) {
             console.error(`[RoboLab] Failed to write aux file ${baseName}:`, err);
           }
@@ -2271,7 +2268,6 @@ ipcMain.handle('get-installed-libs', async (event, payloadUserId) => {
     }
   }
 
-  console.log(`[RoboLab] Installed libraries for user [${userId || 'guest'}]: ${combined.length} (custom: ${userLibs.length})`);
   return combined;
 });
 
@@ -2295,7 +2291,6 @@ ipcMain.handle('get-installed-cores', async () => {
       try {
         const data = JSON.parse(stdout);
         const cores = Array.isArray(data) ? data.map(item => item.id).filter(Boolean) : [];
-        console.log('[RoboLab] Installed board cores on disk:', cores);
         resolve(cores);
       } catch (e) {
         console.warn('[RoboLab] core list JSON parse warning:', e.message);
@@ -2904,7 +2899,6 @@ ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
               try {
                 fs.rmSync(targetPath, { recursive: true, force: true });
                 deletedAny = true;
-                console.log(`[RoboLab] Removed library directory: ${targetPath}`);
               } catch (rmErr) {
                 console.warn(`[RoboLab] Failed to remove library directory ${targetPath}:`, rmErr.message);
               }
@@ -3033,7 +3027,6 @@ const getSerialPortsFromRegistry = () => {
           ports.push({ address: comPort, label: `${comPort} (${deviceName})` });
         }
       });
-      console.log('[RoboLab] Registry COM ports:', ports);
       resolve(ports);
     });
   });
@@ -3069,7 +3062,6 @@ const getSerialPortsViaCLI = () => {
             }
           });
         }
-        console.log('[RoboLab] arduino-cli COM ports:', ports);
         resolve(ports);
       } catch (e) {
         resolve(null);
@@ -3151,7 +3143,6 @@ ipcMain.handle('get-serial-ports', async () => {
     });
   }
 
-  console.log('[RoboLab] Final COM ports:', allPorts);
   return allPorts;
 });
 
@@ -3518,7 +3509,6 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('install-update-now', () => {
-  console.log('[RoboLab AutoUpdater] Installing update now...');
   try {
     const { execSync } = require('child_process');
     if (activeSerialProcess) {

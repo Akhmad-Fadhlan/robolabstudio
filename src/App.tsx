@@ -4560,7 +4560,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       try {
         const electron = req('electron');
         const ports = await electron.ipcRenderer.invoke('get-serial-ports');
-        console.log('[RoboLab UI] Detected ports:', ports);
         if (ports) {
           setAvailablePorts(ports);
           if (ports.length > 0) {
@@ -4572,7 +4571,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 p.label && !p.label.toLowerCase().includes('bth') && !p.label.toLowerCase().includes('bluetooth')
               );
               const selected = usbPort ? usbPort.address : ports[0].address;
-              console.log('[RoboLab UI] Auto-selected port:', selected);
               return selected;
             });
           } else {
@@ -6118,7 +6116,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         pullupPins.add(puMatch[1].replace(/^[DPG]/, ''));
       }
     }
-    console.log("ROBOLAB SIMULATOR: Detected servo pins:", [...servoPins]);
 
     const parseLines = (lineList: string[], startIdx: number, endIdx: number): any[] => {
       const queue: any[] = [];
@@ -7063,7 +7060,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     const setupQueue = hasArduinoStructure ? parseLines(setupLines, 0, setupLines.length - 1) : [];
     const loopQueue = hasArduinoStructure ? parseLines(loopLines, 0, loopLines.length - 1) : [];
     const queue = hasArduinoStructure ? [] : parseLines(lines, 0, lines.length - 1);
-    console.log("ROBOLAB SIMULATOR: Parsed queues:", { hasArduinoStructure, globalQueue, setupQueue, loopQueue, queue });
 
     if (hasArduinoStructure) {
       if (globalQueue.length === 0 && setupQueue.length === 0 && loopQueue.length === 0) {
@@ -7253,7 +7249,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
 
       const item = blockQueue[blockIndex];
-      console.log("ROBOLAB SIMULATOR: Executing block item:", item);
       const next = () => executeBlock(blockQueue, blockIndex + 1, onComplete, onReturn, onBreak, onContinue);
 
       if (item.type === 'return') {

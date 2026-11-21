@@ -2075,7 +2075,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       // Auto-collect used pins to generate pinMode declarations
       const outputs = new Set<string>();
       const inputs = new Set<string>();
-      console.log('[RoboLab Generator] Block types in workspace:', workspace.getAllBlocks(false).map(b => b.type));
       workspace.getAllBlocks(false).forEach(block => {
         if (block.type === 'pin_digital_write' || block.type === 'pin_analog_write') {
           const pin = block.getFieldValue('PIN');

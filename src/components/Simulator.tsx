@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { WokwiPart, type WokwiPin, wokwiPartHeight, wokwiPartName, wokwiPartPinId, wokwiParts, wokwiPartWidth } from './simulator/WokwiPart';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, Palette, Check, Bot } from 'lucide-react';
 import { RobotArena3D } from './RobotArena3D';
 import {
@@ -842,7 +843,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
     // If we have direct frames from BlocklyEditor, use them
     if (microbitFrames && microbitFrames.length > 0) {
-      console.log('[Simulator] Using direct microbitFrames:', microbitFrames);
       inputFrames.push(...microbitFrames);
     } else if (activeCode) {
       const lines = activeCode.split('\n');
@@ -943,7 +943,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
       }
     });
 
-    console.log('[Simulator] parsed final frames:', finalFrames.length);
     setLedFrames(finalFrames);
     setCurrentFrameIdx(0);
   }, [activeCode, isRunning, board, microbitFrames]);
@@ -1070,6 +1069,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   // Filter active components by base type
+  const [partSearch, setPartSearch] = useState('');
+  const matchingWokwiParts = wokwiParts.filter(tag => wokwiPartName(tag).toLowerCase().includes(partSearch.trim().toLowerCase()));
+  const [wokwiPins, setWokwiPins] = useState<Record<string, WokwiPin[]>>({});
+  const catalogParts = activeComponents.filter(id => wokwiParts.includes(getBaseComponentType(id)));
+  const updateWokwiPins = useCallback((id: string, next: WokwiPin[]) => {
+    setWokwiPins(previous => ({ ...previous, [id]: next }));
+  }, []);
+
   const ledComponents = activeComponents.filter(c => getBaseComponentType(c) === 'led');
   const servoComponents = activeComponents.filter(c => getBaseComponentType(c) === 'servo');
   const ultrasonicComponents = activeComponents.filter(c => getBaseComponentType(c) === 'ultrasonic');
@@ -1406,6 +1413,16 @@ export const Simulator: React.FC<SimulatorProps> = ({
       );
     });
 
+    for (const id of catalogParts) {
+      (wokwiPins[id] || []).forEach((pin, index) => {
+        componentPins.push({
+          id: wokwiPartPinId(id, index),
+          name: `${wokwiPartName(getBaseComponentType(id))} · ${pin.name}`,
+          ...getRotatedPinCoords(id, pin.x, pin.y, wokwiPartWidth / 2, wokwiPartHeight / 2),
+          type: 'component',
+        });
+      });
+    }
     return [...mcuPins, ...componentPins];
   };
 
@@ -1958,6 +1975,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
     }[baseType] || [baseType.toUpperCase() + '_'];
 
     const isTargetPin = (pinId: string) => {
+      if (instanceId.startsWith('wokwi-')) return pinId.startsWith(instanceId + ':');
       const matchPrefix = pinPrefixes.some(pref => pinId.startsWith(pref));
       if (!matchPrefix) return false;
       if (instanceId.includes('_')) {
@@ -3439,6 +3457,18 @@ export const Simulator: React.FC<SimulatorProps> = ({
           })}
 
           {/* ==================== INTERACTIVE PINS TERMINAL CIRCLES (SCALED UP FOR HIT-TEST ACCURACY) ==================== */}
+          {catalogParts.map(id => {
+            const tag = getBaseComponentType(id);
+            const pos = positions[id] || { x: 50, y: 420 };
+            return <g key={id} className="cursor-move" aria-label={wokwiPartName(tag)}
+              transform={`translate(${pos.x}, ${pos.y}) rotate(${rotations[id] || 0}, ${wokwiPartWidth / 2}, ${wokwiPartHeight / 2})`}
+              onMouseDown={event => startDrag(id, event)}
+              onContextMenu={event => { event.preventDefault(); handleRotateComponent(id); }}>
+              <rect width={wokwiPartWidth} height={wokwiPartHeight} rx="8" fill="transparent" pointerEvents="all" />
+              <WokwiPart id={id} tag={tag} onPins={updateWokwiPins} />
+            </g>;
+          })}
+
           {pins.map(pin => {
             const isStarting = activePinStart?.id === pin.id;
             return (
@@ -3613,6 +3643,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             if (isButtonPopup) return `🔘 Button${instanceSuffix}`;
             if (isLcdPopup) return `📟 LCD 16x2${instanceSuffix}`;
             if (isMotorPopup) return `⚙️ DC Motor${instanceSuffix}`;
+            if (basePopup.startsWith('wokwi-')) return wokwiPartName(basePopup);
             return `${activePopup.toUpperCase()}${instanceSuffix}`;
           };
 
@@ -3864,8 +3895,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
              </div>
           </div>
           
+          <label className="block space-y-1 text-xs">
+            <span className="font-semibold">Cari komponen Wokwi</span>
+            <input type="search" value={partSearch} onChange={event => setPartSearch(event.target.value)}
+              placeholder="Misalnya resistor atau LCD"
+              className={`w-full rounded-lg border px-3 py-2 ${isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-950'}`} />
+          </label>
           <div className="relative">
             <select
+              aria-label="Tambah komponen"
               value=""
               onChange={(e) => {
                 handleAddComponent(e.target.value);
@@ -3873,7 +3911,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
               }}
               className={`w-full text-[11px] font-bold border rounded-lg pl-3 pr-8 py-2.5 outline-none cursor-pointer hover:border-indigo-400 transition-colors appearance-none shadow-sm ${isLight ? 'bg-slate-50 text-slate-700 border-slate-200' : 'bg-[#090b12] text-slate-200 border-slate-700/80'}`}
             >
-              <option value="" disabled className={isLight ? 'bg-white text-slate-500' : 'bg-[#0f131f] text-slate-400'}>➕ ADD COMPONENT</option>
+              <option value="" disabled className={isLight ? 'bg-white text-slate-500' : 'bg-[#0f131f] text-slate-400'}>Tambah komponen</option>
               <option value="led" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔴 Red LED Bulb</option>
               <option value="servo" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>⚙️ SG90 Servo Motor</option>
               <option value="ultrasonic" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔊 HC-SR04 Ultrasonic</option>
@@ -3885,9 +3923,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
               <option value="lcd" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>📺 16x2 OLED LCD Screen</option>
               <option value="dht11" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🌡️ DHT11 Temp/Humid</option>
               <option value="rfid" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🏷️ RC522 RFID Reader</option>
+              <optgroup label="Katalog aset Wokwi · visual rangkaian" disabled={!matchingWokwiParts.length}>
+                {!matchingWokwiParts.length && <option>Tidak ada aset Wokwi yang cocok</option>}
+                {matchingWokwiParts.map(tag => <option key={tag} value={tag}>{wokwiPartName(tag)}</option>)}
+              </optgroup>
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>
+
+          <p className="text-[10px]">Aset Wokwi dapat dipasang dan dikabelkan sesuai pin yang tersedia. Gunakan komponen bawaan untuk simulasi perilaku program. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
 
           <div className={`border-t ${isLight ? 'border-slate-100' : 'border-slate-800/80'}`} />
 

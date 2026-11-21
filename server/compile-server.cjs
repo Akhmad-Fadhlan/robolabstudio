@@ -1471,15 +1471,12 @@ function startCompileServer(port = PORT) {
 
   server.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
-      console.log(`[RoboLab Web Compiler] Port ${port} already active.`);
     } else {
       console.warn(`[RoboLab Web Compiler] Server warning:`, err.message || err);
     }
   });
 
   server.listen(port, () => {
-    console.log(`[RoboLab Web Compiler] Listening on http://localhost:${port}`);
-    console.log(`[RoboLab Web Compiler] Using arduino-cli: ${getArduinoCliPath()}`);
   });
 
   global.__robolabActiveCompileServer = server;
