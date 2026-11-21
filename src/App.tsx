@@ -9445,7 +9445,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             <div className="absolute inset-0 flex gap-3 bg-transparent">
               
               {/* SIDEBAR PANEL (Explorer / Files list) */}
-              {showExplorer && (
+              {showExplorer && !(isMobile && workspaceMode === 'split') && (
                 <div className="panel-explorer w-56 flex flex-col flex-shrink-0 select-none overflow-hidden">
                   {/* Panel Title */}
                   <div className="h-10 flex items-center justify-between px-4 border-b border-white/5">
@@ -9620,6 +9620,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               {/* CENTRAL WORKSPACE & TELEMETRY */}
               <div className="flex-1 flex flex-col min-w-0 gap-0 bg-transparent relative">
                 
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-400/30 px-3 py-2">
+                  <span className="text-xs font-semibold">Tampilan proyek</span>
+                  {(['.ino', '.py'] as const).map(extension => (
+                    <button key={extension} type="button"
+                      aria-pressed={uiMode === 'pro' && workspaceMode === 'split' && activeFile.endsWith(extension) && !isBlocklyCollapsed && !isEditorCollapsed}
+                      className="rounded-lg border border-slate-400/40 px-2.5 py-1.5 text-xs font-semibold aria-pressed:bg-sky-800 aria-pressed:text-white"
+                      onClick={() => {
+                        const defaultPath = extension === '.py' ? 'python/main.py' : 'firmware/main.ino';
+                        const path = activeFile.endsWith(extension) ? activeFile : Object.keys(files).find(name => name.endsWith(extension)) ?? defaultPath;
+                        if (!(path in files)) setFiles(previous => ({ ...previous, [path]: '' }));
+                        handleFileSelect(path);
+                        setUiMode('pro');
+                        setWorkspaceMode('split');
+                        setIsBlocklyCollapsed(false);
+                        setIsEditorCollapsed(false);
+                      }}>
+                      {extension === '.ino' ? 'Arduino .ino + Blok' : 'Blok + Python'}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Compile progress overlay */}
                 {buildProgress > 0 && buildProgress < 100 && (
                   <div className="bg-[#0b0c10] border-b border-[#181b28] px-4 py-2 flex items-center justify-between gap-4 font-mono text-[10px] select-none">
@@ -10826,7 +10847,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {currentTab === 'learning' && (() => {
             const currentLessons = learningCategory === 'fundamental' ? PYTHON_LESSONS : (learningCategory === 'hardware' ? ARDUINO_HARDWARE_LESSONS : MICROPYTHON_LESSONS);
             const currentLesson = currentLessons[activeLessonIndex] || currentLessons[0];
-            const exampleBlocks = showLearningProjects ? '' : learningCategory === 'hardware'
+            const exampleBlocks = showLearningProjects || learningCategory === 'fundamental' ? '' : learningCategory === 'hardware'
               ? arduinoToBlocklyXml(currentLesson.code)
               : pythonToBlocklyXml(currentLesson.code);
             
@@ -10966,11 +10987,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       </button>
                     </div>
 
-                    <section className="min-w-0 rounded-xl border border-slate-400/40 p-3">
+                    {exampleBlocks && <section className="min-w-0 rounded-xl border border-slate-400/40 p-3">
                       <h3 className="mb-1 font-bold">Contoh program Blockly</h3>
                       <p className="mb-3 text-xs">Blok kode bebas menampung bagian yang belum punya blok khusus. Lihat kode teks untuk contoh lengkap.</p>
                       <BlocklyPreview key={currentLesson.title} xml={exampleBlocks} />
-                    </section>
+                    </section>}
                     <LessonMission category={learningCategory} index={activeLessonIndex} />
                     {learningCategory === 'hardware' && <BlockFieldGuide />}
                     <KidsAnalogyCard

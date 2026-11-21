@@ -13,6 +13,18 @@ export function BlocklyPreview({ xml }: { xml: string }) {
       try {
         workspace = Blockly.inject(container, { readOnly: true, renderer: 'zelos', sounds: false, media: '/media/' });
         Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), workspace);
+        const roots = workspace.getTopBlocks(false);
+        const setup = roots.find(block => block.type === 'arduino_setup');
+        if (setup) {
+          roots.splice(roots.indexOf(setup), 1);
+          roots.unshift(setup);
+        }
+        let nextY = 16;
+        for (const block of roots) {
+          const position = block.getRelativeToSurfaceXY();
+          block.moveBy(16 - position.x, nextY - position.y);
+          nextY += block.getHeightWidth().height + 24;
+        }
         const bounds = workspace.getBlocksBoundingBox();
         container.style.width = `${Math.max(160, bounds.right - bounds.left + 32)}px`;
         container.style.height = `${Math.max(64, bounds.bottom - bounds.top + 32)}px`;

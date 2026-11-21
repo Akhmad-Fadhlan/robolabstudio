@@ -2813,7 +2813,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     const rootEl = blocklyDivRef.current;
     if (!rootEl) return;
     const isLight = isLightModeRef.current;
-    const tbWidth = '215px';
+    const tbWidth = boardRef.current === 'BBC micro:bit' ? 'clamp(110px, 36vw, 215px)' : '215px';
 
     // Inject permanent global CSS to kill native Blockly tree icons & 8px border-left bars
     if (!document.getElementById('codekit-toolbox-kill-icons')) {
@@ -2822,7 +2822,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       killStyle.textContent = `
         .blocklyTreeIcon, .blocklyTreeIconNone, .blocklyToolboxCategoryIcon, [class*="TreeIcon"] { display: none !important; width: 0 !important; height: 0 !important; min-width: 0 !important; border: none !important; border-left: none !important; visibility: hidden !important; opacity: 0 !important; }
         .blocklyTreeRow::before, .blocklyToolboxCategory::before { display: none !important; content: none !important; }
-        .blocklyToolboxDiv [role="treeitem"] > div:not(.codekit-icon-box):not(.cat-active-bar) { border: none !important; border-left: none !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
+        .blocklyToolboxDiv [role="treeitem"] > div:not([role="group"]):not(.codekit-icon-box):not(.cat-active-bar) { border: none !important; border-left: none !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; margin: 0 !important; }
         .blocklyTreeSelected .blocklyTreeLabel, .blocklyToolboxCategorySelected .blocklyToolboxCategoryLabel { background: transparent !important; background-color: transparent !important; border-left: none !important; }
         .blocklyToolboxContents { overflow: visible !important; padding-bottom: 32px !important; }
         .blocklyToolboxDiv { overflow-x: hidden !important; overflow-y: auto !important; }
@@ -2894,7 +2894,19 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const renderedSections = new Set<string>();
 
       effectiveRows.forEach((rowEl: Element) => {
-        const row = rowEl as HTMLElement;
+        const treeItem = rowEl as HTMLElement;
+        const childGroup = treeItem.querySelector<HTMLElement>(':scope > [role="group"]');
+        const row = childGroup
+          ? treeItem.querySelector<HTMLElement>(':scope > .blocklyToolboxCategory, :scope > .blocklyTreeRow') || treeItem
+          : treeItem;
+
+        if (childGroup) {
+          treeItem.style.setProperty('flex-direction', 'column', 'important');
+          treeItem.style.setProperty('align-items', 'stretch', 'important');
+          treeItem.style.setProperty('height', 'auto', 'important');
+          treeItem.style.setProperty('max-height', 'none', 'important');
+          childGroup.style.setProperty('padding-inline-start', '8px', 'important');
+        }
 
         // Strip any native Blockly 8px left color border on inner rowDiv_ / rowContents_
         row.querySelectorAll('div:not(.codekit-icon-box):not(.cat-active-bar)').forEach((innerDivEl) => {
@@ -2941,12 +2953,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
 
           const lowerText = cleanedText.toLowerCase();
-          const catKey = getCatKey(lowerText);
+          const catKey = [...row.classList, ...treeItem.classList].find(name => name.startsWith('cat-mb-')) || getCatKey(lowerText);
           const iconConf = CAT_ICON_CONFIG[catKey] || CAT_ICON_CONFIG['cat-default'];
 
           // Section header insertion
           const sectionName = iconConf.section;
-          if (contentsEl && !renderedSections.has(sectionName) && sectionName && row.parentNode === contentsEl) {
+          if (contentsEl && !renderedSections.has(sectionName) && sectionName && treeItem.parentNode === contentsEl) {
             renderedSections.add(sectionName);
             let sectionHeader = contentsEl.querySelector(`.cat-section-header[data-section="${sectionName}"]`) as HTMLElement | null;
             if (!sectionHeader) {
@@ -2955,16 +2967,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
               sectionHeader.setAttribute('data-section', sectionName);
               sectionHeader.textContent = sectionName;
             }
-            if (sectionHeader.parentNode !== contentsEl || row.previousElementSibling !== sectionHeader) {
-              contentsEl.insertBefore(sectionHeader, row);
+            if (sectionHeader.parentNode !== contentsEl || treeItem.previousElementSibling !== sectionHeader) {
+              contentsEl.insertBefore(sectionHeader, treeItem);
             }
           }
 
-          const matches = !searchQuery || cleanedText.toLowerCase().includes(searchQuery.toLowerCase());
+          const matches = !searchQuery || treeItem.textContent?.toLowerCase().includes(searchQuery.toLowerCase());
           if (searchQuery) {
-            row.style.setProperty('display', matches ? 'flex' : 'none', 'important');
+            treeItem.style.setProperty('display', matches ? 'flex' : 'none', 'important');
           } else {
-            row.style.removeProperty('display');
+            treeItem.style.removeProperty('display');
           }
 
           if (searchQuery && !matches) return;
@@ -3053,7 +3065,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           iconBox.style.setProperty('min-width', '28px', 'important');
           iconBox.style.setProperty('height', '28px', 'important');
           iconBox.style.setProperty('border-radius', '9px', 'important');
-          iconBox.style.setProperty('margin-right', '10px', 'important');
+          iconBox.style.setProperty('margin-right', boardRef.current === 'BBC micro:bit' ? '5px' : '10px', 'important');
           iconBox.style.setProperty('display', 'inline-flex', 'important');
           iconBox.style.setProperty('align-items', 'center', 'important');
           iconBox.style.setProperty('justify-content', 'center', 'important');
@@ -4089,7 +4101,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const language = localStorage.getItem('robolab_language') || 'id';
       return `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-      <category expanded="true" name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
+      <category name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
         <category name="${language === 'id' ? 'Layar &amp; waktu' : 'Basic'}" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
           <block type="arduino_setup"></block>
           <block type="arduino_loop"></block>

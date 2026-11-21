@@ -2164,7 +2164,7 @@ html body:not(.light) .codekit-toolbox-header,
 }
 
 /* Reset inner wrapper divs inside [role="treeitem"] so Blockly's 8px border-left never shows */
-.blocklyToolboxDiv [role="treeitem"] > div:not(.codekit-icon-box):not(.cat-active-bar),
+.blocklyToolboxDiv [role="treeitem"] > div:not([role="group"]):not(.codekit-icon-box):not(.cat-active-bar),
 .blocklyToolboxDiv [role="treeitem"] .blocklyTreeRow,
 .blocklyToolboxDiv [role="treeitem"] .blocklyTreeRowContentContainer {
   border: none !important;
@@ -2434,4 +2434,13 @@ nav[aria-label="Jalur belajar"] button:focus-visible {
 .microbit-blockly :is(.blocklyTreeRow, .blocklyToolboxCategory)[class*="cat-mb-"] :is(.blocklyTreeLabel, .blocklyToolboxCategoryLabel) {
   font-size: 13px;
   font-weight: 650;
+}
+
+.microbit-blockly [role="treeitem"]:has(> [role="group"]) {
+  transform: none !important;
+}
+.microbit-blockly .cat-microbit > .cat-microbit::after {
+  content: "▾";
+  margin-inline-start: auto;
+  color: currentColor;
 }
