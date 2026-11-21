@@ -21,7 +21,6 @@ import {
   type RobotHardwareConfig,
   type RobotPlan,
   type RobotPlanStep,
-  type PlanActionType,
   type ActiveExecutionHighlight,
   type RobotMcuId,
   type SensorCount,
@@ -30,6 +29,9 @@ import {
   type MotorPresetId,
   MOTOR_PRESETS,
   getBoardPinOptions,
+  getSensorPresetOptions,
+  getDefaultSensorPattern,
+  getRobotActionSpeeds,
   estimateRobotPins,
   computeAutoPidProfiles,
   evaluateSensorPatternMatch,
@@ -142,13 +144,39 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   const chosenStep = steps.some(step => step.index === startStep) ? startStep : null;
   const trackResults = results.filter(result => result.trackId === selectedTrackId && result.planId === currentPlan?.planId);
 
-  const editStep = (position: number, patch: Partial<Pick<RobotPlanStep, 'action' | 'speedL' | 'speedR'>>) => {
+  const replacePlanItems = (items: RobotPlan['items']) => {
     if (!currentPlan || isRunning) return;
-    const items = currentPlan.items.map((item, index) =>
-      index === position && item.type === 'step' ? { ...item, ...patch } : item
-    );
     onChangePlans(plans.map(plan => plan.planId === currentPlan.planId ? { ...plan, items } : plan), currentPlan.planId);
   };
+
+  const editStep = (position: number, patch: Partial<Omit<RobotPlanStep, 'type' | 'blockId'>>) => {
+    if (!currentPlan) return;
+    replacePlanItems(currentPlan.items.map((item, index) =>
+      index === position && item.type === 'step' ? { ...item, ...patch } : item
+    ));
+  };
+
+  const changeStop = (position: number, stage: '' | 'ACTION' | 'SPEED_A') => {
+    if (!currentPlan || isRunning) return;
+    const items = [...currentPlan.items];
+    const next = items[position + 1];
+    const previousStop = next?.type === 'stop_here' ? next : undefined;
+    items.splice(position + 1, previousStop ? 1 : 0, ...(stage ? [{ ...previousStop, type: 'stop_here' as const, stage }] : []));
+    replacePlanItems(items);
+  };
+
+  const newStepIndex = Array.from({ length: 100 }, (_, index) => index).find(index => !steps.some(step => step.index === index));
+  const addStep = () => {
+    if (!currentPlan || newStepIndex === undefined) return;
+    const items: RobotPlan['items'] = [...currentPlan.items, {
+      type: 'step', index: newStepIndex, triggerMode: 'MOTION', sensorPattern: getDefaultSensorPattern(hardwareConfig.sensorCount),
+      logicOp: 'OR', action: 'MAJU', triggerValue: 500, triggerUnit: 'ms', brake: 0,
+      speedL: 80, speedR: 80, pidId: 0, speedA: 0, timerValue: 0, timerUnit: 'ms', lineColor: 'HITAM',
+    }];
+    replacePlanItems(items);
+    setExpandedStep(items.length - 1);
+  };
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
   // Robot live state
   const [, setRobotPose] = useState<{ x: number; y: number; theta: number }>({
@@ -212,6 +240,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     stageStartEncR: 0,
     pidIntegral: 0,
     pidLastErr: 0,
+    pidLastUpdateMs: -Infinity,
+    pidCorrection: 0,
     wheelAngle: 0,
     finished: false,
   });
@@ -427,6 +457,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         stageStartEncR: 0,
         pidIntegral: 0,
         pidLastErr: 0,
+        pidLastUpdateMs: -Infinity,
+        pidCorrection: 0,
         wheelAngle: 0,
         finished: false,
       };
@@ -603,6 +635,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         stageStartEncR: 0,
         pidIntegral: 0,
         pidLastErr: 0,
+        pidLastUpdateMs: -Infinity,
+        pidCorrection: 0,
         wheelAngle: 0,
         finished: false,
       };
@@ -697,6 +731,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             if (step.pidId < 1 || step.pidId > 5) return 0;
             const pid = hardwareConfig.pids[step.pidId - 1];
             if (!pid) return 0;
+            if (s.elapsedMs - s.pidLastUpdateMs < pid.dt) return s.pidCorrection;
+            s.pidLastUpdateMs = s.elapsedMs;
 
             let weightedSum = 0;
             let activeCount = 0;
@@ -708,18 +744,20 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               }
             }
             const err = activeCount > 0 ? weightedSum / activeCount : s.pidLastErr * 0.9;
-            s.pidIntegral = Math.max(-30, Math.min(30, s.pidIntegral + err * (dtMs / 1000)));
-            const deriv = (err - s.pidLastErr) / Math.max(0.005, dtMs / 1000);
+            const dt = pid.dt / 1000;
+            s.pidIntegral = Math.max(-30, Math.min(30, s.pidIntegral + err * dt));
+            const deriv = (err - s.pidLastErr) / Math.max(0.005, dt);
             s.pidLastErr = err;
-            return pid.kp * err + pid.ki * s.pidIntegral + pid.kd * deriv * 0.08;
+            s.pidCorrection = pid.kp * err + pid.ki * s.pidIntegral + pid.kd * deriv * 0.08;
+            return s.pidCorrection;
           };
 
           const hasDurationElapsed = (targetVal: number, unit: 'ms' | 'enc_l' | 'enc_r'): boolean => {
             if (targetVal <= 0) return true;
-            if (unit === 'enc_l') {
+            if (hardwareConfig.hasEncoder && unit === 'enc_l') {
               return Math.abs(s.encL - s.stageStartEncL) >= targetVal;
             }
-            if (unit === 'enc_r') {
+            if (hardwareConfig.hasEncoder && unit === 'enc_r') {
               return Math.abs(s.encR - s.stageStartEncR) >= targetVal;
             }
             return s.elapsedMs - s.stageStartMs >= targetVal;
@@ -735,9 +773,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               s.stageStartEncR = s.encR;
             } else {
               // Evaluasi kecocokan sensor terlebih dahulu sebelum melakukan aksi apapun
-              const minGuardPassed = s.itemCursor === 0 ? true : s.elapsedMs - s.stageStartMs >= 35;
               const patternMatched =
-                minGuardPassed &&
                 evaluateSensorPatternMatch(
                   sensors,
                   normalizeSensorPattern(step.sensorPattern, hardwareConfig.sensorCount),
@@ -776,7 +812,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
           // ── 2. AKSI PADA INDEX (HANYA DIEKSEKUSI JIKA SENSOR SUDAH TERDETEKSI ATAU MOTION) ──
           if (s.subStage === 'ACTION') {
-            const trigVal = step.triggerValue ?? 100;
+            const trigVal = step.action === 'PAUSE' && step.triggerValue <= 0 ? 100 : step.triggerValue;
             setExecStatus({
               stepIndex: step.index,
               stage: 'ACTION',
@@ -784,46 +820,16 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               stoppedByInterrupt: false,
             });
 
-            if (step.action === 'PAUSE') {
-              cmdSpeedL = 0;
-              cmdSpeedR = 0;
-            } else if (step.action === 'LEFT') {
-              // Belok kiri: roda kiri mundur/lambat, roda kanan maju
-              if (step.speedL < 0 || (step.speedL === 0 && step.speedR > 0)) {
-                cmdSpeedL = step.speedL;
-                cmdSpeedR = step.speedR;
-              } else {
-                cmdSpeedL = -Math.abs(step.speedL);
-                cmdSpeedR = Math.abs(step.speedR);
-              }
-            } else if (step.action === 'RIGHT') {
-              // Belok kanan: roda kiri maju, roda kanan mundur/lambat
-              if (step.speedR < 0 || (step.speedR === 0 && step.speedL > 0)) {
-                cmdSpeedL = step.speedL;
-                cmdSpeedR = step.speedR;
-              } else {
-                cmdSpeedL = Math.abs(step.speedL);
-                cmdSpeedR = -Math.abs(step.speedR);
-              }
-            } else if (step.action === 'MUNDUR') {
-              cmdSpeedL = -Math.abs(step.speedL);
-              cmdSpeedR = -Math.abs(step.speedR);
-            } else {
-              // MAJU
-              if (step.pidId > 0) {
-                const pidCorr = computePidCorrection();
-                cmdSpeedL = Math.max(-255, Math.min(255, step.speedL + pidCorr));
-                cmdSpeedR = Math.max(-255, Math.min(255, step.speedR - pidCorr));
-              } else {
-                cmdSpeedL = step.speedL;
-                cmdSpeedR = step.speedR;
-              }
-            }
+            const direction = getRobotActionSpeeds(step);
+            cmdSpeedL = direction.left;
+            cmdSpeedR = direction.right;
 
             // Cek apakah aksi sudah selesai sesuai durasi / encoder yang ditentukan
-            const actionDone = hasDurationElapsed(trigVal, step.triggerUnit);
+            const actionDone = hasDurationElapsed(trigVal, step.action === 'PAUSE' ? 'ms' : step.triggerUnit);
 
             if (actionDone) {
+              cmdSpeedL = 0;
+              cmdSpeedR = 0;
               // Aksi pada index selesai -> Lanjut ke tahap Pengereman
               s.subStage = 'BRAKE';
               s.stageStartMs = s.elapsedMs;
@@ -832,24 +838,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             }
           } else if (s.subStage === 'BRAKE') {
             // ── 3. PENGEREMAN ──
-            const brakeMs = step.brake > 0 ? step.brake : 20;
-            let prevL = step.speedL || 140;
-            let prevR = step.speedR || 140;
-            if (step.action === 'LEFT') {
-              prevL = -Math.abs(step.speedL);
-              prevR = Math.abs(step.speedR);
-            } else if (step.action === 'RIGHT') {
-              prevL = Math.abs(step.speedL);
-              prevR = -Math.abs(step.speedR);
-            } else if (step.action === 'MUNDUR') {
-              prevL = -Math.abs(step.speedL);
-              prevR = -Math.abs(step.speedR);
-            } else if (step.action === 'PAUSE') {
-              prevL = 0;
-              prevR = 0;
+            const brakeMs = step.brake;
+            const direction = getRobotActionSpeeds(step);
+            if (!hasDurationElapsed(brakeMs, 'ms')) {
+              cmdSpeedL = Math.trunc(-direction.left / 2);
+              cmdSpeedR = Math.trunc(-direction.right / 2);
             }
-            cmdSpeedL = -prevL * 0.45;
-            cmdSpeedR = -prevR * 0.45;
 
             setExecStatus({
               stepIndex: step.index,
@@ -894,10 +888,11 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             });
 
             // Selalu mengikuti garis menggunakan kontrol PID saat Speed A
-            const pidCorr = computePidCorrection();
-            const baseSpeedA = step.speedA || 120;
-            cmdSpeedL = Math.max(-255, Math.min(255, baseSpeedA + pidCorr));
-            cmdSpeedR = Math.max(-255, Math.min(255, baseSpeedA - pidCorr));
+            if (!hasDurationElapsed(step.timerValue, step.timerUnit) && step.speedA !== 0) {
+              const pidCorr = computePidCorrection();
+              cmdSpeedL = Math.max(-255, Math.min(255, step.speedA + pidCorr));
+              cmdSpeedR = Math.max(-255, Math.min(255, step.speedA - pidCorr));
+            }
 
             if (hasDurationElapsed(step.timerValue, step.timerUnit)) {
               if (hasStopAfterSpeedA) {
@@ -1334,10 +1329,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           ],
           4,
           14,
-          '#facc15',
-          '#ca8a04',
-          '#eab308',
-          '#fef08a',
+          '#8b9599',
+          '#4a555c',
+          '#66737a',
+          '#dbe6e8',
           1
         );
 
@@ -1353,7 +1348,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             ],
             5,
             18,
-            '#38bdf8',
+            '#648b89',
             '#0284c7',
             '#0369a1',
             '#e0f2fe',
@@ -1388,10 +1383,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           ],
           5,
           16,
-          '#f59e0b',
-          '#d97706',
-          '#b45309',
-          '#fef3c7',
+          '#707c82',
+          '#333f47',
+          '#444e53',
+          '#aab4bc',
           0.9
         );
 
@@ -1414,25 +1409,25 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       // 3. Main Line Follower T-Hammerhead PCB Chassis (Rear Deck + Neck Bridge + Wide Front Sensor Wing)
       // 3a. Rear & Center Chassis Deck (Vibrant Robotics Orange/Carbon)
       const mainDeckPts: Array<[number, number]> = [
-        [25, -12],
-        [25, 12],
-        [10, 14],
-        [6, 22],
-        [-27, 22],
-        [-33, 16],
-        [-33, -16],
-        [-27, -22],
-        [6, -22],
-        [10, -14],
+        [27, -9],
+        [27, 9],
+        [7, 14],
+        [4, 22],
+        [-24, 22],
+        [-31, 14],
+        [-31, -14],
+        [-24, -22],
+        [4, -22],
+        [7, -14],
       ];
       drawExtrudedLocalPoly(
         mainDeckPts,
         5,
         13,
-        '#f97316',
-        '#c2410c',
-        '#ea580c',
-        '#ffedd5',
+        '#2a3e45',
+        '#14282d',
+        '#24363c',
+        '#5f797c',
         1.5
       );
 
@@ -1442,7 +1437,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         const tEnd = localToWorld(27, traceY * 1.4);
         const pStart = project3D(tStart.wx, tStart.wy, 13.4 * rScale);
         const pEnd = project3D(tEnd.wx, tEnd.wy, 13.4 * rScale);
-        ctx.strokeStyle = '#fde047';
+        ctx.strokeStyle = '#648b89';
         ctx.lineWidth = 1.1;
         ctx.beginPath();
         ctx.moveTo(pStart.sx, pStart.sy);
@@ -1481,7 +1476,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         '#0f172a',
         '#020617',
         '#1e293b',
-        '#38bdf8',
+        '#648b89',
         1.6
       );
 
@@ -1496,10 +1491,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         ],
         13,
         20,
-        '#2563eb',
-        '#1d4ed8',
-        '#1e40af',
-        '#93c5fd',
+        '#374151',
+        '#1f2937',
+        '#283440',
+        '#778792',
         1
       );
       // Yellow LiPo strap
@@ -1512,9 +1507,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         ],
         13.2,
         20.4,
-        '#facc15',
-        '#ca8a04',
-        '#eab308'
+        '#8b9599',
+        '#4a555c',
+        '#66737a'
       );
 
       // 4b. Microcontroller Board (Teal/Emerald PCB in Center)
@@ -1595,7 +1590,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         localToWorld(14, -5.5),
         localToWorld(14, 5.5),
       ].map((p) => project3D(p.wx, p.wy, 14.5 * rScale));
-      ctx.fillStyle = '#fef08a';
+      ctx.fillStyle = '#dbe6e8';
       ctx.beginPath();
       arrowPts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
       ctx.closePath();
@@ -1771,6 +1766,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   };
 
   const boardPins = getBoardPinOptions(hardwareConfig.mcu);
+  const sensorPresets = getSensorPresetOptions(hardwareConfig.sensorCount);
   const controlStyle = `min-h-9 rounded-lg border px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 ${isLight ? 'border-slate-300 bg-white text-slate-800' : 'border-slate-600 bg-slate-800 text-slate-100'}`;
 
   return (
@@ -1912,7 +1908,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#132238] hover:bg-[#1a2e4a] text-amber-300 border-amber-500/30'
             }`}
           >
-            <Cpu className="w-3 h-3" /> ⚙️ Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
+            <Cpu className="w-3 h-3" /> Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
           </button>
 
           <button
@@ -1926,7 +1922,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#132238] hover:bg-[#1a2e4a] text-fuchsia-300 border-fuchsia-500/30'
             }`}
           >
-            <Sliders className="w-3 h-3" /> 🎛️ PID 1–5
+            <Sliders className="w-3 h-3" /> PID 1–5
           </button>
 
           <button
@@ -1959,10 +1955,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 : 'bg-[#111e34] text-sky-200 border-slate-700'
             }`}
           >
-            <option value="3d_persp">🎥 3D Perspektif (Orbit)</option>
-            <option value="2d_top">🗺️ 2D Atas (Top-Down)</option>
-            <option value="chase_cam">🏎️ Chase Cam (Belakang Robot)</option>
-            <option value="pov_cam">👀 POV Cam (Depan Robot)</option>
+            <option value="3d_persp">3D perspektif</option>
+            <option value="2d_top">Tampak atas</option>
+            <option value="chase_cam">Ikuti dari belakang</option>
+            <option value="pov_cam">Kamera robot</option>
           </select>
 
           <button
@@ -2029,7 +2025,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-purple-300'
             }`}
           >
-            🏁 Set Start
+            Titik mulai
           </button>
 
           <button
@@ -2043,7 +2039,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-emerald-300'
             }`}
           >
-            🎯 Set Finis
+            Titik finis
           </button>
 
           <button
@@ -2057,7 +2053,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
             }`}
           >
-            📍 Pindah Robot
+            Pindah robot
           </button>
 
           <button
@@ -2075,7 +2071,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
             }`}
           >
-            ✏️ Gambar Jalur
+            Gambar jalur
           </button>
 
           <div
@@ -2151,40 +2147,79 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           <section aria-label="Langkah Plan" className={`absolute inset-x-2 top-2 z-30 max-h-[calc(100%-1rem)] overflow-auto rounded-2xl border p-3 shadow-xl ${isLight ? 'border-sky-200 bg-white' : 'border-slate-600 bg-slate-900'}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-extrabold">{currentPlan ? `Langkah Plan ${currentPlan.planId}` : 'Langkah Plan'}</h3>
-              <button type="button" onClick={() => setActiveDrawer('none')} className={controlStyle}>Tutup</button>
+              <div className="flex gap-2">
+                <button type="button" onClick={addStep} disabled={!currentPlan || isRunning || newStepIndex === undefined} className={controlStyle}>Tambah langkah</button>
+                <button type="button" onClick={() => setActiveDrawer('none')} className={controlStyle}>Tutup</button>
+              </div>
             </div>
-            <p className="my-2 text-xs">Ubah gerakan dan tenaga motor kiri/kanan. Pilih langkah awal di atas untuk mencoba bagian tertentu.</p>
-            {currentPlan ? (
-              <table className="w-full text-left text-xs">
-                <thead><tr><th scope="col">Langkah</th><th scope="col">Gerakan</th><th scope="col">PWM kiri</th><th scope="col">PWM kanan</th></tr></thead>
-                <tbody>
-                  {currentPlan.items.map((item, position) => {
-                    if (item.type === 'stop_here') return <tr key={position}><td colSpan={4} className="py-1.5 font-semibold">Berhenti di tahap {item.stage}</td></tr>;
-                    const active = isRunning && execStatus.stepIndex === item.index;
-                    return <tr key={item.blockId ?? position} aria-current={active ? 'step' : undefined}
-                      className={active ? isLight ? 'bg-sky-100' : 'bg-sky-900' : undefined}>
-                      <th scope="row" className="px-1 py-1">{item.index}</th>
-                      <td className="py-1"><select aria-label={`Gerakan langkah ${item.index}`} value={item.action}
-                          disabled={isRunning || !plans.length}
-                          onChange={event => editStep(position, { action: event.target.value as PlanActionType })} className={controlStyle}>
-                        <option value="MAJU">Maju</option><option value="MUNDUR">Mundur</option>
-                        <option value="LEFT">Belok kiri</option><option value="RIGHT">Belok kanan</option><option value="PAUSE">Jeda</option>
-                      </select></td>
-                      {(['speedL', 'speedR'] as const).map((side, index) => <td key={side} className="px-1 py-1">
-                        <input type="number" min={-255} max={255} aria-label={`PWM ${index === 0 ? 'kiri' : 'kanan'} langkah ${item.index}`}
-                          key={item[side]} defaultValue={item[side]} disabled={isRunning || !plans.length} className={`${controlStyle} w-14 sm:w-16`}
+            <p className="my-2 text-xs text-slate-500 dark:text-slate-400">Pilih langkah untuk mengatur sensor, motor, dan kapan robot berhenti.</p>
+            {currentPlan?.items.length ? (
+              <ol className="divide-y divide-slate-500/20">
+                {currentPlan.items.map((item, position) => {
+                  if (item.type !== 'step') return position === 0 || currentPlan.items[position - 1].type === 'stop_here'
+                    ? <li key={position} className="py-2 text-xs">Stop · {item.stage}</li> : null;
+                  const active = isRunning && execStatus.stepIndex === item.index;
+                  const nextItem = currentPlan.items[position + 1];
+                  const numericFields = [
+                    ['index', 'Index', 0, 99], ['triggerValue', 'Durasi gerakan', 0, 20000], ['brake', 'Rem (ms)', 0, 1000],
+                    ['speedL', 'PWM kiri', -255, 255], ['speedR', 'PWM kanan', -255, 255], ['speedA', 'Speed A', -255, 255],
+                    ['timerValue', 'Durasi Speed A', 0, 10000],
+                  ] as const;
+                  const unitOptions = [['ms', 'Milidetik'], ['enc_l', 'Encoder kiri'], ['enc_r', 'Encoder kanan']] as const;
+                  const choices = [
+                    ['triggerMode', 'Pemicu', [['SENSOR', 'Sensor garis'], ['MOTION', 'Langsung bergerak']]],
+                    ['sensorPattern', 'Pola sensor', [
+                      ...(sensorPresets.some(preset => preset.pattern === item.sensorPattern) ? [] : [[item.sensorPattern, item.sensorPattern]]),
+                      ...sensorPresets.map(preset => [preset.pattern, `${preset.label} · ${preset.pattern}`]),
+                    ]],
+                    ['logicOp', 'Logika sensor', [['EQUAL', 'EQUAL'], ['AND', 'AND'], ['OR', 'OR'], ['XOR', 'XOR']]],
+                    ['action', 'Gerakan', [['MAJU', 'Maju'], ['MUNDUR', 'Mundur'], ['LEFT', 'Belok kiri'], ['RIGHT', 'Belok kanan'], ['PAUSE', 'Jeda']]],
+                    ['triggerUnit', 'Satuan durasi gerakan', unitOptions],
+                    ['pidId', 'Profil PID', [['0', 'Tanpa PID'], ...hardwareConfig.pids.map(profile => [String(profile.id), `PID ${profile.id} · ${profile.label}`])]],
+                    ['timerUnit', 'Satuan Speed A', unitOptions],
+                    ['lineColor', 'Warna garis', [['HITAM', 'Hitam'], ['PUTIH', 'Putih']]],
+                  ] as const;
+                  return <li key={item.blockId ?? position} aria-current={active ? 'step' : undefined}>
+                    <button type="button" aria-expanded={expandedStep === position} onClick={() => setExpandedStep(value => value === position ? null : position)}
+                      className={`flex min-h-10 w-full items-center justify-between gap-2 px-2 text-left text-xs font-semibold ${active ? (isLight ? 'bg-sky-100' : 'bg-sky-950') : ''}`}>
+                      <span>Langkah {item.index} · {choices[3][2].find(([value]) => value === item.action)?.[1]}</span>
+                      <span className="font-mono">{item.speedL} / {item.speedR} PWM</span>
+                    </button>
+                    {expandedStep === position && <fieldset disabled={isRunning || !plans.length} className="grid grid-cols-2 gap-2 px-2 pb-3 text-xs sm:grid-cols-3">
+                      {choices.map(([field, label, options]) => <label key={field} className="grid min-w-0 gap-1">
+                        {label}
+                        <select value={item[field]} className={controlStyle}
+                          onChange={event => editStep(position, { [field]: field === 'pidId' ? Number(event.target.value) : event.target.value })}>
+                          {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+                        </select>
+                      </label>)}
+                      {numericFields.map(([field, label, min, max]) => <label key={field} className="grid min-w-0 gap-1">
+                        {label}
+                        <input key={item[field]} type="number" min={min} max={max} defaultValue={item[field]} className={controlStyle}
                           onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
                           onBlur={event => {
                             const input = event.currentTarget;
-                            const value = Number.isFinite(input.valueAsNumber) ? Math.min(255, Math.max(-255, Math.round(input.valueAsNumber))) : item[side];
+                            const value = Number.isFinite(input.valueAsNumber) ? Math.min(max, Math.max(min, Math.round(input.valueAsNumber))) : item[field];
                             input.value = String(value);
-                            if (value !== item[side]) editStep(position, { [side]: value });
+                            if (value !== item[field]) editStep(position, { [field]: value });
                           }} />
-                      </td>)}
-                    </tr>;
-                  })}
-                </tbody>
-              </table>
+                      </label>)}
+                      <label className="grid min-w-0 gap-1">Berhenti setelah
+                        <select value={nextItem?.type === 'stop_here' ? nextItem.stage : ''} className={controlStyle}
+                          onChange={event => changeStop(position, event.target.value as '' | 'ACTION' | 'SPEED_A')}>
+                          <option value="">Lanjut ke langkah berikutnya</option>
+                          <option value="ACTION">Gerakan dan rem</option>
+                          <option value="SPEED_A">Speed A</option>
+                        </select>
+                      </label>
+                      <button type="button" className={controlStyle} onClick={() => {
+                        replacePlanItems(currentPlan.items.filter((_, i) => i !== position && !(i === position + 1 && nextItem?.type === 'stop_here')));
+                        setExpandedStep(null);
+                      }}>Hapus langkah</button>
+                    </fieldset>}
+                  </li>;
+                })}
+              </ol>
             ) : <p className="text-xs">Susun Plan di editor blok untuk mulai.</p>}
           </section>
         )}
@@ -2845,7 +2880,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               isLight ? 'text-sky-700' : 'text-sky-300'
             }`}
           >
-            👀 Sensor ({hardwareConfig.sensorCount}):
+            Sensor ({hardwareConfig.sensorCount}):
           </span>
           <div className="flex items-center gap-1">
             {sensorReadings.map((active, i) => (

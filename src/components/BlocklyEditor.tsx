@@ -191,10 +191,10 @@ const registerRobotPlanBlocks = () => {
           ]),
           'ACTION'
         )
-        .appendField(new Blockly.FieldNumber(100, 0, 20000, 10), 'TRIG_VAL')
+        .appendField(new Blockly.FieldNumber(100, 0, 20000, 1), 'TRIG_VAL')
         .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TRIG_UNIT')
         .appendField('│ Brake')
-        .appendField(new Blockly.FieldNumber(0, 0, 1000, 5), 'BRAKE');
+        .appendField(new Blockly.FieldNumber(0, 0, 1000, 1), 'BRAKE');
 
       this.appendDummyInput()
         .appendField('   ⚙️ Speed L')
@@ -214,9 +214,9 @@ const registerRobotPlanBlocks = () => {
           'PID_ID'
         )
         .appendField('│ Follow at Speed A')
-        .appendField(new Blockly.FieldNumber(120, -255, 255, 5), 'SPEED_A')
+        .appendField(new Blockly.FieldNumber(120, -255, 255, 1), 'SPEED_A')
         .appendField('Timer')
-        .appendField(new Blockly.FieldNumber(120, 0, 10000, 10), 'TIMER_VAL')
+        .appendField(new Blockly.FieldNumber(120, 0, 10000, 1), 'TIMER_VAL')
         .appendField(new Blockly.FieldDropdown(getDurationUnitOptions), 'TIMER_UNIT')
         .appendField('│ Line')
         .appendField(

@@ -833,6 +833,19 @@ export function evaluateSensorPatternMatch(
 /**
  * Generates complete, hardware-ready Arduino C++ (.ino) code from RobotHardwareConfig + RobotPlan list.
  */
+export function getRobotActionSpeeds(step: Pick<RobotPlanStep, 'action' | 'speedL' | 'speedR'>) {
+  const { action, speedL, speedR } = step;
+  if (action === 'PAUSE') return { left: 0, right: 0 };
+  if (action === 'MUNDUR') return { left: -Math.abs(speedL), right: -Math.abs(speedR) };
+  if (action === 'LEFT' && !(speedL < 0 || (speedL === 0 && speedR > 0))) {
+    return { left: -Math.abs(speedL), right: Math.abs(speedR) };
+  }
+  if (action === 'RIGHT' && !(speedR < 0 || (speedR === 0 && speedL > 0))) {
+    return { left: Math.abs(speedL), right: -Math.abs(speedR) };
+  }
+  return { left: speedL, right: speedR };
+}
+
 export function generateRobotPlanArduinoCode(
   hw: RobotHardwareConfig,
   plans: RobotPlan[],
@@ -846,7 +859,7 @@ export function generateRobotPlanArduinoCode(
   const pidLines = hw.pids
     .map(
       (pid) =>
-        `  { ${pid.kp.toFixed(2)}f, ${pid.ki.toFixed(3)}f, ${pid.kd.toFixed(2)}f, ${pid.dt} } // PID ${pid.id}: ${pid.label}`
+        `  { ${pid.kp.toFixed(2)}f, ${pid.ki.toFixed(3)}f, ${pid.kd.toFixed(2)}f, ${pid.dt} }, // PID ${pid.id}: ${pid.label}`
     )
     .join('\n');
 
@@ -886,7 +899,7 @@ long readUltrasonicCm() {
   const planFunctions = plans
     .map((plan) => {
       const bodyLines: string[] = [];
-      let lastStepIdx = 0;
+      let lastStepIdx = -1;
       for (const item of plan.items) {
         if (item.type === 'step') {
           lastStepIdx = item.index;
@@ -910,6 +923,8 @@ long readUltrasonicCm() {
             );
             bodyLines.push(`  stopRobotForever(); return;`);
           }
+        } else if (lastStepIdx === -1 || plan.items[plan.items.indexOf(item) - 1]?.type !== 'step') {
+          bodyLines.push('  stopRobotForever(); return;');
         }
       }
       if (bodyLines.length === 0) {
@@ -933,6 +948,9 @@ long readUltrasonicCm() {
 #define MOTOR_DIR_R2 ${p.dirR2}
 #define NUM_SENSORS ${hw.sensorCount}
 #define MOTOR_RPM ${hw.motorRpm}
+#ifndef SENSOR_THRESHOLD
+#define SENSOR_THRESHOLD ${hw.mcu === 'ESP32 DevKit V1' ? 2048 : 512}
+#endif
 
 ${sensorPinSection}
 ${encoderSection}
@@ -943,6 +961,18 @@ enum LogicOp { OP_EQUAL, OP_AND, OP_OR, OP_XOR };
 enum DurationUnit { UNIT_MS, UNIT_ENC_L, UNIT_ENC_R };
 enum LineColor { LINE_HITAM, LINE_PUTIH };
 enum StopStage { STOP_NONE, STOP_AT_ACTION, STOP_AT_SPEED_A };
+
+// Explicit declarations keep the sketch compatible with Arduino's prototype generation.
+void readAllSensors(LineColor lineColor);
+bool matchSensorPattern(const char* pattern, LogicOp op, LineColor lineColor);
+long readEncoderTicks(DurationUnit unit);
+bool usesEncoder(DurationUnit unit);
+bool durationPending(long target, DurationUnit unit, unsigned long startMs, long startTicks);
+void waitDuration(long target, DurationUnit unit);
+void followLine(int baseSpeed, int pidId, LineColor lineColor);
+void runStep(int idx, ActionType act, long trigVal, DurationUnit trigUnit,
+  const char* pattern, LogicOp op, int brakeMs, int speedL, int speedR,
+  int pidId, int speedA, long timerVal, DurationUnit timerUnit, LineColor lineColor, StopStage stopStage);
 
 struct PIDConfig { float kp; float ki; float kd; int dt; };
 PIDConfig pidList[5] = {
@@ -977,7 +1007,7 @@ ${isMux16 ? '    digitalWrite(MUX_S3, (i >> 3) & 0x01);\n' : ''}    delayMicrose
     int raw = analogRead(MUX_SIG);`
     : `    int raw = analogRead(SENSOR_PINS[i]);`
 }
-    bool isDark = (raw > 512);
+    bool isDark = raw >= SENSOR_THRESHOLD;
     sensorState[i] = (lineColor == LINE_HITAM) ? isDark : !isDark;
   }
 }
@@ -1000,26 +1030,31 @@ bool matchSensorPattern(const char* pattern, LogicOp op, LineColor lineColor) {
   return false;
 }
 
-void waitDuration(long targetVal, DurationUnit unit) {
-  if (targetVal <= 0) return;
-${
-  hw.hasEncoder
-    ? `  if (unit == UNIT_ENC_L) {
-    long startL = encLeftCount;
-    while ((encLeftCount - startL) < targetVal) { delay(1); }
-    return;
-  }
-  if (unit == UNIT_ENC_R) {
-    long startR = encRightCount;
-    while ((encRightCount - startR) < targetVal) { delay(1); }
-    return;
-  }`
-    : ''
+long readEncoderTicks(DurationUnit unit) {
+${hw.hasEncoder ? `  noInterrupts();
+  long ticks = unit == UNIT_ENC_L ? encLeftCount : encRightCount;
+  interrupts();
+  return ticks;` : '  return 0;'}
 }
-  delay(targetVal);
+
+bool usesEncoder(DurationUnit unit) {
+  return ${hw.hasEncoder ? 'unit != UNIT_MS' : 'false'};
+}
+
+bool durationPending(long target, DurationUnit unit, unsigned long startMs, long startTicks) {
+  if (target <= 0) return false;
+  if (usesEncoder(unit)) return readEncoderTicks(unit) - startTicks < target;
+  return millis() - startMs < (unsigned long)target;
+}
+
+void waitDuration(long target, DurationUnit unit) {
+  unsigned long startMs = millis();
+  long startTicks = usesEncoder(unit) ? readEncoderTicks(unit) : 0;
+  while (durationPending(target, unit, startMs, startTicks)) delay(1);
 }
 
 void followLine(int baseSpeed, int pidId, LineColor lineColor) {
+  if (baseSpeed == 0) { stopMotors(); return; }
   readAllSensors(lineColor);
   if (pidId < 1 || pidId > 5) {
     setMotorSpeed(baseSpeed, baseSpeed);
@@ -1048,7 +1083,7 @@ void runStep(
   const char* pattern, LogicOp op,
   int brakeMs, int speedL, int speedR,
   int pidId, int speedA, long timerVal, DurationUnit timerUnit,
-  LineColor lineColor, StopStage stopStage = STOP_NONE
+  LineColor lineColor, StopStage stopStage
 ) {
   // Tahap 1: Evaluasi Sensor: Apakah sensor terdeteksi? Jika belum, telusuri garis atau tunggu
   if (pattern[0] != 'M') {
@@ -1064,34 +1099,32 @@ void runStep(
   }
 
   // Tahap 2: Sensor Terdeteksi -> Jalankan Aksi Index
+  int actSpeedL = speedL;
+  int actSpeedR = speedR;
   if (act == ACT_PAUSE) {
-    stopMotors();
-    waitDuration(trigVal > 0 ? trigVal : 100, trigUnit);
-  } else {
-    int actSpeedL = speedL;
-    int actSpeedR = speedR;
-    if (act == ACT_LEFT) {
-      actSpeedL = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedL : -abs(speedL);
-      actSpeedR = (speedL < 0 || (speedL == 0 && speedR > 0)) ? speedR : abs(speedR);
-    } else if (act == ACT_RIGHT) {
-      actSpeedL = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedL : abs(speedL);
-      actSpeedR = (speedR < 0 || (speedR == 0 && speedL > 0)) ? speedR : -abs(speedR);
-    } else if (act == ACT_MUNDUR) {
-      actSpeedL = -abs(speedL);
-      actSpeedR = -abs(speedR);
-    }
+    actSpeedL = 0;
+    actSpeedR = 0;
+    trigUnit = UNIT_MS;
+    if (trigVal <= 0) trigVal = 100;
+  } else if (act == ACT_LEFT && !(speedL < 0 || (speedL == 0 && speedR > 0))) {
+    actSpeedL = -abs(speedL);
+    actSpeedR = abs(speedR);
+  } else if (act == ACT_RIGHT && !(speedR < 0 || (speedR == 0 && speedL > 0))) {
+    actSpeedL = abs(speedL);
+    actSpeedR = -abs(speedR);
+  } else if (act == ACT_MUNDUR) {
+    actSpeedL = -abs(speedL);
+    actSpeedR = -abs(speedR);
+  }
+  if (trigVal > 0) {
     setMotorSpeed(actSpeedL, actSpeedR);
-    if (trigVal > 0) {
-      waitDuration(trigVal, trigUnit);
-    }
+    waitDuration(trigVal, trigUnit);
   }
-
-  // Brake jika ada
   if (brakeMs > 0) {
-    setMotorSpeed(-speedL / 2, -speedR / 2);
+    setMotorSpeed(-actSpeedL / 2, -actSpeedR / 2);
     delay(brakeMs);
-    stopMotors();
   }
+  stopMotors();
 
   if (stopStage == STOP_AT_ACTION) {
     stopMotors();
@@ -1101,15 +1134,14 @@ void runStep(
   // Tahap 3: Lanjut Speed A yaitu Mengikuti Garis selama waktu yang ditentukan / encoder
   if (timerVal > 0) {
     unsigned long startT = millis();
-    while (millis() - startT < (unsigned long)timerVal) {
+    long startTicks = usesEncoder(timerUnit) ? readEncoderTicks(timerUnit) : 0;
+    while (durationPending(timerVal, timerUnit, startT, startTicks)) {
       followLine(speedA, pidId, lineColor);
       delay(pidId >= 1 && pidId <= 5 ? pidList[pidId - 1].dt : 5);
     }
   }
 
-  if (stopStage == STOP_AT_SPEED_A) {
-    stopMotors();
-  }
+  stopMotors();
 }
 
 ${planFunctions}
@@ -1141,7 +1173,7 @@ ${isMux16 ? '  pinMode(MUX_S3, OUTPUT);\n' : ''}`
       ? `  pinMode(ULTRA_TRIG, OUTPUT);
   pinMode(ULTRA_ECHO, INPUT);\n`
       : ''
-  }  plan${activePlanToRun}();
+  }  ${plans.some(plan => plan.planId === activePlanToRun) ? `plan${activePlanToRun}();` : '// No active plan'}
   stopMotors();
 }
 
@@ -1160,6 +1192,15 @@ export function generateRobotPlanPythonCode(
   activePlanToRun = 1
 ): string {
   const p = hw.pins;
+  const direct = hw.sensorCount === 2 || hw.sensorCount === 4 || hw.sensorMode === 'direct';
+  const esp8266 = hw.mcu === 'NodeMCU / ESP8266';
+  const esp32 = hw.mcu === 'ESP32 DevKit V1';
+  const nodeMcuPins = [16, 5, 4, 0, 2, 14, 12, 13, 15];
+  const gpio = (pin: string) => esp8266 && /^D[0-8]$/.test(pin)
+    ? String(nodeMcuPins[Number(pin.slice(1))])
+    : /^\d+$/.test(pin) ? String(Number(pin)) : '0';
+  const muxPins = [p.muxS0, p.muxS1, p.muxS2, ...(hw.sensorMode === 'mux_4067' ? [p.muxS3] : [])];
+  const adc = (pin: string) => esp8266 ? 'ADC(0)' : `make_adc(${gpio(pin)})`;
   const pidEntries = hw.pids
     .map(
       (pid) =>
@@ -1185,8 +1226,10 @@ export function generateRobotPlanPythonCode(
           );
           if (stopStage !== 'NONE') {
             lines.push(`    stop_motors()`);
-            lines.push(`    return  # 🛑 Stop Disini (Tahap ${stopStage})`);
+            lines.push(`    return  # Stop at ${stopStage}`);
           }
+        } else if (plan.items[i - 1]?.type !== 'step') {
+          lines.push('    stop_motors()', '    return  # Stop here');
         }
       }
       if (lines.length === 0) lines.push('    stop_motors()');
@@ -1201,24 +1244,107 @@ export function generateRobotPlanPythonCode(
 from machine import Pin, PWM, ADC
 import time
 
-MOTOR_PWM_L = "${p.pwmL}"
-MOTOR_PWM_R = "${p.pwmR}"
+${!esp8266 && !esp32 ? 'raise RuntimeError("Use the generated Arduino .ino sketch for this board.")\n' : ''}
+${esp8266 && direct ? 'raise RuntimeError("Use a multiplexer for multiple analog sensors on ESP8266.")\n' : ''}
 NUM_SENSORS = ${hw.sensorCount}
-MOTOR_RPM = ${hw.motorRpm}
+SENSOR_THRESHOLD = 32768
 HAS_ENCODER = ${hw.hasEncoder ? 'True' : 'False'}
-
 PID_PROFILES = {
 ${pidEntries}
 }
 
+def make_adc(pin):
+    channel = ADC(Pin(pin))
+    if hasattr(ADC, "ATTN_11DB"):
+        channel.atten(ADC.ATTN_11DB)
+    return channel
+
+motor_l = PWM(Pin(${gpio(p.pwmL)}), freq=1000, duty=0)
+motor_r = PWM(Pin(${gpio(p.pwmR)}), freq=1000, duty=0)
+dir_l = (Pin(${gpio(p.dirL1)}, Pin.OUT), Pin(${gpio(p.dirL2)}, Pin.OUT))
+dir_r = (Pin(${gpio(p.dirR1)}, Pin.OUT), Pin(${gpio(p.dirR2)}, Pin.OUT))
+${direct
+  ? `sensor_channels = [${p.sensorDirectPins.slice(0, hw.sensorCount).map(adc).join(', ')}]`
+  : `sensor_channel = ${adc(p.muxSig)}
+mux_select = [${muxPins.map(pin => `Pin(${gpio(pin)}, Pin.OUT)`).join(', ')}]`}
+encoder_ticks = [0, 0]
+pid_integral = 0.0
+pid_last_error = 0.0
+
+def on_encoder_left(pin):
+    encoder_ticks[0] += 1
+
+def on_encoder_right(pin):
+    encoder_ticks[1] += 1
+
+if HAS_ENCODER:
+    encoder_left = Pin(${gpio(p.encLA)}, Pin.IN${esp32 && [34, 35, 36, 39].includes(Number(p.encLA)) ? '' : ', Pin.PULL_UP'})
+    encoder_right = Pin(${gpio(p.encRA)}, Pin.IN${esp32 && [34, 35, 36, 39].includes(Number(p.encRA)) ? '' : ', Pin.PULL_UP'})
+    encoder_left.irq(trigger=Pin.IRQ_RISING, handler=on_encoder_left)
+    encoder_right.irq(trigger=Pin.IRQ_RISING, handler=on_encoder_right)
+
 def set_motor_speed(speed_l, speed_r):
-    pass
+    for speed, pwm, direction in ((speed_l, motor_l, dir_l), (speed_r, motor_r, dir_r)):
+        value = int(min(255, abs(speed)))
+        direction[0].value(int(speed >= 0))
+        direction[1].value(int(speed < 0))
+        if hasattr(pwm, "duty_u16"):
+            pwm.duty_u16(value * 257)
+        else:
+            pwm.duty(value * 1023 // 255)
+
+def stop_motors():
+    set_motor_speed(0, 0)
+
+def read_sensors(line_color):
+    states = []
+    for index in range(NUM_SENSORS):
+${direct ? '        adc = sensor_channels[index]' : `        for bit, pin in enumerate(mux_select):
+            pin.value((index >> bit) & 1)
+        time.sleep_us(10)
+        adc = sensor_channel`}
+        raw = adc.read_u16() if hasattr(adc, "read_u16") else adc.read() * ${esp8266 ? 64 : 16}
+        dark = raw >= SENSOR_THRESHOLD
+        states.append(dark if line_color == "HITAM" else not dark)
+    return states
 
 def follow_line(base_speed, pid_id, line_color):
-    pass
+    global pid_integral, pid_last_error
+    if base_speed == 0 or pid_id not in PID_PROFILES:
+        set_motor_speed(base_speed, base_speed)
+        return
+    sensors = read_sensors(line_color)
+    weights = [i - (NUM_SENSORS - 1) / 2 for i, active in enumerate(sensors) if active]
+    error = sum(weights) / len(weights) if weights else pid_last_error * 0.9
+    pid = PID_PROFILES[pid_id]
+    dt = pid["dt"] / 1000
+    pid_integral = max(-30, min(30, pid_integral + error * dt))
+    correction = pid["kp"] * error + pid["ki"] * pid_integral + pid["kd"] * (error - pid_last_error) / max(dt, 0.005) * 0.08
+    pid_last_error = error
+    set_motor_speed(base_speed + correction, base_speed - correction)
 
 def match_sensor_pattern(pattern, logic_op, line_color):
-    return True
+    checked = [active for mark, active in zip(pattern, read_sensors(line_color)) if mark == "0"]
+    if not checked:
+        return True
+    if logic_op == "XOR":
+        return sum(checked) % 2 == 1
+    return any(checked) if logic_op == "OR" else all(checked)
+
+def duration_counter(unit):
+    if HAS_ENCODER and unit in ("enc_l", "enc_r"):
+        return encoder_ticks[0 if unit == "enc_l" else 1]
+    return time.ticks_ms()
+
+def duration_pending(target, unit, start):
+    now = duration_counter(unit)
+    elapsed = now - start if HAS_ENCODER and unit in ("enc_l", "enc_r") else time.ticks_diff(now, start)
+    return target > elapsed
+
+def wait_duration(target, unit):
+    start = duration_counter(unit)
+    while duration_pending(target, unit, start):
+        time.sleep_ms(1)
 
 def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, speed_l, speed_r, pid_id, speed_a, timer_val, timer_unit, line_color, stop_stage="NONE"):
     # Tahap 1: Evaluasi Sensor: Apakah sensor terdeteksi? Jika belum, telusuri garis atau tunggu
@@ -1231,29 +1357,23 @@ def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, spee
                 stop_motors()
                 time.sleep_ms(10)
 
-    # Tahap 2: Sensor Terdeteksi -> Jalankan Aksi Index
+    act_l, act_r = speed_l, speed_r
     if action == "PAUSE":
-        stop_motors()
-        time.sleep_ms(trig_val if trig_val > 0 else 100)
-    else:
-        act_l, act_r = speed_l, speed_r
-        if action == "LEFT":
-            act_l = speed_l if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else -abs(speed_l)
-            act_r = speed_r if (speed_l < 0 or (speed_l == 0 and speed_r > 0)) else abs(speed_r)
-        elif action == "RIGHT":
-            act_l = speed_l if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else abs(speed_l)
-            act_r = speed_r if (speed_r < 0 or (speed_r == 0 and speed_l > 0)) else -abs(speed_r)
-        elif action == "MUNDUR":
-            act_l, act_r = -abs(speed_l), -abs(speed_r)
+        act_l, act_r = 0, 0
+        trig_val, trig_unit = trig_val if trig_val > 0 else 100, "ms"
+    elif action == "LEFT" and not (speed_l < 0 or (speed_l == 0 and speed_r > 0)):
+        act_l, act_r = -abs(speed_l), abs(speed_r)
+    elif action == "RIGHT" and not (speed_r < 0 or (speed_r == 0 and speed_l > 0)):
+        act_l, act_r = abs(speed_l), -abs(speed_r)
+    elif action == "MUNDUR":
+        act_l, act_r = -abs(speed_l), -abs(speed_r)
+    if trig_val > 0:
         set_motor_speed(act_l, act_r)
-        if trig_val > 0:
-            time.sleep_ms(trig_val)
-
-    # Brake jika ada
+        wait_duration(trig_val, trig_unit)
     if brake_ms > 0:
-        set_motor_speed(-speed_l // 2, -speed_r // 2)
+        set_motor_speed(int(-act_l / 2), int(-act_r / 2))
         time.sleep_ms(brake_ms)
-        stop_motors()
+    stop_motors()
 
     if stop_stage == "ACTION":
         stop_motors()
@@ -1261,18 +1381,18 @@ def run_step(idx, action, trig_val, trig_unit, pattern, logic_op, brake_ms, spee
 
     # Tahap 3: Lanjut Speed A (Mengikuti Garis) selama waktu yang ditentukan / encoder
     if timer_val > 0:
-        start_t = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start_t) < timer_val:
+        start_t = duration_counter(timer_unit)
+        while duration_pending(timer_val, timer_unit, start_t):
             follow_line(speed_a, pid_id, line_color)
-            time.sleep_ms(10)
+            time.sleep_ms(PID_PROFILES[pid_id]["dt"] if pid_id in PID_PROFILES else 5)
 
-    if stop_stage == "SPEED_A":
-        stop_motors()
+    stop_motors()
 
 ${planDefs}
 
-# Jalankan Plan ${activePlanToRun}
-plan_${activePlanToRun}()
+# Run Plan ${activePlanToRun}
+stop_motors()
+${plans.some(plan => plan.planId === activePlanToRun) ? `plan_${activePlanToRun}()` : '# No active plan'}
 stop_motors()
 `;
 }
@@ -1289,11 +1409,20 @@ export function parseRobotPlansFromCode(
     return null;
   }
 
+  const cppCode = code.includes('run_step(') && !code.includes('runStep(')
+    ? Array.from(code.matchAll(/^def plan_(\d+)\(\):\s*\n((?:[ \t]+[^\n]*\n?)*)/gm), ([, id, body]) => {
+        const calls = Array.from(body.matchAll(/^\s*run_step\(\s*(\d+)\s*,\s*"(\w+)"\s*,\s*(-?\d+)\s*,\s*"(\w+)"\s*,\s*"([^"]*)"\s*,\s*"(\w+)"\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*"(\w+)"\s*,\s*"(\w+)"\s*,\s*"(\w+)"\s*\)/gm),
+          ([, index, action, trigger, units, pattern, logic, brake, left, right, pid, speed, timer, timerUnit, line, stop]) =>
+            `runStep(${index}, ACT_${action}, ${trigger}, UNIT_${units.toUpperCase()}, "${pattern}", OP_${logic}, ${brake}, ${left}, ${right}, ${pid}, ${speed}, ${timer}, UNIT_${timerUnit.toUpperCase()}, LINE_${line}, STOP_${stop === 'NONE' ? 'NONE' : `AT_${stop}`});`);
+        return `void plan${id}() {\n${calls.join('\n')}\n}`;
+      }).join('\n')
+    : code;
+
   const plans: RobotPlan[] = [];
   // Match C++ void planN() { ... }
   const cppPlanRegex = /void\s+plan(\d+)\s*\(\s*\)\s*\{([\s\S]*?)\}/g;
   let match: RegExpExecArray | null;
-  while ((match = cppPlanRegex.exec(code)) !== null) {
+  while ((match = cppPlanRegex.exec(cppCode)) !== null) {
     const planId = parseInt(match[1], 10);
     const body = match[2];
     const items: RobotPlanItem[] = [];
@@ -1319,7 +1448,7 @@ export function parseRobotPlansFromCode(
         brake: parseInt(sm[7], 10) || 0,
         speedL: parseInt(sm[8], 10) || 0,
         speedR: parseInt(sm[9], 10) || 0,
-        pidId: (parseInt(sm[10], 10) as 0 | 1 | 2 | 3 | 4 | 5) || 1,
+        pidId: Number(sm[10]) as RobotPlanStep['pidId'],
         speedA: parseInt(sm[11], 10) || 0,
         timerValue: parseInt(sm[12], 10) || 0,
         timerUnit: (sm[13].toLowerCase() as PlanDurationUnit) || 'ms',
@@ -1356,7 +1485,7 @@ export function parseRobotPlansFromCode(
           brake: parseInt(sm[5], 10) || 0,
           speedL: parseInt(sm[6], 10) || 0,
           speedR: parseInt(sm[7], 10) || 0,
-          pidId: (parseInt(sm[9], 10) as 0 | 1 | 2 | 3 | 4 | 5) || 1,
+          pidId: Number(sm[9]) as RobotPlanStep['pidId'],
           speedA: parseInt(sm[10], 10) || 0,
           timerValue: parseInt(sm[11], 10) || 0,
           timerUnit: (sm[12].toLowerCase() as PlanDurationUnit) || 'ms',
@@ -1377,7 +1506,7 @@ export function parseRobotPlansFromCode(
     }
   }
 
-  const callMatch = code.match(/\bplan_?(\d+)\s*\(\s*\)/);
+  const callMatch = code.match(/^\s*plan_?(\d+)\s*\(\s*\)\s*;?[^\S\r\n]*$/m);
   const activePlanId = callMatch ? parseInt(callMatch[1], 10) : plans[0]?.planId || 1;
   return plans.length > 0 ? { plans, activePlanId } : null;
 }

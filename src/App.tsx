@@ -46,6 +46,7 @@ import {
   generateRobotPlanArduinoCode,
   generateRobotPlanPythonCode,
   buildRobotPlanBlocklyXml,
+  parseRobotPlansFromCode,
 } from './types/robotSimulator';
 
 import { LIBRARY_PROJECT_TEMPLATES } from './data/libraryProjectTemplates';
@@ -3822,7 +3823,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': BLANK_SIM_XML,
     };
   });
-  const [simViewMode] = useState<'split' | 'blockly' | 'code' | 'circuit'>('split');
+  const [showSimulatorCode, setShowSimulatorCode] = useState(true);
   const [simShowConsole, setSimShowConsole] = useState<boolean>(false);
   const [simResetKey, setSimResetKey] = useState<number>(0);
 
@@ -8245,6 +8246,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setPaywallFeature('Simulator');
       setShowPaywallModal(true);
     } else {
+      if (simSyncStatuses[simActiveFile] === false) {
+        const parsed = parseRobotPlansFromCode(simFiles[simActiveFile] || '', robotHardwareConfig.sensorCount);
+        if (!parsed) {
+          setSimShowConsole(true);
+          setTerminalLogs(previous => [...previous, { text: 'Kode belum memuat Plan RoboLab yang bisa disimulasikan.', type: 'error' }]);
+          return;
+        }
+        setRobotPlans(parsed.plans);
+        setActiveRobotPlanId(parsed.activePlanId);
+      } else if (!robotPlans.some(plan => plan.items.length > 0)) {
+        return;
+      }
       isRunningRef.current = true;
       setIsRunning(true);
     }
@@ -10371,6 +10384,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
 
+                  <button type="button" aria-expanded={showSimulatorCode} aria-controls="simulator-code-panel"
+                    onClick={() => setShowSimulatorCode(visible => !visible)}
+                    className="rounded-lg border border-current/20 px-3 py-1.5 text-xs font-semibold">
+                    {showSimulatorCode ? 'Sembunyikan kode' : 'Tampilkan kode'}
+                  </button>
+
                   {/* Toggle Virtual Serial Output */}
                   <button
                     onClick={() => setSimShowConsole(prev => !prev)}
@@ -10388,13 +10407,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               {/* Simulator workspace */}
               <div className={`flex-1 min-w-0 min-h-0 flex gap-3 ${simulatorMode === 'robot' ? 'flex-col overflow-y-auto xl:flex-row xl:overflow-hidden' : 'overflow-hidden'}`}>
                 {/* Simulator Blockly and code editor */}
-                {simViewMode !== 'circuit' && (
                   <div className={`${simulatorMode === 'circuit' ? 'h-full w-[42%] min-w-[340px]' : 'order-2 h-[680px] w-full xl:order-none xl:h-full xl:w-[42%] xl:min-w-[340px]'} flex flex-col gap-2 min-h-0 flex-shrink-0`}>
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
-                    {(simViewMode === 'blockly' || simViewMode === 'split') && (
                       <div
                         className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-3xl border border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))]"
-                        style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
+                        style={{ height: showSimulatorCode ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
                       >
                         <BlocklyEditor
                           key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
@@ -10410,6 +10427,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           isSyncWithBlocks={(simActiveFile.endsWith('.ino') || simActiveFile.endsWith('.py')) && simSyncStatuses[simActiveFile] === true}
                           workspaceXml={simWorkspaceXmls[simActiveFile] || simWorkspaceXmls['firmware/main.ino'] || simWorkspaceXmls['python/main.py'] || null}
                           onWorkspaceChange={(xmlText) => {
+                            if (simulatorMode === 'robot' && !/type=["']robot_plan_container["']/.test(xmlText)) {
+                              setRobotPlans(previous => previous.length ? [] : previous);
+                            }
                             const pyFile = 'python/main.py';
                             const inoFile = 'firmware/main.ino';
                             setSimWorkspaceXmls(prev => ({
@@ -10484,13 +10504,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           }}
                         />
                       </div>
-                    )}
 
-                    {/* Monaco Code Editor (shown in 'code' or bottom half of 'split') */}
-                    {(simViewMode === 'code' || simViewMode === 'split') && (
+                    {/* Text code editor */}
+                    {showSimulatorCode && (
                       <div
                         className="panel-3d panel-code min-w-0 relative overflow-hidden rounded-2xl glass-panel border border-cyan-500/20"
-                        style={{ height: simViewMode === 'split' ? (simulatorMode === 'circuit' ? '46%' : '42%') : '100%' }}
+                        id="simulator-code-panel"
+                        style={{ height: simulatorMode === 'circuit' ? '46%' : '42%' }}
                       >
                         <CodeEditor
                           files={simFiles}
@@ -10502,6 +10522,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           onSyncToggle={(sync) => {
                             const pyFile = 'python/main.py';
                             const inoFile = 'firmware/main.ino';
+                            if (sync && simulatorMode === 'robot') {
+                              const parsed = parseRobotPlansFromCode(simFiles[simActiveFile] || '', robotHardwareConfig.sensorCount);
+                              if (parsed) {
+                                syncRobotToSimulatorWorkspace(robotHardwareConfig, parsed.plans, parsed.activePlanId, true);
+                              } else {
+                                setSimShowConsole(true);
+                                setTerminalLogs(previous => [...previous, { text: 'Plan belum terbaca. Gunakan format runStep(...) atau run_step(...) dari RoboLab.', type: 'error' }]);
+                              }
+                              return;
+                            }
                             if (sync) {
                               try {
                                 const currentCode = simFiles[simActiveFile] || '';
@@ -10531,7 +10561,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               ...prev,
                               [filename]: content,
                             }));
-                            if (simSyncStatuses[filename] === false) {
+                            if (simulatorMode !== 'robot' && simSyncStatuses[filename] === false) {
                               const inoFile = Object.keys(simFiles).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
                               const pyFile = Object.keys(simFiles).find(f => f.endsWith('.py')) || 'python/main.py';
                               try {
@@ -10553,6 +10583,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           }}
                           isRunning={isRunning}
                           onRunSimulator={() => {
+                            if (simulatorMode === 'robot') {
+                              toggleRobotRun();
+                              return;
+                            }
                             const codeToRun = simFiles[simActiveFile] || '';
                             const isArduinoSketch = codeToRun.includes('void loop') || codeToRun.includes('void setup') || codeToRun.includes('digitalWrite');
                             if (isArduinoSketch) {
@@ -10572,7 +10606,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       </div>
                     )}
                   </div>
-                )}
 
                 {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
                 <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${simulatorMode === 'robot' ? 'order-1 min-h-[520px] xl:order-none xl:min-h-0' : ''}`}>
@@ -10614,7 +10647,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       onSimulatorModeChange={handleSimulatorModeChange}
                       robotHardwareConfig={robotHardwareConfig}
                       onRobotHardwareChange={(nextHw) => {
-                        syncRobotToSimulatorWorkspace(nextHw, robotPlans, activeRobotPlanId, false);
+                        syncRobotToSimulatorWorkspace(nextHw, robotPlans, activeRobotPlanId, true);
                       }}
                       robotPlans={robotPlans}
                       activePlanId={activeRobotPlanId}
