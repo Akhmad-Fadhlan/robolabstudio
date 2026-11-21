@@ -333,6 +333,118 @@ export const KNOWN_LIBRARIES: KnownLibraryApi[] = [
       { name: 'setGyroRange', returnType: 'void', params: ['MPU6050_RANGE_500_DEG'], label: 'Atur Rentang Giroskop (250/500/1000/2000 deg/s)', doc: 'Menentukan skala sudut putar maksimum giroskop' },
       { name: 'setFilterBandwidth', returnType: 'void', params: ['MPU6050_BAND_21_HZ'], label: 'Atur Filter Bandwidth (DLPF)', doc: 'Mengatur filter sinyal low-pass bawaan chip untuk meredam getaran mekanis' }
     ]
+  },
+
+  // ── Adafruit MAX31865 (PT100 / PT1000 RTD High Precision Temperature Sensor) ──
+  {
+    patterns: ['max31865', 'adafruit_max31865', 'adafruit-max31865', 'pt100', 'pt1000', 'rtd'],
+    className: 'Adafruit_MAX31865',
+    instanceName: 'thermo',
+    mainHeader: 'Adafruit_MAX31865.h',
+    categoryName: 'PT100 RTD (MAX31865)',
+    colour: '#ef4444',
+    constructors: [{ params: ['cs_pin'], defaultArgs: '10' }],
+    pins: [{ name: 'MAX31865_CS', value: '10', isPin: true }],
+    constants: [
+      { name: 'RNOMINAL', value: '100.0', isPin: false },
+      { name: 'RREF', value: '430.0', isPin: false }
+    ],
+    methods: [
+      { name: 'begin', returnType: 'void', params: ['MAX31865_3WIRE'], label: 'Mulai Sensor PT100 (3-Wire / 2-Wire)', doc: 'Inisialisasi amplifier RTD MAX31865 via SPI' },
+      { name: 'temperature', returnType: 'Number', params: ['100.0', '430.0'], label: 'Baca Suhu PT100 Presisi (°C)', doc: 'Mengembalikan pembacaan suhu probe PT100 dalam derajat Celcius presisi tinggi' },
+      { name: 'readRTD', returnType: 'Number', params: [], label: 'Baca Nilai Resistansi RTD (Ohm)', doc: 'Membaca nilai resistansi probe RTD mentah' },
+      { name: 'readFault', returnType: 'Number', params: [], label: 'Baca Status Kerusakan / Fault', doc: 'Mendeteksi gangguan probe (kabel putus, korsleting)' },
+      { name: 'clearFault', returnType: 'void', params: [], label: 'Bersihkan Indikator Fault', doc: 'Mereset register status fault MAX31865' }
+    ]
+  },
+
+  // ── Firebase ESP32 (Google Firebase Realtime Database) ──────────────────
+  {
+    patterns: ['firebaseesp32', 'firebase_esp32', 'firebase-esp32', 'firebase', 'firebasedata', 'firebase-esp-client'],
+    className: 'FirebaseData',
+    instanceName: 'fbdo',
+    mainHeader: 'FirebaseESP32.h',
+    categoryName: 'Firebase Realtime DB',
+    colour: '#f59e0b',
+    constructors: [{ params: [], defaultArgs: '' }],
+    constants: [
+      { name: 'FIREBASE_HOST', value: '"proyek-anda.firebaseio.com"', isPin: false },
+      { name: 'FIREBASE_AUTH', value: '"DATABASE_SECRET_KEY"', isPin: false }
+    ],
+    methods: [
+      { name: 'begin', returnType: 'void', params: ['FIREBASE_HOST', 'FIREBASE_AUTH'], label: 'Mulai Firebase DB (Host, Auth)', doc: 'Inisialisasi koneksi ke server Firebase Realtime Database' },
+      { name: 'reconnectWiFi', returnType: 'void', params: ['true'], label: 'Auto Sambung Ulang WiFi (true)', doc: 'Mengaktifkan koneksi otomatis ke WiFi jika sinyal terputus' },
+      { name: 'setInt', returnType: 'Boolean', params: ['"/suhu"', '28'], label: 'Kirim Nilai Integer ke Firebase (Path, Nilai)', doc: 'Menyimpan nilai integer ke path Firebase database' },
+      { name: 'setFloat', returnType: 'Boolean', params: ['"/tegangan"', '3.3'], label: 'Kirim Nilai Desimal ke Firebase (Path, Nilai)', doc: 'Menyimpan nilai desimal float ke path Firebase' },
+      { name: 'setString', returnType: 'Boolean', params: ['"/status"', '"AKTIF"'], label: 'Kirim Teks ke Firebase (Path, Teks)', doc: 'Menyimpan string teks ke path Firebase database' },
+      { name: 'setBool', returnType: 'Boolean', params: ['"/saklar"', 'true'], label: 'Kirim Boolean ke Firebase (Path, True/False)', doc: 'Menyimpan status saklar boolean ke path Firebase' },
+      { name: 'getInt', returnType: 'Number', params: ['"/suhu"'], label: 'Ambil Nilai Integer dari Firebase (Path)', doc: 'Membaca angka integer dari database Firebase' },
+      { name: 'getString', returnType: 'String', params: ['"/status"'], label: 'Ambil Teks dari Firebase (Path)', doc: 'Membaca teks dari database Firebase' },
+      { name: 'getBool', returnType: 'Boolean', params: ['"/saklar"'], label: 'Ambil Status Saklar dari Firebase (Path)', doc: 'Membaca status saklar boolean dari Firebase' }
+    ]
+  },
+
+  // ── MFRC522 (RFID Card Reader 13.56 MHz SPI) ────────────────────────────
+  {
+    patterns: ['mfrc522', 'rfid_rc522', 'rc522', 'rfid-rc522', 'mfrc-522'],
+    className: 'MFRC522',
+    instanceName: 'mfrc522',
+    mainHeader: 'MFRC522.h',
+    categoryName: 'RFID Reader (RC522)',
+    colour: '#10b981',
+    constructors: [{ params: ['ssPin', 'rstPin'], defaultArgs: '10, 9' }],
+    pins: [
+      { name: 'SS_PIN', value: '10', isPin: true },
+      { name: 'RST_PIN', value: '9', isPin: true }
+    ],
+    methods: [
+      { name: 'PCD_Init', returnType: 'void', params: [], label: 'Mulai Reader RFID RC522 (PCD_Init)', doc: 'Inisialisasi modul RFID RC522 melalui bus SPI' },
+      { name: 'PICC_IsNewCardPresent', returnType: 'Boolean', params: [], label: 'Kartu RFID Baru Terdeteksi?', doc: 'Mengembalikan true jika kartu/tag RFID didekatkan ke antena' },
+      { name: 'PICC_ReadCardSerial', returnType: 'Boolean', params: [], label: 'Berhasil Baca Serial UID Kartu?', doc: 'Membaca nomor seri UID kartu yang terdeteksi' },
+      { name: 'PICC_HaltA', returnType: 'void', params: [], label: 'Hentikan Komunikasi Kartu (HaltA)', doc: 'Memasukkan kartu ke status standby setelah dibaca' },
+      { name: 'PCD_StopCrypto1', returnType: 'void', params: [], label: 'Hentikan Enkripsi Kripto RFID', doc: 'Menonaktifkan enkripsi Crypto1 pada kartu Mifare' }
+    ]
+  },
+
+  // ── Adafruit NeoPixel (WS2812B Addressable RGB LED) ──────────────────────
+  {
+    patterns: ['neopixel', 'adafruit_neopixel', 'adafruit-neopixel', 'ws2812', 'ws2812b'],
+    className: 'Adafruit_NeoPixel',
+    instanceName: 'strip',
+    mainHeader: 'Adafruit_NeoPixel.h',
+    categoryName: 'NeoPixel RGB (WS2812B)',
+    colour: '#ec4899',
+    constructors: [{ params: ['count', 'pin', 'type'], defaultArgs: '8, 6, NEO_GRB + NEO_KHZ800' }],
+    pins: [{ name: 'LED_PIN', value: '6', isPin: true }],
+    constants: [{ name: 'LED_COUNT', value: '8', isPin: false }],
+    methods: [
+      { name: 'begin', returnType: 'void', params: [], label: 'Mulai Strip NeoPixel (begin)', doc: 'Inisialisasi pin kendali LED WS2812B' },
+      { name: 'show', returnType: 'void', params: [], label: 'Kirim / Tampilkan Warna LED (show)', doc: 'Mendorong data warna dari buffer ke strip LED' },
+      { name: 'setPixelColor', returnType: 'void', params: ['0', '255', '0', '0'], label: 'Atur Warna Pixel (index, R, G, B)', doc: 'Mengatur warna LED tertentu (Merah, Hijau, Biru 0-255)' },
+      { name: 'setBrightness', returnType: 'void', params: ['100'], label: 'Atur Kecerahan (0-255)', doc: 'Mengatur tingkat terang LED (0=mati, 255=maksimum)' },
+      { name: 'clear', returnType: 'void', params: [], label: 'Matikan Semua LED (Clear)', doc: 'Mereset semua LED menjadi hitam/mati' }
+    ]
+  },
+
+  // ── Adafruit PN532 (NFC / RFID Reader I2C/SPI) ───────────────────────────
+  {
+    patterns: ['pn532', 'adafruit_pn532', 'adafruit-pn532', 'adafruit pn532'],
+    className: 'Adafruit_PN532',
+    instanceName: 'nfc',
+    mainHeader: 'Adafruit_PN532.h',
+    categoryName: 'PN532 NFC / RFID',
+    colour: '#06b6d4',
+    constructors: [{ params: ['irq', 'reset'], defaultArgs: '2, 3' }],
+    pins: [
+      { name: 'PN532_IRQ', value: '2', isPin: true },
+      { name: 'PN532_RESET', value: '3', isPin: true }
+    ],
+    methods: [
+      { name: 'begin', returnType: 'void', params: [], label: 'Mulai Modul PN532 (begin)', doc: 'Inisialisasi komunikasi dengan chip PN532' },
+      { name: 'SAMConfig', returnType: 'Boolean', params: [], label: 'Konfigurasi SAM (Secure Access Module)', doc: 'Menyiapkan modul untuk membaca kartu RFID normal' },
+      { name: 'getFirmwareVersion', returnType: 'Number', params: [], label: 'Cek Versi Firmware PN532', doc: 'Memeriksa apakah modul PN532 terdeteksi di sistem' },
+      { name: 'readPassiveTargetID', returnType: 'Boolean', params: ['PN532_MIFARE_ISO14443A', 'uid', '&uidLength'], label: 'Baca Kartu RFID / NFC Target', doc: 'Membaca UID kartu Mifare atau tag NFC yang ditempelkan' }
+    ]
   }
 ];
 

@@ -4429,16 +4429,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       <category name="Servo" colour="#FF6D00" css-container="cat-servo" css-row="cat-servo">
         <block type="arduino_servo_write"></block>
       </category>
-
-      <category name="Sensors" colour="#A855F7" css-container="cat-sensor" css-row="cat-sensor">
-        <block type="sensor_ultrasonic"></block>
-      </category>
-      <category name="Display (LCD I2C)" colour="#F59E0B" css-container="cat-display" css-row="cat-display">
-        <block type="lib_display_begin"></block>
-        <block type="lib_display_clear"></block>
-        <block type="lib_display_print"></block>
-        <block type="lib_display_setcursor"></block>
-      </category>
       <category name="IoT" colour="#0EA5E9" css-container="cat-iot" css-row="cat-iot">
         <block type="esp32_wifi_connect"></block>
         <block type="esp32_wifi_status"></block>
@@ -4464,15 +4454,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     `;
 
     const normalizedLibs = (Array.isArray(libs) ? libs : []).map(l => (typeof l === 'string' ? l : (l && typeof l === 'object' ? l.name : '') || '').toLowerCase());
+    const ws = workspaceRef.current;
 
-    // Hardcoded essential library categories (blocks defined at module level)
+    // Hardcoded essential library categories (rendered only if installed or used in workspace)
     const hasDht = normalizedLibs.some(l => l.includes('dht'));
-    const hasMpu = normalizedLibs.some(l => l.includes('mpu6050') || l.includes('mpu_6050'));
-    const hasNeo = normalizedLibs.some(l => l.includes('neopixel') || l.includes('neo_pixel'));
-    const hasIR = normalizedLibs.some(l => l.includes('irremote') || l.includes('ir_remote') || l.includes('infrared'));
-    const hasUltrasonic = normalizedLibs.some(l => l.includes('ultrasonic') || l.includes('hcsr04') || l.includes('hc_sr04'));
-
-    if (hasDht) {
+    const isDhtUsed = !!((ws && ws.getAllBlocks(false).some((b: any) => b.type.startsWith('dht_'))) || (workspaceXml && workspaceXml.includes('dht_')));
+    if (hasDht || isDhtUsed) {
       xml += `
       <category name="DHT Sensor" colour="#2d9cdb" css-row="cat-dht">
         <block type="dht_init"></block>
@@ -4481,7 +4468,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       `;
     }
-    if (hasMpu) {
+
+    const hasMpu = normalizedLibs.some(l => l.includes('mpu6050') || l.includes('mpu_6050'));
+    const isMpuUsed = !!((ws && ws.getAllBlocks(false).some((b: any) => b.type.startsWith('mpu6050_'))) || (workspaceXml && workspaceXml.includes('mpu6050_')));
+    if (hasMpu || isMpuUsed) {
       xml += `
       <category name="MPU6050 IMU" colour="#9b51e0" css-row="cat-mpu">
         <block type="mpu6050_init"></block>
@@ -4489,7 +4479,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       `;
     }
-    if (hasNeo) {
+
+    const hasNeo = normalizedLibs.some(l => l.includes('neopixel') || l.includes('neo_pixel'));
+    const isNeoUsed = !!((ws && ws.getAllBlocks(false).some((b: any) => b.type.startsWith('neopixel_'))) || (workspaceXml && workspaceXml.includes('neopixel_')));
+    if (hasNeo || isNeoUsed) {
       xml += `
       <category name="NeoPixel RGB" colour="#eb5757" css-row="cat-neopixel">
         <block type="neopixel_init"></block>
@@ -4498,6 +4491,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       `;
     }
+
+    const hasIR = normalizedLibs.some(l => l.includes('irremote') || l.includes('ir_remote') || l.includes('infrared'));
     if (hasIR) {
       xml += `
       <category name="IR Remote" colour="#f2994a" css-row="cat-ir">
@@ -4506,10 +4501,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       </category>
       `;
     }
-    if (hasUltrasonic) {
+
+    const hasUltrasonic = normalizedLibs.some(l => l.includes('ultrasonic') || l.includes('hcsr04') || l.includes('hc_sr04') || l.includes('newping'));
+    const isUltrasonicUsed = !!((ws && ws.getAllBlocks(false).some((b: any) => b.type === 'sensor_ultrasonic')) || (workspaceXml && workspaceXml.includes('sensor_ultrasonic')));
+    if (hasUltrasonic || isUltrasonicUsed) {
       xml += `
-      <category name="Ultrasonic Sensor" colour="#e0e0e0" css-row="cat-ultrasonic">
+      <category name="Ultrasonik (HC-SR04)" colour="#a855f7" css-row="cat-ultrasonic">
         <block type="sensor_ultrasonic"></block>
+      </category>
+      `;
+    }
+
+    const hasLcd = normalizedLibs.some(l => l.includes('liquidcrystal') || l.includes('lcd'));
+    const isLcdUsed = !!((ws && ws.getAllBlocks(false).some((b: any) => b.type.startsWith('lib_display_'))) || (workspaceXml && workspaceXml.includes('lib_display_')));
+    if (hasLcd || isLcdUsed) {
+      xml += `
+      <category name="Display (LCD I2C)" colour="#F59E0B" css-container="cat-display" css-row="cat-display">
+        <block type="lib_display_begin"></block>
+        <block type="lib_display_clear"></block>
+        <block type="lib_display_print"></block>
+        <block type="lib_display_setcursor"></block>
       </category>
       `;
     }
@@ -4520,16 +4531,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       registerLibraryBlocks(sig);
       if (sig.categoryName.toLowerCase().includes('display')) return;
 
-      const ws = workspaceRef.current;
       const isUsedInWorkspace = !!(ws && ws.getAllBlocks(false).some((b: any) => sig.blocks.some(bd => bd.type === b.type)));
       const isUsedInXml = !!(workspaceXml && sig.blocks.some(bd => workspaceXml.includes(bd.type)));
       const isInstalled = (libs || []).some((l: any) => {
         const name = ((typeof l === 'string' ? l : l?.name) || '').toLowerCase();
         return sig.patterns.some(p => name === p || name.includes(p));
       });
-      const isMfrc522 = sig.categoryName.toLowerCase().includes('mfrc522');
 
-      if (!isUsedInWorkspace && !isUsedInXml && !isInstalled && !isMfrc522) return;
+      if (!isUsedInWorkspace && !isUsedInXml && !isInstalled) return;
 
       xml += `<category name="${sig.categoryName}" colour="${sig.colour}" css-row="cat-lib-${idx}">`;
       sig.blocks.forEach(bd => {
@@ -4539,21 +4548,21 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     });
 
     // ── Dynamic Custom / GitHub Libraries Generator ────────────────────────
-    const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core', 'pn532', 'adafruit_pn532', 'adafruit-pn532', 'adafruit pn532'];
+    const builtinCoreLibs = ['wire', 'spi', 'arduinojson', 'servo', 'esp32servo', 'robolab', 'robolab_core', 'irremote', 'dht', 'mpu6050', 'ultrasonic', 'hcsr04', 'liquidcrystal_i2c', 'liquidcrystal'];
     const customLibs = (libs || []).filter((lib: any) => {
       const name = (typeof lib === 'string' ? lib : lib?.name) || '';
       const lower = name.toLowerCase().trim();
       return lower && !builtinCoreLibs.includes(lower);
     });
 
-    // Universal Library Blocks Category
-    xml += `<category name="📚 Library Kustom" colour="#8B5CF6" css-row="cat-default">`;
-    xml += `<block type="custom_library_init"></block>`;
-    xml += `<block type="custom_library_call"></block>`;
-    xml += `<block type="custom_library_call_val"></block>`;
-    xml += `</category>`;
-
     if (customLibs.length > 0) {
+      // Universal Library Blocks Category
+      xml += `<category name="📚 Library Kustom" colour="#8B5CF6" css-row="cat-default">`;
+      xml += `<block type="custom_library_init"></block>`;
+      xml += `<block type="custom_library_call"></block>`;
+      xml += `<block type="custom_library_call_val"></block>`;
+      xml += `</category>`;
+
       const escapeXmlVal = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       customLibs.forEach(lib => {
         const libName = (typeof lib === "string" ? lib : (lib as any)?.name) || "CustomLib";
