@@ -2435,12 +2435,3 @@ nav[aria-label="Jalur belajar"] button:focus-visible {
   font-size: 13px;
   font-weight: 650;
 }
-
-.microbit-blockly [role="treeitem"]:has(> [role="group"]) {
-  transform: none !important;
-}
-.microbit-blockly .cat-microbit > .cat-microbit::after {
-  content: "▾";
-  margin-inline-start: auto;
-  color: currentColor;
-}

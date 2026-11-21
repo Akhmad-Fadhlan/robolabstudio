@@ -4101,82 +4101,80 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const language = localStorage.getItem('robolab_language') || 'id';
       return `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-      <category name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
-        <category name="${language === 'id' ? 'Layar &amp; waktu' : 'Basic'}" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
-          <block type="arduino_setup"></block>
-          <block type="arduino_loop"></block>
-          <block type="basic_show_string">
-            <value name="TEXT">
-              <block type="text">
-                <field name="TEXT">Hello!</field>
-              </block>
-            </value>
-          </block>
-          <block type="basic_show_number">
-            <value name="NUMBER">
-              <block type="math_number">
-                <field name="NUM">0</field>
-              </block>
-            </value>
-          </block>
-          <block type="basic_show_leds"></block>
-          <block type="basic_show_icon"></block>
-          <block type="basic_clear_screen"></block>
-          <block type="basic_pause">
-            <value name="MS">
-              <block type="math_number">
-                <field name="NUM">500</field>
-              </block>
-            </value>
-          </block>
-        </category>
-        <category name="${language === 'id' ? 'Tombol &amp; sensor' : 'Input'}" colour="#12B886" css-container="cat-mb-input" css-row="cat-mb-input">
-          <block type="input_on_button_pressed"></block>
-          <block type="input_button_is_pressed"></block>
-          <block type="input_on_gesture"></block>
-          <block type="input_temperature"></block>
-          <block type="input_light_level"></block>
-          <block type="input_compass_heading"></block>
-        </category>
-        <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
-          <block type="music_play_tone">
-            <value name="NOTE">
-              <block type="math_number"><field name="NUM">440</field></block>
-            </value>
-            <value name="DURATION">
-              <block type="math_number"><field name="NUM">500</field></block>
-            </value>
-          </block>
-        </category>
-        <category name="Radio" colour="#74C0FC" css-container="cat-mb-radio" css-row="cat-mb-radio">
-          <block type="radio_send_number">
-            <value name="NUMBER">
-              <block type="math_number"><field name="NUM">0</field></block>
-            </value>
-          </block>
-        </category>
-        <category name="${language === 'id' ? 'Pin &amp; kabel' : 'Pins'}" colour="#4a90e2" css-container="cat-mb-pins" css-row="cat-mb-pins">
-          <block type="pins_digital_write">
-            <field name="PIN">P0</field>
-            <value name="VALUE">
-              <block type="math_number"><field name="NUM">1</field></block>
-            </value>
-          </block>
-          <block type="pins_analog_write">
-            <field name="PIN">P0</field>
-            <value name="VALUE">
-              <block type="math_number"><field name="NUM">512</field></block>
-            </value>
-          </block>
-          <block type="pins_servo_write">
-            <field name="PIN">P0</field>
-            <value name="VALUE">
-              <block type="math_number"><field name="NUM">180</field></block>
-            </value>
-          </block>
-          <block type="pins_digital_read"></block>
-          <block type="pins_analog_read"></block>
-        </category>
+      <category name="${language === 'id' ? 'Layar &amp; waktu' : 'Basic'}" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
+        <block type="arduino_setup"></block>
+        <block type="arduino_loop"></block>
+        <block type="basic_show_string">
+          <value name="TEXT">
+            <block type="text">
+              <field name="TEXT">Hello!</field>
+            </block>
+          </value>
+        </block>
+        <block type="basic_show_number">
+          <value name="NUMBER">
+            <block type="math_number">
+              <field name="NUM">0</field>
+            </block>
+          </value>
+        </block>
+        <block type="basic_show_leds"></block>
+        <block type="basic_show_icon"></block>
+        <block type="basic_clear_screen"></block>
+        <block type="basic_pause">
+          <value name="MS">
+            <block type="math_number">
+              <field name="NUM">500</field>
+            </block>
+          </value>
+        </block>
+      </category>
+      <category name="${language === 'id' ? 'Tombol &amp; sensor' : 'Input'}" colour="#12B886" css-container="cat-mb-input" css-row="cat-mb-input">
+        <block type="input_on_button_pressed"></block>
+        <block type="input_button_is_pressed"></block>
+        <block type="input_on_gesture"></block>
+        <block type="input_temperature"></block>
+        <block type="input_light_level"></block>
+        <block type="input_compass_heading"></block>
+      </category>
+      <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
+        <block type="music_play_tone">
+          <value name="NOTE">
+            <block type="math_number"><field name="NUM">440</field></block>
+          </value>
+          <value name="DURATION">
+            <block type="math_number"><field name="NUM">500</field></block>
+          </value>
+        </block>
+      </category>
+      <category name="Radio" colour="#74C0FC" css-container="cat-mb-radio" css-row="cat-mb-radio">
+        <block type="radio_send_number">
+          <value name="NUMBER">
+            <block type="math_number"><field name="NUM">0</field></block>
+          </value>
+        </block>
+      </category>
+      <category name="${language === 'id' ? 'Pin &amp; kabel' : 'Pins'}" colour="#4a90e2" css-container="cat-mb-pins" css-row="cat-mb-pins">
+        <block type="pins_digital_write">
+          <field name="PIN">P0</field>
+          <value name="VALUE">
+            <block type="math_number"><field name="NUM">1</field></block>
+          </value>
+        </block>
+        <block type="pins_analog_write">
+          <field name="PIN">P0</field>
+          <value name="VALUE">
+            <block type="math_number"><field name="NUM">512</field></block>
+          </value>
+        </block>
+        <block type="pins_servo_write">
+          <field name="PIN">P0</field>
+          <value name="VALUE">
+            <block type="math_number"><field name="NUM">180</field></block>
+          </value>
+        </block>
+        <block type="pins_digital_read"></block>
+        <block type="pins_analog_read"></block>
       </category>
       <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
         <block type="controls_if"></block>
