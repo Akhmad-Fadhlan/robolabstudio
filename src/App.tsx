@@ -5440,6 +5440,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   };
 
+  useEffect(() => {
+    if (simBoard === 'BBC micro:bit' && !simActiveFile.endsWith('.py')) setSimActiveFile('python/main.py');
+  }, [simBoard, simActiveFile]);
+
+  useEffect(() => {
+    if (board !== 'BBC micro:bit' || currentTab !== 'ide' || activeFile.endsWith('.py')) return;
+    const path = 'python/main.py' in files ? 'python/main.py' : Object.keys(files).find(name => name.endsWith('.py')) || 'python/main.py';
+    if (!(path in files)) setFiles(previous => ({ ...previous, [path]: '' }));
+    setActiveFile(path);
+  }, [board, currentTab, activeFile, files]);
+
   const handleFileSelect = (filename: string, explicitFilesMap?: { [key: string]: string }) => {
     const sourceFiles = explicitFilesMap || files;
     const content = sourceFiles[filename] || '';
@@ -8108,6 +8119,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setTerminalLogs(prev => [...prev, { text: `Web Hardware Error: ${err?.message || err}`, type: 'error' }]);
       } finally {
         isHardwareActionRef.current = false;
+        setBuildProgress(100);
       }
       return;
     }
@@ -9513,7 +9525,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             const foldersMap: { [folder: string]: string[] } = {};
                             const rootFiles: string[] = [];
 
-                            Object.keys(files).forEach(f => {
+                            Object.keys(files).filter(f => board !== 'BBC micro:bit' || f.endsWith('.py')).forEach(f => {
                               if (f.includes('/')) {
                                 const folderName = f.substring(0, f.indexOf('/'));
                                 if (!foldersMap[folderName]) foldersMap[folderName] = [];
@@ -9623,7 +9635,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-400/30 px-3 py-2">
                   <span className="text-xs font-semibold">Tampilan proyek</span>
-                  {(['.ino', '.py'] as const).map(extension => (
+                  {(board === 'BBC micro:bit' ? ['.py'] : ['.ino', '.py']).map(extension => (
                     <button key={extension} type="button"
                       aria-pressed={uiMode === 'pro' && workspaceMode === 'split' && activeFile.endsWith(extension) && !isBlocklyCollapsed && !isEditorCollapsed}
                       className="rounded-lg border border-slate-400/40 px-2.5 py-1.5 text-xs font-semibold aria-pressed:bg-sky-800 aria-pressed:text-white"
@@ -9719,7 +9731,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             <BlocklyEditor 
                               key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount + "_" + packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}
                               libraryFocus={libraryFocus}
-                              codeType={activeFile.endsWith('.py') ? 'python' : 'arduino'} 
+                              codeType={board === 'BBC micro:bit' || activeFile.endsWith('.py') ? 'python' : 'arduino'}
                               board={board}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                                 name: p.name,
@@ -9742,6 +9754,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 }));
                               }}
                               onCodeChange={(newCode, otherCode) => {
+                                if (board === 'BBC micro:bit' && !activeFile.endsWith('.py')) return;
                                 if (syncStatuses[activeFile] === false) {
                                   return;
                                 }
@@ -9764,19 +9777,26 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 setFiles((prev: any) => ({
                                   ...prev,
                                   [activeFile]: newCode,
-                                  ...(otherCode !== undefined ? {
+                                  ...(board !== 'BBC micro:bit' && otherCode !== undefined ? {
                                     [otherFile]: otherCode
                                   } : {})
                                 }));
                                 setSimFiles((prev: any) => ({
                                   ...prev,
                                   [activeFile]: newCode,
-                                  ...(otherCode !== undefined ? {
+                                  ...(board !== 'BBC micro:bit' && otherCode !== undefined ? {
                                     [otherFile]: otherCode
                                   } : {})
                                 }));
                               }}
                               onSyncToCode={(arduinoCode, pythonCode) => {
+                                if (board === 'BBC micro:bit') {
+                                  const path = activeFile.endsWith('.py') ? activeFile : 'python/main.py';
+                                  setFiles(prev => ({ ...prev, [path]: pythonCode }));
+                                  setSimFiles(prev => ({ ...prev, [path]: pythonCode }));
+                                  setSyncStatuses(prev => ({ ...prev, [path]: true }));
+                                  return;
+                                }
                                 const pyFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'python/main.py' : activeFile.replace(/\.(ino|hex)$/i, '.py');
                                 const inoFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'firmware/main.ino' : activeFile.replace(/\.py$/i, '.ino');
                                 setSyncStatuses(prev => ({
@@ -10446,7 +10466,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       className="bg-transparent outline-none cursor-pointer text-xs font-bold"
                     >
                       <option value="python/main.py" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Python (py)</option>
-                      <option value="firmware/main.ino" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>C++ (ino)</option>
+                      {simBoard !== 'BBC micro:bit' && <option value="firmware/main.ino" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>C++ (ino)</option>}
                     </select>
                   </div>
 

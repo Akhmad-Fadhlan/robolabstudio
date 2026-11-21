@@ -57,11 +57,12 @@ export async function writeMicrobitProgram(port: MicrobitSerialPort, source: str
     }
 
     // Small writes fit the serial buffer of both generations of micro:bit.
+    await run("f=open('main.py','wb')\n");
     for (let offset = 0; offset < program.length; offset += 48) {
       const chunk = Array.from(program.subarray(offset, offset + 48), byte => '\\x' + byte.toString(16).padStart(2, '0')).join('');
-      await run(`f=open('main.py','${offset ? 'ab' : 'wb'}');f.write(b'${chunk}');f.close()\n`);
+      await run(`f.write(b'${chunk}')\n`);
     }
-    const written = await run("f=open('main.py','rb');print(len(f.read()));f.close()\n");
+    const written = await run("f.close();f=open('main.py','rb');print(len(f.read()));f.close()\n");
     if (Number(written) !== program.length) throw new Error('Ukuran main.py di board berbeda dari kode yang dikirim.');
 
     response = '';

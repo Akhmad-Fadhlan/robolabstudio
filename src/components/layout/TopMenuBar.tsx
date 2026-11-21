@@ -133,6 +133,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   }, []);
 
   const [toolsOpen, setToolsOpen] = useState(false);
+  const isMicrobit = board === 'BBC micro:bit';
   const isDark = themeMode === 'dark';
   const isFileModified = files[activeFile] !== savedFiles[activeFile];
 
@@ -192,7 +193,13 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
             <div className="w-px h-4 bg-white/10 mx-0.5 sm:mx-1 flex-shrink-0" />
 
             {/* Primary Action Buttons: Context-aware (Python vs Arduino/C++) */}
-            {activeFile.endsWith('.py') ? (
+            {isMicrobit ? (
+              <button type="button" onClick={() => handleArduinoHardwareAction('upload')}
+                className="flex items-center gap-1.5 rounded-lg bg-sky-800 px-3 py-1 text-xs font-bold text-white"
+                title="Upload MicroPython ke BBC micro:bit">
+                <Upload className="h-4 w-4" /> Upload
+              </button>
+            ) : activeFile.endsWith('.py') ? (
               <button
                 onClick={handleRunPython}
                 className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${
@@ -263,10 +270,10 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 >
                   <div className="border-b border-white/10 pb-1 mb-1">
                     <button
-                      onClick={() => { setShowMoreMenu(false); handleRunPython(); }}
+                      onClick={() => { setShowMoreMenu(false); if (isMicrobit) handleArduinoHardwareAction('upload'); else handleRunPython(); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-600/20 hover:text-purple-300 transition cursor-pointer"
                     >
-                      <PythonLogo className="w-3.5 h-3.5" /> {tb('runPython')}
+                      {isMicrobit ? <><Upload className="w-3.5 h-3.5" /> Upload</> : <><PythonLogo className="w-3.5 h-3.5" /> {tb('runPython')}</>}
                     </button>
                     <button
                       onClick={() => { setShowMoreMenu(false); handleInstallCores(); }}
