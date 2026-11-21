@@ -1884,6 +1884,7 @@ try {
 }
 
 interface BlocklyEditorProps {
+  libraryFocus?: string;
   codeType: 'arduino' | 'python';
   board?: string;
   onCodeChange: (code: string, otherCode?: string) => void;
@@ -1913,7 +1914,8 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   const lower = libName.toLowerCase();
   
   // 1. Hardcoded libraries
-  if (lower.includes('rfid') || lower.includes('pn532') || lower.includes('mfrc522') || lower.includes('nfc')) {
+  if (lower.includes('mfrc522')) return ['mfrc522_begin', 'mfrc522_is_card', 'mfrc522_read_serial', 'mfrc522_get_uid', 'mfrc522_print_uid', 'mfrc522_halt'];
+  if (lower.includes('rfid') || lower.includes('pn532') || lower.includes('nfc')) {
     return ['lib_rfid_i2c_begin', 'lib_rfid_begin', 'lib_rfid_print_uid', 'lib_rfid_iscard', 'lib_rfid_read'];
   }
   if (lower.includes('dht')) {
@@ -1945,7 +1947,7 @@ const getBlockTypesForLibrary = (libName: string): string[] => {
   }
   
   // 3. Custom / GitHub / Verified libraries
-  return ['custom_library_init', 'custom_library_call', 'custom_library_call_val'];
+  return [];
 };
 
 export function getLibraryIcon(libName: string, category: string = ''): string {
@@ -2553,12 +2555,12 @@ const isLibraryNeeded = (lib: any, workspace: any): boolean => {
   const blockTypes = getBlockTypesForLibrary(libName);
   if (blockTypes.length === 0) return false;
   
-  return blockTypes.some(type => workspace.getBlocksByType(type).some((b: any) => isBlockActive(b))) ||
-         workspace.getAllBlocks(false).some((b: any) => isBlockActive(b) && ((b.type || '').toLowerCase().includes('rfid') || (b.type || '').toLowerCase().includes('pn532')));
+  return blockTypes.some(type => workspace.getBlocksByType(type).some((b: any) => isBlockActive(b)));
 };
 
 export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   codeType,
+  libraryFocus,
   board = '',
   onCodeChange,
 
@@ -2616,6 +2618,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const codeTypeRef = useRef<'arduino' | 'python'>(codeType);
   codeTypeRef.current = codeType;
 
+  const [guideOpen,setGuideOpen] = React.useState(false);
+  const [guideFilter,setGuideFilter] = React.useState('');
+  const [guideEntries,setGuideEntries] = React.useState<{label:string;category:string;help:string}[]>([]);
+  const [blockHelp,setBlockHelp] = React.useState('');
   const [searchQuery, setSearchQuery] = React.useState("");
 
   // Inject CSS for Live Glowing Block Animation when Robot Simulator runs
@@ -3281,8 +3287,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           if (lowerLib.includes('dht')) {
             header = 'DHT';
           } else if (lowerLib.includes('mfrc522')) {
-            // MFRC522v2 is handled with dedicated SPI drivers and instance declaration below
-            return;
+            header = 'MFRC522';
           } else if (lowerLib.includes('pn532') || lowerLib.includes('adafruit-pn532') || (lowerLib.includes('rfid') && !lowerLib.includes('mfrc522'))) {
             header = 'Adafruit_PN532';
           } else if (lowerLib.includes('servo')) {
@@ -3307,16 +3312,17 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           const hasCustomMethodCalls = workspace.getAllBlocks(false).some((b: any) =>
             isBlockActive(b) && (b.type || '').toLowerCase().startsWith(`custom_${safeName.toLowerCase()}_`)
           );
-          if (hasCustomMethodCalls && !generatedCode.includes(`${className} ${safeName.toLowerCase()};`)) {
-            const initBlock = workspace.getAllBlocks(false).find((b: any) =>
-              isBlockActive(b) && b.type === `custom_${safeName.toLowerCase()}_init_pin`
-            );
-            if (initBlock) {
-              const p = initBlock.getFieldValue('PIN') || '2';
-              generatedCode += `${className} ${safeName.toLowerCase()}(${p});\n`;
-            } else {
-              generatedCode += `${className} ${safeName.toLowerCase()};\n`;
-            }
+          const known = findKnownLibrary(libName);
+          const meta = workspace.getAllBlocks(false)
+            .map(block => (Blockly.Blocks[block.type] as any)?._libMeta)
+            .find(entry => entry?.libName === libName && entry.methodName);
+          const instance = meta?.instName || safeName.toLowerCase();
+          const hasExplicitInit = workspace.getBlocksByType('custom_library_init', false)
+            .some(block => isBlockActive(block) && block.getFieldValue('INSTANCE') === instance);
+          if (hasCustomMethodCalls && !hasExplicitInit) {
+            const initPin = workspace.getBlocksByType(`custom_${safeName.toLowerCase()}_init_pin`, false).find(isBlockActive);
+            const args = initPin?.getFieldValue('PIN') ?? known?.constructors?.[0]?.defaultArgs ?? '';
+            generatedCode += `${meta?.className || className} ${instance}${args ? '(' + args + ')' : ''};\n`;
           }
         }
       });
@@ -3452,7 +3458,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const rfidBlock = workspace.getAllBlocks(false).find((b: any) => {
         if (!isBlockActive(b)) return false;
         const t = (b.type || '').toLowerCase();
-        return t.includes('rfid') || t.includes('pn532') || t.includes('nfc') || t.includes('mfrc522');
+        return !t.startsWith('custom_') && (t.includes('rfid') || t.includes('pn532') || t.includes('nfc') || t.includes('mfrc522'));
       });
       if (rfidBlock) {
         const i2cBeginBlock = workspace.getBlocksByType('lib_rfid_i2c_begin').find((b: any) => isBlockActive(b));
@@ -4552,7 +4558,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     const customLibs = (libs || []).filter((lib: any) => {
       const name = (typeof lib === 'string' ? lib : lib?.name) || '';
       const lower = name.toLowerCase().trim();
-      return lower && !builtinCoreLibs.includes(lower);
+      return lower && !builtinCoreLibs.includes(lower) && !['dht sensor library', 'blynk'].includes(lower);
     });
 
     if (customLibs.length > 0) {
@@ -4571,7 +4577,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const parsedApi = (typeof lib === "object" && lib) ? (lib as any).parsedApi : null;
         const known = findKnownLibrary(libName);
 
-        registerCustomLibBlocks(prefix, libName);
+        // Register once, after resolving the API and category below.
 
         // Sanitize clean C++ class name (remove -Library or invalid chars)
         let rawClass = parsedApi?.className || known?.className || libName;
@@ -4632,7 +4638,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           pinsToRender.slice(0, 5).forEach((p: any) => {
             xml += `<block type="arduino_define_pin">`;
             xml += `<field name="PIN_NAME">${escapeXmlVal(p.name)}</field>`;
-            xml += `<field name="PIN_NUM">${escapeXmlVal(p.value || "2")}</field>`;
+            xml += `<field name="PIN_NUM">${escapeXmlVal(p.value ?? "2")}</field>`;
             xml += `</block>`;
           });
         }
@@ -4667,16 +4673,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             const safeM = m.name.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_');
             const dedicatedType = `${prefix}_${safeM}`;
             xml += `<block type="${dedicatedType}">`;
-            if (m.params && m.params.length === 1) {
-              const rawP = m.params[0] || '';
-              const isPin = /(?:pin|rx|tx|sda|scl|cs)/i.test(rawP) || /^[AD]?\d+$/i.test(rawP);
-              const isNum = /^-?\d+(\.\d+)?$/.test(rawP);
-              if (isPin) {
-                xml += `<field name="PIN">${escapeXmlVal(rawP)}</field>`;
-              } else if (isNum) {
-                xml += `<value name="PARAM"><block type="math_number"><field name="NUM">${rawP}</field></block></value>`;
+            (m.params || []).forEach((param: string, index: number) => {
+              const value = String(param).trim();
+              const singleStatement = m.params.length === 1 && m.returnType === 'void';
+              if (singleStatement && (/(?:pin|rx|tx|sda|scl|cs)/i.test(value) || /^[AD]?\d+$/i.test(value))) {
+                xml += `<field name="PIN">${escapeXmlVal(value)}</field>`;
+                return;
               }
-            }
+              const slot = singleStatement ? 'PARAM' : 'PARAM' + index;
+              let shadow = '';
+              if (/^-?\d+(\.\d+)?$/.test(value)) shadow = `<shadow type="math_number"><field name="NUM">${value}</field></shadow>`;
+              else if (/^"[^"]*"$/.test(value)) shadow = `<shadow type="text"><field name="TEXT">${escapeXmlVal(value.slice(1, -1))}</field></shadow>`;
+              else if (/^(true|false)$/.test(value)) shadow = `<shadow type="logic_boolean"><field name="BOOL">${value.toUpperCase()}</field></shadow>`;
+              if (shadow) xml += `<value name="${slot}">${shadow}</value>`;
+            });
             xml += `</block>`;
           });
         }
@@ -4702,6 +4712,29 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     xml += `</xml>`;
     return xml;
   };
+
+  function openBlockGuide() {
+    const xml = Blockly.utils.xml.textToDom(getToolboxXml(installedLibraries, board));
+    const scratch = new Blockly.Workspace();
+    const entries: typeof guideEntries = [];
+    try {
+      for (const category of Array.from(xml.querySelectorAll('category'))) {
+        for (const node of Array.from(category.children)) {
+          const type = node.getAttribute('type');
+          if (node.tagName.toLowerCase() !== 'block' || !type || !Blockly.Blocks[type]) continue;
+          const item = Blockly.Xml.domToBlock(node.cloneNode(true) as Element, scratch);
+          const label = item.toString(100);
+          const inputs = item.inputList.filter(input=>input.connection).map(input=>input.name).filter(Boolean);
+          const hint = item.outputConnection ? 'Sisipkan ke isian nilai.' : item.previousConnection ? 'Sambungkan ke urutan perintah.' : 'Gunakan sebagai awal susunan.';
+          entries.push({label,category:category.getAttribute('name') || '',help:[item.getTooltip(),hint,inputs.length ? 'Isian: '+inputs.join(', ') : ''].filter(Boolean).join(' ')});
+          item.dispose(false);
+        }
+      }
+    } finally { scratch.dispose(); }
+    setGuideEntries(entries);
+    setGuideFilter('');
+    setGuideOpen(true);
+  }
 
   // Trigger code update and toolbox update when installed libraries or board changes
   useEffect(() => {
@@ -5054,6 +5087,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       }
     };
 
+    workspace.addChangeListener((event: any) => {
+      if (event.type !== Blockly.Events.SELECTED) return;
+      const block = event.newElementId && workspace.getBlockById(event.newElementId);
+      if (!block) { setBlockHelp(''); return; }
+      const tooltip = typeof block.getTooltip === 'function' ? block.getTooltip() : '';
+      const slots = block.inputList.filter((input: Blockly.Input) => input.connection).map((input: Blockly.Input) => input.name).filter(Boolean);
+      const role = block.outputConnection ? 'Pasang di lubang nilai pada blok lain.' : block.previousConnection ? 'Sambungkan dalam urutan perintah.' : 'Mulailah susunan program dari blok ini.';
+      setBlockHelp([block.toString(75), tooltip, role, slots.length ? 'Isian: ' + slots.join(', ') : ''].filter(Boolean).join(' · '));
+    });
     workspace.addChangeListener(updateCode);
     workspace.addChangeListener(handleWorkspaceXmlChange);
     workspace.addChangeListener((e: any) => {
@@ -5184,6 +5226,30 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceXml]); // <-- isSyncWithBlocks sengaja dikeluarkan dari deps!
 
+  useEffect(() => {
+    if (!libraryFocus) return;
+    const toolbox = workspaceRef.current?.getToolbox();
+    const names: Record<string,string> = {'DHT sensor library':'DHT Sensor', Blynk:'IoT',Servo:'Servo', LiquidCrystal_I2C:'Display'};
+    const target = names[libraryFocus] || findKnownLibrary(libraryFocus)?.categoryName || libraryFocus;
+    if (!(toolbox instanceof Blockly.Toolbox)) return;
+    const item = toolbox.getToolboxItems().find(i=>i instanceof Blockly.ToolboxCategory && i.getName().includes(target));
+    if (item) toolbox?.setSelectedItem(item);
+  }, [libraryFocus, board]);
+
+  function arduinoMethodCall(meta: any, instance: string, values: string[]) {
+    const args = (meta.params || []).map((defaultValue: string, i: number) => values[i] || defaultValue);
+    if (meta.className === 'FirebaseData') {
+      if (meta.methodName === 'begin') return `Firebase.begin(${args.join(', ')})`;
+      if (meta.methodName === 'reconnectWiFi') return `Firebase.reconnectNetwork(${args.join(', ')})`;
+      const call = `Firebase.${meta.methodName}(${[instance, ...args].join(', ')})`;
+      if (meta.methodName === 'getInt') return `(${call} ? ${instance}.intData() : 0)`;
+      if (meta.methodName === 'getString') return `(${call} ? ${instance}.stringData() : String())`;
+      if (meta.methodName === 'getBool') return `(${call} && ${instance}.boolData())`;
+      return call;
+    }
+    return `${instance}.${meta.methodName}(${args.join(', ')})`;
+  }
+
   // Helper to resolve the code representation of input blocks
   const getBlockValue = (block: Blockly.Block, lang: 'arduino' | 'python'): string => {
     if (!block) return '';
@@ -5236,7 +5302,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `robot.detect("${obj}")`;
     }
     const blockTypeLower = (block.type || '').toLowerCase();
-    if (blockTypeLower.includes('rfid') || blockTypeLower.includes('pn532') || blockTypeLower.includes('nfc') || blockTypeLower.includes('mfrc522')) {
+    if (!blockTypeLower.startsWith('custom_') && (blockTypeLower.includes('rfid') || blockTypeLower.includes('pn532') || blockTypeLower.includes('nfc') || blockTypeLower.includes('mfrc522'))) {
       if (blockTypeLower.includes('iscard') || blockTypeLower.includes('present') || blockTypeLower.includes('is_card')) {
         if (lang === 'arduino') return `(getRFIDUID() != "")`;
         return `robot.rfid_is_card()`;
@@ -5286,6 +5352,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const typeStr = block.type;
       const libSafe = typeStr.replace(/^custom_/, '').replace(/_(read|read_func|call_val|status|m_.*)$/, '');
 
+      const meta = (Blockly.Blocks[typeStr] as any)?._libMeta;
+      if (meta?.methodName && meta.returnType !== 'void') {
+        const inst = meta.instName || libSafe;
+        const mName = meta.methodName;
+        const params: string[] = [];
+        if (meta.params && meta.params.length === 1) {
+          const pBlock = block.getInputTargetBlock('PARAM0') || block.getInputTargetBlock('PARAM');
+          const pField = block.getFieldValue('PIN') || block.getFieldValue('PARAM');
+          params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+        } else if (meta.params && meta.params.length > 1) {
+          meta.params.forEach((_: any, idx: number) => {
+            const pBlock = block.getInputTargetBlock(`PARAM${idx}`);
+            const pField = block.getFieldValue(`PARAM${idx}`);
+            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+          });
+        }
+        const cleanParams = params.filter(p => p !== '').join(', ');
+        if (lang === 'arduino') return arduinoMethodCall(meta, inst, params);
+        return `robot.custom_lib_val("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})`;
+      }
       if (typeStr.endsWith('_read')) {
         if (lang === 'arduino') return `${libSafe}.read()`;
         return `${libSafe}_read()`;
@@ -5315,26 +5401,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') return `${libSafe}.${methodName}()`;
         return `${libSafe}_${methodName}()`;
       }
-      const meta = (Blockly.Blocks[typeStr] as any)?._libMeta;
-      if (meta && meta.returnType !== 'void') {
-        const inst = meta.instName || libSafe;
-        const mName = meta.methodName;
-        const params: string[] = [];
-        if (meta.params && meta.params.length === 1) {
-          const pBlock = block.getInputTargetBlock('PARAM');
-          const pField = block.getFieldValue('PIN') || block.getFieldValue('PARAM');
-          params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
-        } else if (meta.params && meta.params.length > 1) {
-          meta.params.forEach((_: any, idx: number) => {
-            const pBlock = block.getInputTargetBlock(`PARAM${idx}`);
-            const pField = block.getFieldValue(`PARAM${idx}`);
-            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
-          });
-        }
-        const cleanParams = params.filter(p => p !== '').join(', ');
-        if (lang === 'arduino') return `${inst}.${mName}(${cleanParams})`;
-        return `robot.custom_lib_val("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})`;
-      }
+
     }
     if (block.type === 'arduino_serial_available') {
       if (lang === 'arduino') return `Serial.available()`;
@@ -6030,11 +6097,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}robot.mpu_init()\n`;
         }
       } else if (
-        currentBlock.type === 'lib_rfid_begin' || 
+        !currentBlock.type.startsWith('custom_') && (currentBlock.type === 'lib_rfid_begin' ||
         currentBlock.type.toLowerCase().includes('rfid') || 
         currentBlock.type.toLowerCase().includes('pn532') || 
         currentBlock.type.toLowerCase().includes('nfc') ||
-        currentBlock.type.toLowerCase().includes('mfrc522')
+        currentBlock.type.toLowerCase().includes('mfrc522'))
       ) {
         const cType = currentBlock.type.toLowerCase();
         if (cType.includes('halt')) {
@@ -6317,7 +6384,29 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const typeStr = currentBlock.type;
         const libSafe = typeStr.replace(/^custom_/, '').replace(/_(define_pin|set_pin|attach_pin|begin|begin_pin|init_pin|read|read_func|call_val|status|write|print|call|update|reset|def_.*|const_.*|m_.*)$/, '');
 
-        if (typeStr.endsWith('_define_pin')) {
+        if ((Blockly.Blocks[typeStr] as any)?._libMeta?.methodName) {
+          const meta = (Blockly.Blocks[typeStr] as any)._libMeta;
+          const inst = meta.instName || libSafe;
+          const mName = meta.methodName;
+          const params: string[] = [];
+          if (meta.params && meta.params.length === 1) {
+            const pBlock = currentBlock.getInputTargetBlock('PARAM');
+            const pField = currentBlock.getFieldValue('PIN') || currentBlock.getFieldValue('PARAM');
+            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+          } else if (meta.params && meta.params.length > 1) {
+            meta.params.forEach((_: any, idx: number) => {
+              const pBlock = currentBlock.getInputTargetBlock(`PARAM${idx}`);
+              const pField = currentBlock.getFieldValue(`PARAM${idx}`);
+              params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
+            });
+          }
+          const cleanParams = params.filter(p => p !== '').join(', ');
+          if (lang === 'arduino') {
+            code += `${indent}${arduinoMethodCall(meta, inst, params)};\n`;
+          } else {
+            code += `${indent}robot.custom_lib_call("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})\n`;
+          }
+        } else if (typeStr.endsWith('_define_pin')) {
           const pinName = currentBlock.getFieldValue('PIN_NAME') || `${libSafe.toUpperCase()}_PIN`;
           const pinNum = currentBlock.getFieldValue('PIN_NUM') || '2';
           if (lang === 'arduino') {
@@ -6429,28 +6518,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           } else {
             code += `${indent}# Objek ${libSafe} siap digunakan\n`;
           }
-        } else if ((Blockly.Blocks[typeStr] as any)?._libMeta) {
-          const meta = (Blockly.Blocks[typeStr] as any)._libMeta;
-          const inst = meta.instName || libSafe;
-          const mName = meta.methodName;
-          const params: string[] = [];
-          if (meta.params && meta.params.length === 1) {
-            const pBlock = currentBlock.getInputTargetBlock('PARAM');
-            const pField = currentBlock.getFieldValue('PIN') || currentBlock.getFieldValue('PARAM');
-            params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
-          } else if (meta.params && meta.params.length > 1) {
-            meta.params.forEach((_: any, idx: number) => {
-              const pBlock = currentBlock.getInputTargetBlock(`PARAM${idx}`);
-              const pField = currentBlock.getFieldValue(`PARAM${idx}`);
-              params.push(pBlock ? getBlockValue(pBlock, lang) : (pField ?? ''));
-            });
-          }
-          const cleanParams = params.filter(p => p !== '').join(', ');
-          if (lang === 'arduino') {
-            code += `${indent}${inst}.${mName}(${cleanParams});\n`;
-          } else {
-            code += `${indent}robot.custom_lib_call("${inst}", "${mName}"${cleanParams ? `, "${cleanParams.replace(/"/g, '\\"')}"` : ''})\n`;
-          }
+
         } else {
           if (lang === 'arduino') {
             code += `${indent}// Custom library statement\n`;
@@ -6793,6 +6861,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
         
         <div className="flex gap-1.5 items-center">
+          <button type="button" onClick={openBlockGuide} className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-900">Kamus blok</button>
           {!isSyncWithBlocks && (
             <button
               onClick={() => {
@@ -6869,6 +6938,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
       </div>
 
+      {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 overflow-auto rounded-xl bg-white text-slate-800 shadow-lg p-4">
+        <header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>
+        <input autoFocus placeholder="Cari label, fungsi, atau kategori" aria-label="Cari di kamus blok" value={guideFilter} onChange={e=>setGuideFilter(e.target.value)} className="w-full my-3 border rounded-lg p-2"/>
+        {guideEntries.filter(e=>[e.label,e.category,e.help].join(' ').toLowerCase().includes(guideFilter.toLowerCase())).map((e,i)=><article className="border-t py-2 text-sm" key={i}><small className="text-sky-700">{e.category}</small><h3 className="font-bold">{e.label}</h3><p>{e.help}</p></article>)}
+      </section>}
+      {blockHelp && <p role="status" className="px-4 py-2 bg-sky-50 text-sky-950 text-xs leading-relaxed">{blockHelp}</p>}
       <div className="flex-1 w-full relative z-10 overflow-hidden">
         <div ref={blocklyDivRef} className="w-full h-full" />
       </div>

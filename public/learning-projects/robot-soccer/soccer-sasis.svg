@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 325" role="img">
+<style>text{font-family:Nunito,system-ui,Arial,sans-serif;fill:#152c4b;font-size:16px}.key{font-weight:bold;font-size:15px}.tiny{font-size:12px}.label{font-weight:bold;font-size:12px;letter-spacing:1px}</style>
+<rect x="1" y="1" width="698" height="323" rx="15" fill="#f4f9fc" stroke="#d6e7f3"/>
+<rect x="147" y="47" width="406" height="231" rx="33" fill="#e0f0fb" stroke="#7aaccf" stroke-width="2"/>
+<path d="M225 46V22H475V46" fill="none" stroke="#0c7991" stroke-width="10" stroke-linecap="round"/>
+<text x="350" y="18" class="key" text-anchor="middle">Bumper untuk bola</text>
+<rect x="126" y="116" width="28" height="89" rx="9" fill="#223953"/><rect x="546" y="116" width="28" height="89" rx="9" fill="#223953"/>
+<rect x="158" y="146" width="94" height="44" rx="7" fill="#ffe5ae" stroke="#bc8837"/>
+<rect x="448" y="146" width="94" height="44" rx="7" fill="#ffe5ae" stroke="#bc8837"/>
+<text x="205" y="174" class="key" text-anchor="middle">N20 kiri</text><text x="495" y="174" class="key" text-anchor="middle">N20 kanan</text>
+<rect x="281" y="72" width="138" height="45" rx="8" fill="#d0f4ed" stroke="#75ada0"/>
+<text x="350" y="100" class="key" text-anchor="middle">ESP32 DevKit V1</text>
+<rect x="285" y="145" width="130" height="44" rx="8" fill="#ffe4e6" stroke="#d58185"/>
+<text x="350" y="173" class="key" text-anchor="middle">Driver MX1508</text>
+<path d="M350 117v28M251 164h34M415 164h33" stroke="#047e93" stroke-width="3"/>
+<rect x="247" y="213" width="206" height="38" rx="8" fill="#eee7ff" stroke="#a491d2"/>
+<text x="350" y="238" class="key" text-anchor="middle">Pack motor diikat ke sasis</text>
+<circle cx="350" cy="272" r="11" fill="#8b9bb5"/>
+<text x="350" y="308" class="key" text-anchor="middle">Caster bebas berputar · tempatkan power bank sesuai ruang sasis</text></svg>

@@ -1,0 +1,431 @@
+[
+  {
+    "type": "controls_if",
+    "label": "if ? do ? + else if + else",
+    "category": "Logic",
+    "steps": [
+      "Memilih tindakan ketika suatu syarat benar.",
+      "Seperti menyalakan lampu kalau ruangan gelap.",
+      "Pasang perbandingan pada if. Masukkan aksi di do. Ketuk + else bila perlu cabang alternatif.",
+      "Hanya cabang yang memenuhi syarat yang berjalan.",
+      "Tambahkan + else if untuk kondisi remang.",
+      "Sambungkan kondisi Boolean. Isi cabang else setelah menambahkannya."
+    ]
+  },
+  {
+    "type": "robolab_logic_compare",
+    "label": "? < ?",
+    "category": "Logic",
+    "steps": [
+      "Membandingkan dua nilai dan menghasilkan benar atau salah.",
+      "Apakah bacaan sensor lebih kecil dari 450?",
+      "Colokkan dua nilai, pilih operator, lalu pasang hasilnya pada if.",
+      "Hasil 300 < 450 adalah true.",
+      "Uji 450 pada operator <, lalu ≤.",
+      "Urutan nilai kiri dan kanan penting."
+    ]
+  },
+  {
+    "type": "arduino_setup",
+    "label": "void setup() { ? }",
+    "category": "Loops",
+    "steps": [
+      "Menyusun pekerjaan yang dilakukan sekali saat program dimulai.",
+      "Atur pin LED dan mulai koneksi sebelum loop.",
+      "Tarik setup dan letakkan blok pengaturan di ruang dalamnya.",
+      "Generator menaruh aksi pada bagian awal program.",
+      "Cetak pesan awal dan lihat berapa kali muncul setelah reset.",
+      "Gunakan satu wadah setup untuk satu alur awal."
+    ]
+  },
+  {
+    "type": "arduino_loop",
+    "label": "void loop() { ? }",
+    "category": "Loops",
+    "steps": [
+      "Mengulang rangkaian aksi selama program berjalan.",
+      "LED terus berkedip.",
+      "Tarik loop dan rangkai aksi serta jeda di ruang dalamnya.",
+      "Sesudah aksi terakhir, program kembali ke aksi pertama.",
+      "Tambahkan satu pola pendek setelah kedipan panjang.",
+      "Beri jeda saat mengamati LED atau mengirim banyak log."
+    ]
+  },
+  {
+    "type": "controls_repeat_ext",
+    "label": "repeat 10 times do ?",
+    "category": "Loops",
+    "steps": [
+      "Mengulang aksi sebanyak hitungan yang diisi.",
+      "Kedipkan lampu tepat tiga kali.",
+      "Pasang angka 3 pada times, lalu susun aksi di do.",
+      "Aksi di dalam do dijalankan tiga kali.",
+      "Ubah hitungan menjadi 0 dan prediksi hasilnya.",
+      "Pakai bilangan bulat kecil saat belajar."
+    ]
+  },
+  {
+    "type": "math_number",
+    "label": "0",
+    "category": "Math",
+    "steps": [
+      "Memasukkan angka ke soket nilai.",
+      "Isi sudut 90 pada blok servo.",
+      "Tarik blok angka, ketik nilainya, lalu pasang pada soket angka.",
+      "Blok induk menerima angka itu.",
+      "Ubah 90 menjadi 45 dan prediksi perubahan sudut.",
+      "Perhatikan konteks satuan pada blok induk."
+    ]
+  },
+  {
+    "type": "arduino_map",
+    "label": "map ? from [ ? , ? ] to [ ? , ? ]",
+    "category": "Math",
+    "steps": [
+      "Mengubah skala angka dari interval asal ke interval tujuan.",
+      "Mengubah bacaan potensiometer 0–1023 menjadi target PWM 0–255.",
+      "Masukkan analogRead pada nilai, tetapkan kedua pasangan batas, dan colokkan hasilnya ke analogWrite.",
+      "Nilai ADC yang naik menghasilkan target PWM yang naik.",
+      "Balik batas tujuan agar lampu meredup saat knop diputar.",
+      "Gunakan batas asal berbeda; map dapat menghasilkan angka di luar batas jika input di luar interval."
+    ]
+  },
+  {
+    "type": "text",
+    "label": "“  ”",
+    "category": "Text",
+    "steps": [
+      "Menyimpan huruf, kata, atau kalimat pendek.",
+      "Label “Halo, robot!” pada layar.",
+      "Ketik pesan di bidang teks dan colokkan ke blok tampilkan teks.",
+      "Blok induk menerima pesan sebagai string.",
+      "Ganti pesannya dengan nama kelompok.",
+      "Simpan sandi sungguhan di luar proyek yang dibagikan."
+    ]
+  },
+  {
+    "type": "arduino_serial_print",
+    "label": "Serial.println ?",
+    "category": "Text",
+    "steps": [
+      "Mengirim satu nilai ke Serial Monitor dan pindah baris.",
+      "Membuat daftar bacaan jarak.",
+      "Taruh blok di loop, sambungkan bacaan ke TEXT, lalu buka Serial Monitor.",
+      "Setiap bacaan tampil pada baris berikutnya.",
+      "Tambah label memakai create text with.",
+      "Cocokkan baud monitor dengan Serial.begin yang dihasilkan."
+    ]
+  },
+  {
+    "type": "procedures_defnoreturn",
+    "label": "to do something  ?",
+    "category": "Functions",
+    "steps": [
+      "Memberi nama pada rangkaian aksi yang bisa dipanggil ulang.",
+      "Buat aksi bernama nyalakan untuk satu pola lampu.",
+      "Taruh definisi di ruang kosong, ubah judul, masukkan aksi, lalu ambil pemanggilnya dari Functions.",
+      "Aksi berjalan saat pemanggil dipakai.",
+      "Panggil fungsi dua kali dari loop dengan jeda.",
+      "Gunakan nama yang valid bagi generator, misalnya nyalakan_led."
+    ]
+  },
+  {
+    "type": "procedures_callnoreturn",
+    "label": "nyalakan",
+    "category": "Functions",
+    "steps": [
+      "Menjalankan fungsi aksi yang sudah kamu definisikan.",
+      "Menjalankan lagi pola nyalakan.",
+      "Buat fungsi nyalakan, lalu taruh blok panggilannya di loop.",
+      "Isi fungsi dijalankan setiap kali dipanggil.",
+      "Panggil dari dua tempat berbeda.",
+      "Blok baru muncul setelah fungsi yang cocok didefinisikan."
+    ]
+  },
+  {
+    "type": "arduino_pin_mode",
+    "label": "pinMode Pin 2 Mode OUTPUT",
+    "category": "Input/Output",
+    "steps": [
+      "Memilih pin sebagai pengirim, pembaca, atau pembaca dengan pull-up.",
+      "Atur LED sebagai OUTPUT atau tombol sebagai INPUT_PULLUP.",
+      "Masukkan blok pada setup, ketik pin, dan pilih Mode.",
+      "Board menyiapkan arah kerja pin.",
+      "Bandingkan pembacaan tombol saat dipasang ke GND dengan INPUT_PULLUP.",
+      "Pada INPUT_PULLUP, tombol yang ditekan ke GND terbaca LOW."
+    ]
+  },
+  {
+    "type": "pin_digital_write",
+    "label": "digitalWrite Pin 2 to HIGH",
+    "category": "Input/Output",
+    "steps": [
+      "Mengatur satu pin ke HIGH atau LOW.",
+      "Menyalakan dan memadamkan LED.",
+      "Atur mode OUTPUT, lalu pasang blok dengan pin dan keadaan yang diinginkan.",
+      "LED aktif tinggi menyala pada HIGH dan padam pada LOW.",
+      "Tambah delay dan blok kedua untuk membuat kedipan.",
+      "Gunakan resistor seri pada LED."
+    ]
+  },
+  {
+    "type": "pin_digital_read",
+    "label": "digitalRead Pin 4",
+    "category": "Input/Output",
+    "steps": [
+      "Membaca keadaan digital dari pin.",
+      "Mengetahui apakah tombol ditekan.",
+      "Atur pin input dengan pull-up yang sesuai. Colokkan pembaca ke perbandingan atau kondisi.",
+      "Pembacaan berubah mengikuti level HIGH/LOW.",
+      "Cetak bacaan saat tombol ditekan dan dilepas.",
+      "Hindari input yang mengambang dengan pull-up atau pull-down yang tepat."
+    ]
+  },
+  {
+    "type": "pin_analog_write",
+    "label": "analogWrite Pin 5 to value ? (freq 1000 Hz)",
+    "category": "Input/Output",
+    "steps": [
+      "Mengatur duty cycle PWM untuk mengendalikan kecerahan atau driver.",
+      "LED pada D5 Uno menyala redup dengan nilai 64.",
+      "Pilih pin PWM, isi VALUE, lalu perhatikan dukungan FREQ pada board.",
+      "Kecerahan berubah mengikuti duty cycle.",
+      "Bandingkan 64, 128, dan 255.",
+      "Generator hanya memakai FREQ Arduino untuk ESP32 DevKit V1. Uno memakai frekuensi PWM dari core."
+    ]
+  },
+  {
+    "type": "pin_analog_read",
+    "label": "analogRead Pin A0",
+    "category": "Input/Output",
+    "steps": [
+      "Mengubah tegangan pada pin ADC menjadi angka.",
+      "Membaca posisi potensiometer.",
+      "Pilih pin analog seperti A0 pada Uno, lalu colokkan pembaca ke Serial.println.",
+      "Nilai berubah saat knop diputar.",
+      "Catat nilai di posisi kiri, tengah, dan kanan.",
+      "Gunakan tegangan dalam batas pin. Rentang angka bergantung board dan resolusi ADC."
+    ]
+  },
+  {
+    "type": "arduino_delay",
+    "label": "delay 1000 ms",
+    "category": "Time",
+    "steps": [
+      "Menunggu selama jumlah milidetik yang kamu masukkan.",
+      "Menunggu 500 ms di antara dua perubahan lampu.",
+      "Sisipkan delay di antara aksi HIGH dan LOW.",
+      "Aksi berikutnya menunggu sampai jeda selesai.",
+      "Ubah 500 ke 250 dan bandingkan laju kedip.",
+      "1000 ms = 1 detik. Delay menahan alur yang sedang berjalan."
+    ]
+  },
+  {
+    "type": "arduino_servo_write",
+    "label": "Servo on Pin 9 write angle ?",
+    "category": "Servo",
+    "steps": [
+      "Mengatur target posisi servo pada pin sinyal.",
+      "Membuka palang mini ke 90°.",
+      "Pilih pin servo, pasang nilai sudut, lalu susun jeda sesudah gerakan.",
+      "Servo posisi bergerak menuju sudut yang diberikan.",
+      "Buat urutan 45°, 90°, 135°.",
+      "Rentang latihan 0–180°, sesuaikan dengan servo dan gunakan catu yang memadai."
+    ]
+  },
+  {
+    "type": "esp32_wifi_connect",
+    "label": "WiFi Connect SSID ? Pass ?",
+    "category": "IoT",
+    "steps": [
+      "Menyambungkan board ke titik akses WiFi.",
+      "Board bergabung dengan jaringan kelas.",
+      "Isi SSID dan PASS dengan teks. Letakkan di setup, lalu cek status.",
+      "Kode mencoba menghubungkan dan menunggu jaringan dalam batas percobaan.",
+      "Cetak IP jika koneksi berhasil.",
+      "Jangan bagikan sandi jaringan kelas di tangkapan layar."
+    ]
+  },
+  {
+    "type": "esp32_wifi_status",
+    "label": "WiFi Is Connected?",
+    "category": "IoT",
+    "steps": [
+      "Menghasilkan kondisi benar saat WiFi tersambung.",
+      "Mengirim data hanya saat koneksi aktif.",
+      "Letakkan nilai ini di if dan taruh aksi jaringan pada do.",
+      "Saat WiFi putus, cabang do dilewati.",
+      "Tambahkan pesan “offline” pada else.",
+      "Sambungan ke WiFi belum menjamin server tujuan dapat dijangkau."
+    ]
+  },
+  {
+    "type": "esp32_wifi_ip",
+    "label": "WiFi Local IP",
+    "category": "IoT",
+    "steps": [
+      "Mengambil alamat IP lokal board sebagai teks.",
+      "Mengetahui alamat board di jaringan kelas.",
+      "Sambungkan WiFi lalu colokkan WiFi Local IP ke Serial.println.",
+      "Log menampilkan alamat yang diterima board.",
+      "Restart board dan amati apakah IP berubah.",
+      "Cek status dulu karena 0.0.0.0 dapat muncul sebelum IP siap."
+    ]
+  },
+  {
+    "type": "blynk_config",
+    "label": "Blynk Config Template ID ? Name ? Auth ?",
+    "category": "IoT",
+    "steps": [
+      "Menetapkan identitas template dan token untuk proyek Blynk.",
+      "Menghubungkan board ke template praktikum.",
+      "Isi TEMPLATE_ID, TEMPLATE_NAME, dan AUTH_TOKEN dengan data template milikmu.",
+      "Generator menggunakan konfigurasi pada kode Blynk.",
+      "Cek posisi definisi template di kode hasil.",
+      "Simpan token pribadi dan gunakan nilai contoh dalam buku atau saat berbagi."
+    ]
+  },
+  {
+    "type": "blynk_begin",
+    "label": "Blynk Begin Auth ? SSID ? Pass ?",
+    "category": "IoT",
+    "steps": [
+      "Memulai koneksi WiFi dan layanan Blynk.",
+      "Menghubungkan sensor kelas ke dashboard sendiri.",
+      "Pasang di setup dan isi token perangkat, SSID, serta sandi.",
+      "Board mencoba tersambung ke layanan Blynk melalui WiFi.",
+      "Uji status perangkat dari dashboard milikmu.",
+      "Cocokkan token perangkat dengan template dan jalankan Blynk Run di loop."
+    ]
+  },
+  {
+    "type": "blynk_run",
+    "label": "Blynk Run",
+    "category": "IoT",
+    "steps": [
+      "Memproses komunikasi Blynk saat loop berjalan.",
+      "Membiarkan dashboard tetap bertukar data.",
+      "Letakkan Blynk Run di loop setelah setup koneksi.",
+      "Client mendapat kesempatan memproses pesan setiap putaran.",
+      "Amati keterlambatan jika loop terlalu lama tertahan.",
+      "Hindari delay panjang di loop utama."
+    ]
+  },
+  {
+    "type": "blynk_on_write",
+    "label": "Blynk On Write V0 ?",
+    "category": "IoT",
+    "steps": [
+      "Menyusun aksi yang dipicu oleh tulisan ke Virtual Pin.",
+      "Virtual Pin V0 menerima nilai sakelar dashboard.",
+      "Letakkan blok event sebagai blok mandiri, pilih V0, lalu isi ruang dalam dengan aksi.",
+      "Kode menghubungkan aksi dengan callback BLYNK_WRITE untuk pin itu.",
+      "Tambahkan callback untuk Virtual Pin lain.",
+      "Nomor Virtual Pin harus sama dengan datastream dashboard."
+    ]
+  },
+  {
+    "type": "blynk_param_as_int",
+    "label": "Blynk Parameter Value (Integer)",
+    "category": "IoT",
+    "steps": [
+      "Mengubah nilai yang diterima callback Blynk menjadi bilangan bulat.",
+      "Membaca 0 atau 1 dari sakelar.",
+      "Pasang di dalam Blynk On Write, misalnya sebagai input perbandingan.",
+      "Syarat dapat memakai data dashboard sebagai angka.",
+      "Coba widget geser dengan rentang 0–100.",
+      "Blok memakai param milik callback; gunakan di dalam event yang tepat."
+    ]
+  },
+  {
+    "type": "blynk_virtual_write",
+    "label": "Blynk Virtual Write Pin V0 Value ?",
+    "category": "IoT",
+    "steps": [
+      "Mengirim nilai board ke sebuah Virtual Pin.",
+      "Mengirim suhu ke datastream V1.",
+      "Pilih pin virtual, isi VALUE dengan bacaan, lalu panggil berkala.",
+      "Dashboard dapat menampilkan nilai baru pada datastream yang sesuai.",
+      "Kirim dua bacaan pada dua Virtual Pin.",
+      "Atur interval pengiriman dan cocokkan tipe datastream."
+    ]
+  },
+  {
+    "type": "dht_init",
+    "label": "Initialize DHT Pin D2 Type DHT11",
+    "category": "DHT Sensor",
+    "steps": [
+      "Mempersiapkan DHT11 atau DHT22 untuk membaca suhu dan kelembapan.",
+      "Menyiapkan sensor cuaca meja.",
+      "Pasang di setup, isi pin sesuai board dan pilih tipe sensor yang benar.",
+      "Generator membuat objek DHT dan memanggil begin.",
+      "Cek perubahan deklarasi saat memilih DHT22.",
+      "Untuk Uno, tulis 2 untuk D2. Gunakan penamaan pin yang dikenali core."
+    ]
+  },
+  {
+    "type": "dht_read_temp",
+    "label": "DHT Read Temperature (°C)",
+    "category": "DHT Sensor",
+    "steps": [
+      "Mengambil suhu udara dalam derajat Celsius.",
+      "Membuat termometer kelas.",
+      "Inisialisasi DHT di setup. Pasang pembaca di Serial.println pada loop.",
+      "Serial Monitor menampilkan suhu °C jika sensor merespons.",
+      "Bandingkan dekat jendela dan bagian tengah ruangan.",
+      "Beri interval sekitar 2 detik pada latihan. nan menandakan pembacaan gagal."
+    ]
+  },
+  {
+    "type": "dht_read_humi",
+    "label": "DHT Read Humidity (%)",
+    "category": "DHT Sensor",
+    "steps": [
+      "Mengambil kelembapan relatif udara dalam persen.",
+      "Mencatat perubahan kelembapan di rumah kaca mini.",
+      "Inisialisasi DHT dan pasang pembaca ke Serial.println dengan jeda 2 detik.",
+      "Monitor menampilkan RH dalam persen saat bacaan valid.",
+      "Catat bacaan berulang dan buat tabel sederhana.",
+      "Jangan membasahi sensor. Gunakan jenis sensor dan pin yang cocok."
+    ]
+  },
+  {
+    "type": "lib_display_begin",
+    "label": "LCD I2C Mulai (Begin)",
+    "category": "Display (LCD I2C)",
+    "steps": [
+      "Menginisialisasi LCD I2C dan menyiapkannya menerima teks.",
+      "Membuka layar papan informasi kelas.",
+      "Pasang Begin di setup, kemudian tambahkan Cetak dengan pesan.",
+      "LCD yang sesuai menampilkan pesan setelah inisialisasi.",
+      "Cek alamat dan ukuran LCD yang ditetapkan generator.",
+      "Cocokkan alamat I2C, jalur SDA/SCL, dan kontras pada modul."
+    ]
+  },
+  {
+    "type": "lib_display_print",
+    "label": "LCD I2C Cetak ?",
+    "category": "Display (LCD I2C)",
+    "steps": [
+      "Mencetak data pada posisi kursor LCD.",
+      "Menampilkan “Suhu 26 C”.",
+      "Inisialisasi LCD, atur kursor, lalu sambungkan teks ke Cetak.",
+      "Teks muncul mulai posisi kursor.",
+      "Ganti teks dengan gabungan angka dari sensor.",
+      "Jika pesan baru lebih pendek, bersihkan atau timpa sisa karakter lama."
+    ]
+  },
+  {
+    "type": "lib_display_setcursor",
+    "label": "LCD I2C Atur Kursor Kolom 0 Baris 0",
+    "category": "Display (LCD I2C)",
+    "steps": [
+      "Memindahkan posisi cetak LCD ke kolom dan baris pilihan.",
+      "Memulai teks kedua pada baris berikutnya.",
+      "Pakai kolom 0 dan baris 1, kemudian letakkan Cetak setelahnya.",
+      "Karakter berikutnya mulai dari kolom pertama di baris kedua.",
+      "Coba kolom 3 sambil menjaga teks tetap muat.",
+      "Untuk LCD 16 × 2 gunakan kolom 0–15 dan baris 0–1 sebagai batas fisik."
+    ]
+  }
+]

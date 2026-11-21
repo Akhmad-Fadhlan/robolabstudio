@@ -146,7 +146,7 @@ const translations: Record<LangCode, Translations> = {
       backToWorkspace: '← Back to Workspace',
     },
     learning: {
-      title:        'Python & MicroPython Learning Portal',
+      title:        'RoboLab Learning Lab',
       subtitle:     'Master Python programming from basic syntax to MicroPython implementation on IoT and robotics devices interactively.',
       pythonBasic:  'Python Basic',
       microPython:  '🔌 MicroPython',
@@ -213,7 +213,7 @@ const translations: Record<LangCode, Translations> = {
       backToWorkspace: '← Kembali ke Workspace',
     },
     learning: {
-      title:        'Portal Pembelajaran Python & MicroPython',
+      title:        'Lab Belajar RoboLab',
       subtitle:     'Kuasai pemrograman Python dari dasar sintaksis hingga implementasi MicroPython pada perangkat IoT dan robotika secara interaktif.',
       pythonBasic:  'Python Dasar',
       microPython:  '🔌 MicroPython',
@@ -280,7 +280,7 @@ const translations: Record<LangCode, Translations> = {
       backToWorkspace: '← Kembali ke Ruang Kerja',
     },
     learning: {
-      title:        'Portal Pembelajaran Python & MicroPython',
+      title:        'Lab Belajar RoboLab',
       subtitle:     'Kuasai pengaturcaraan Python dari sintaks asas hingga pelaksanaan MicroPython pada peranti IoT dan robotik secara interaktif.',
       pythonBasic:  'Python Asas',
       microPython:  '🔌 MicroPython',

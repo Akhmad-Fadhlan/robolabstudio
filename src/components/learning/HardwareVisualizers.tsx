@@ -1,3 +1,4 @@
+import unoImage from '../../assets/lessons/uno.svg';
 // src/components/learning/HardwareVisualizers.tsx
 // Visualizer interaktif untuk materi pembelajaran hardware Arduino
 
@@ -104,7 +105,7 @@ export const DigitalOutputVisualizer: React.FC = () => {
   const vSupply = pinState === 'HIGH' ? 5.0 : 0.0;
   const vLed = pinState === 'HIGH' ? 2.0 : 0.0;
   const currentMa = pinState === 'HIGH' ? Math.round(((vSupply - vLed) / resistance) * 1000 * 10) / 10 : 0.0;
-  const isSafe = currentMa <= 25.0;
+  const isSafe = currentMa <= 20.0;
 
   return (
     <div className="flex flex-col h-full gap-3 text-slate-200">
@@ -131,23 +132,18 @@ export const DigitalOutputVisualizer: React.FC = () => {
       </div>
 
       {/* Virtual Circuit Animation */}
-      <div className="flex-1 bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col items-center justify-center gap-3 relative shadow-inner">
-        {/* Animated LED Graphic */}
-        <div className="relative flex flex-col items-center">
-          <div
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
-              pinState === 'HIGH'
-                ? 'bg-amber-400 shadow-[0_0_35px_#f59e0b] ring-4 ring-amber-300/60 scale-105'
-                : 'bg-slate-800 border-2 border-slate-700'
-            }`}
-          >
-            <span className={`text-[10px] font-bold font-mono ${pinState === 'HIGH' ? 'text-amber-950' : 'text-slate-500'}`}>
-              {pinState === 'HIGH' ? 'ON' : 'OFF'}
-            </span>
-          </div>
-          <span className="text-[8px] font-mono text-slate-400 mt-1">LED (Vf ≈ 2.0V)</span>
-        </div>
-
+      <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col items-center gap-3 relative shadow-inner">
+        <figure className="w-full rounded-xl bg-slate-50 p-3 text-slate-800">
+          <figcaption className="font-bold text-sm">Ikuti arus di satu cabang LED</figcaption>
+          <img src={unoImage} alt="Board Arduino Uno" className="h-24 mx-auto my-2" />
+          <svg viewBox="0 0 280 78" role="img" aria-label={`Pin D8 menuju resistor ${resistance} ohm, LED merah lalu GND. Arus ${currentMa} miliampere.`}>
+            <path d="M18 39 H74 M114 39 H171 M194 39 H260" fill="none" stroke={pinState==='HIGH'?'#d97706':'#64748b'} strokeWidth="4" />
+            <rect x="74" y="30" width="40" height="18" rx="4" fill="#d8b079" stroke="#855b35"/>
+            <circle cx="182" cy="39" r="13" fill={pinState==='HIGH'?'#fb4444':'#793640'} stroke="#6a2535"/>
+            <g fontSize="12" textAnchor="middle" fill="#173453"><text x="18" y="65">D8</text><text x="94" y="20">{resistance} Ω</text><text x="182" y="67">LED</text><text x="253" y="65">GND</text></g>
+          </svg>
+          <p className="text-xs">Model LED merah, Vf ≈ 2 V. Arus perkiraan <b>{currentMa} mA</b>.</p>
+        </figure>
         {/* Resistor Control Slider */}
         <div className="w-full space-y-1 mt-1">
           <div className="flex justify-between text-[8.5px] font-mono text-slate-400">

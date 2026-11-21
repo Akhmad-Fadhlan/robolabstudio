@@ -1,0 +1,265 @@
+[
+  {
+    "id": "kedip",
+    "title": "LED pertama · nyala, mati, ulangi",
+    "board": "Arduino Uno",
+    "goal": "Pahami setup, loop, dan waktu melalui satu LED.",
+    "steps": [
+      "Pasang LED dan resistor pada baris berbeda di breadboard.",
+      "Pilih Arduino Uno dan Arduino C++. Masukkan pinMode D9 OUTPUT ke setup.",
+      "Isi loop dengan HIGH → delay 500 → LOW → delay 500. Lihat perubahan kode, lalu unggah."
+    ],
+    "result": "LED menyala 0,5 detik lalu padam 0,5 detik dan mengulang.",
+    "note": "",
+    "fix": "Cek kaki anoda, katoda, dan satu GND bersama.",
+    "challenge": "Ubah dua delay menjadi 200 ms.",
+    "blocks": [
+      "kedip.png"
+    ],
+    "wiring": [
+      "kedip.svg"
+    ]
+  },
+  {
+    "id": "tombol",
+    "title": "Tombol mengendalikan LED",
+    "board": "Arduino Uno",
+    "goal": "Baca input digital dan pilih aksi dalam if/else.",
+    "steps": [
+      "Letakkan tombol melintasi celah breadboard. Sambungkan satu sisi ke D2 dan sisi satunya ke GND.",
+      "Di setup: D9 OUTPUT dan D2 INPUT_PULLUP.",
+      "Di loop: jika digitalRead D2 = 0, tulis D9 HIGH. Jika tidak, tulis LOW."
+    ],
+    "result": "LED menyala selama tombol ditekan.",
+    "note": "",
+    "fix": "Saat lepas, pull-up memberi HIGH. Jika selalu LOW, pindahkan kabel ke sisi tombol yang benar.",
+    "challenge": "Tukar HIGH dan LOW agar tombol memadamkan LED.",
+    "blocks": [
+      "tombol.png"
+    ],
+    "wiring": [
+      "tombol.svg"
+    ]
+  },
+  {
+    "id": "relay",
+    "title": "Relay untuk lampu miniatur",
+    "board": "Arduino Uno",
+    "goal": "Pahami koil, terminal COM/NO, dan konsep sakelar lampu rumah.",
+    "steps": [
+      "Pakai modul relay 5 V aktif-HIGH dengan rangkaian driver terpasang. Pisahkan sambungan koil dan jalur lampu DC.",
+      "Di setup, atur D7 OUTPUT lalu LOW. Di loop, pasang HIGH 1 detik dan LOW 1 detik.",
+      "Sebelum memberi daya, periksa lampu memang berlabel 5 V DC dan terhubung melalui COM dan NO."
+    ],
+    "result": "Relay berbunyi klik dan lampu 5 V bergantian nyala/padam.",
+    "note": "Diagram ini untuk DC 5 V. Instalasi lampu rumah 220–230 V dilakukan teknisi listrik dan berada di luar praktik siswa.",
+    "fix": "Jika hasil terbalik, cek modul memakai trigger LOW. Panduan ini memakai varian aktif-HIGH.",
+    "challenge": "Ganti putaran otomatis dengan kontrol push button dari misi sebelumnya.",
+    "blocks": [
+      "relay.png"
+    ],
+    "wiring": [
+      "relay.svg"
+    ]
+  },
+  {
+    "id": "pwm",
+    "title": "Potensiometer menjadi dimmer LED",
+    "board": "Arduino Uno",
+    "goal": "Bedakan pengukuran analog dan keluaran PWM.",
+    "steps": [
+      "Putar knop untuk mengubah tegangan pada wiper.",
+      "Susun analogRead A0 di soket nilai map. Ubah 0–1023 menjadi 0–255.",
+      "Colokkan map pada analogWrite D9. Delay 20 ms memberi jarak antarputaran."
+    ],
+    "result": "LED berubah redup ke terang sesuai posisi knop.",
+    "note": "",
+    "fix": "D9 mendukung PWM. Jika arah knop terbalik, tukar dua kaki luar potensiometer.",
+    "challenge": "Ubah batas tujuan menjadi 0–100 dan amati terang maksimum.",
+    "blocks": [
+      "pwm.png"
+    ],
+    "wiring": [
+      "pwm.svg"
+    ]
+  },
+  {
+    "id": "motor-dc",
+    "title": "Motor DC N20 berputar dua arah",
+    "board": "Arduino Uno",
+    "goal": "Pelajari satu kanal H-bridge dan pengaruh PWM.",
+    "steps": [
+      "Pakai N20 6 V arus rendah, driver mini empat input bertanda MX1508, dan pack 4×AA NiMH. Cocokkan arus stall motor terhadap rating modul.",
+      "Kirim PWM 115 ke IN1 dan 0 ke IN2 untuk arah pertama, lalu beri jeda 600 ms.",
+      "Nolkan kedua pin 500 ms, lalu balik pasangan PWM untuk arah kedua. Nolkan lagi sebelum mengulang."
+    ],
+    "result": "Motor berganti arah dengan fase diam di antaranya.",
+    "note": "",
+    "fix": "Uji dengan roda terangkat. Jika motor tidak berputar, cek catu motor, GND bersama, dan label IN.",
+    "challenge": "Bandingkan PWM 115 dan 155 tanpa memberi beban pada roda.",
+    "blocks": [
+      "motor-dc.png"
+    ],
+    "wiring": [
+      "motor-dc.svg"
+    ]
+  },
+  {
+    "id": "servo",
+    "title": "Servo menggerakkan palang",
+    "board": "Arduino Uno",
+    "goal": "Tentukan posisi dengan sudut, seperti palang otomatis.",
+    "steps": [
+      "Letakkan servo tanpa beban. Hubungkan catu yang sanggup menyuplai arus servo.",
+      "Di loop, letakkan servo 45° → delay 800 ms → servo 135° → delay 800 ms.",
+      "Buka kode, cari attach pada pin 9, lalu unggah dengan library Servo yang sesuai."
+    ],
+    "result": "Lengan bergerak antara 45° dan 135°.",
+    "note": "",
+    "fix": "Jika board reset atau servo bergetar, periksa arus catu dan GND bersama.",
+    "challenge": "Tambah posisi 90° dengan jeda yang berbeda.",
+    "blocks": [
+      "servo.png"
+    ],
+    "wiring": [
+      "servo.svg"
+    ]
+  },
+  {
+    "id": "lcd",
+    "title": "LCD I2C menampilkan pesan",
+    "board": "Arduino Uno",
+    "goal": "Kenali SDA untuk data dan SCL untuk jam pada bus I2C.",
+    "steps": [
+      "Pasang library LiquidCrystal_I2C agar kategori Display muncul. Gunakan LCD 16×2 dengan alamat 0x27 untuk contoh ini.",
+      "Masukkan LCD Mulai dalam setup, atur kolom 0 baris 0, lalu cetak teks HALO ROBO.",
+      "Atur kolom 0 baris 1, lalu cetak pesan BELAJAR I2C."
+    ],
+    "result": "LCD menampilkan dua baris pesan.",
+    "note": "",
+    "fix": "Cek alamat I2C, kontras, dan jangan tertukar antara SDA dengan SCL.",
+    "challenge": "Tulis teks pendek pada kolom 3 baris 1.",
+    "blocks": [
+      "lcd.png"
+    ],
+    "wiring": [
+      "lcd.svg"
+    ]
+  },
+  {
+    "id": "wifi",
+    "title": "ESP32 mendapatkan alamat WiFi",
+    "board": "ESP32 DevKit V1",
+    "goal": "Hubungkan ESP32 ke WiFi 2,4 GHz dan baca IP lokal.",
+    "steps": [
+      "Pilih ESP32 DevKit V1 dengan chip ESP32 klasik. Gunakan kabel USB data.",
+      "Pada setup, masukkan WiFi Connect. Isi SSID dan sandi jaringan yang diizinkan.",
+      "Pada loop, jika WiFi Is Connected? cetak WiFi Local IP. Buka Serial Monitor pada 115200 baud."
+    ],
+    "result": "Alamat IP lokal muncul setelah board tersambung.",
+    "note": "",
+    "fix": "Jika tidak tersambung, cek jaringan 2,4 GHz, sandi, dan kebijakan jaringan sekolah.",
+    "challenge": "Cetak pesan offline di else.",
+    "blocks": [
+      "wifi.png"
+    ],
+    "wiring": [
+      "wifi.svg"
+    ]
+  },
+  {
+    "id": "bluetooth",
+    "title": "Bluetooth menyalakan LED dari HP",
+    "board": "ESP32 DevKit V1",
+    "goal": "Ubah karakter yang dikirim HP menjadi keputusan.",
+    "steps": [
+      "Hubungkan LED ke GPIO25. Di setup, atur GPIO25 OUTPUT dan pasang Bluetooth Begin.",
+      "Hubungkan Android memakai terminal Bluetooth Classic SPP. Matikan tambahan CR/LF.",
+      "Di loop, baca satu byte hanya saat Available. Bandingkan dengan 49, kode untuk karakter 1."
+    ],
+    "result": "Kirim 1 untuk menyalakan LED, 0 untuk memadamkannya.",
+    "note": "",
+    "fix": "Pakai ESP32 klasik dan aplikasi SPP, bukan terminal BLE.",
+    "challenge": "Ubah nama perangkat supaya tiap kelompok mudah menemukan board sendiri.",
+    "blocks": [
+      "bluetooth.png"
+    ],
+    "wiring": [
+      "bluetooth.svg"
+    ]
+  },
+  {
+    "id": "sensor-dht",
+    "title": "DHT membaca suhu dan kelembapan",
+    "board": "ESP32 DevKit V1",
+    "goal": "Uji sensor melalui Serial Monitor sebelum masuk ke Blynk.",
+    "steps": [
+      "Gunakan modul DHT11 dengan pull-up DATA ke 3,3 V. Jika memakai DHT bare, tambah resistor 10 kΩ dari DATA ke 3V3.",
+      "Pasang library DHT yang menyediakan DHT.h dan dependensinya. Di setup, pilih 27 dan DHT11.",
+      "Cetak suhu lalu kelembapan di loop. Tambahkan delay 2500 ms."
+    ],
+    "result": "Monitor serial 115200 baud menampilkan suhu °C serta kelembapan relatif %.",
+    "note": "",
+    "fix": "Jika nan, cek tipe sensor, DATA, daya, dan GND.",
+    "challenge": "Bandingkan nilai dari dua tempat di ruang kelas.",
+    "blocks": [
+      "sensor-dht.png"
+    ],
+    "wiring": [
+      "sensor-dht.svg"
+    ]
+  },
+  {
+    "id": "robot-soccer",
+    "title": "Robot Soccer N20 dan L298 Mini",
+    "board": "ESP32 DevKit V1",
+    "goal": "Merakit robot dua roda, menerjemahkan tombol HP, dan mengatur PWM.",
+    "steps": [
+      "Pasang dua N20 pada sasis dengan bracket, dua roda, caster, penahan baterai, dan bumper penuntun bola. Pastikan roda bebas berputar.",
+      "Sambungkan keempat GPIO pada gambar ke driver MX1508 empat input. ESP32 mendapat daya dari USB power bank yang aman terpasang. Pack NiMH khusus motor berbagi GND dengan board.",
+      "Susun setup, loop, dan lima fungsi. Uji satu karakter F/B/L/R pada terminal SPP Android. Untuk gamepad, gunakan HP yang menerjemahkan tombol ke karakter SPP yang sama."
+    ],
+    "result": "Satu perintah valid menggerakkan robot sekitar 150 ms lalu motor coast. Tanpa perintah baru robot tidak terus didorong.",
+    "note": "Acuan modul: board mini bertanda MX1508 dengan IN1–IN4, dua output pasangan motor, dan VM/GND; sering dijual sebagai L298 Mini. Untuk driver berlabel ENA/ENB atau chip lain, gunakan diagram dari vendor modul. Sesuaikan arus stall N20, catu, dan pelindung rangkaian dengan rating aktual.",
+    "fix": "Jika maju justru berputar, matikan daya dan tukar dua kabel pada satu motor. Uji satu karakter, nonaktifkan CR/LF dan auto-repeat saat roda terangkat.",
+    "challenge": "Mulai gelar laga 2 × 45 detik di area berpagar. Pakai bola ringan, lalu ubah PWM belok secara bertahap.",
+    "blocks": [
+      "robot-soccer-1.png",
+      "robot-soccer-2.png",
+      "robot-soccer-3.png",
+      "robot-soccer-4.png",
+      "robot-soccer-5.png",
+      "robot-soccer-6.png",
+      "robot-soccer-7.png"
+    ],
+    "wiring": [
+      "soccer-sasis.svg",
+      "soccer-topologi.svg",
+      "robot-soccer.svg"
+    ]
+  },
+  {
+    "id": "blynk",
+    "title": "Blynk · kendali lampu dan pantau udara",
+    "board": "ESP32 DevKit V1",
+    "goal": "Menghubungkan input dashboard dengan relay dan membaca sensor secara berkala.",
+    "steps": [
+      "Siapkan Blynk.Console memakai langkah pada halaman berikut. Gunakan V0 untuk relay, V1 suhu, dan V2 kelembapan.",
+      "Mulai DHT dan matikan relay di setup sebelum Blynk Begin. Isi Config dengan data perangkat latihan.",
+      "Buat Blynk On Write V0 sebagai blok mandiri. Jalankan Blynk Run berulang; setelah sekitar 2,5 detik kirim dua bacaan."
+    ],
+    "result": "Switch web atau HP mengontrol relay. Dashboard menampilkan pembaruan suhu dan RH berkala saat perangkat online.",
+    "note": "Pakai modul relay koil 5 V yang menerima trigger aktif-HIGH 3,3 V. Beban hanya lampu modul DC 5 V. Hasil Switch adalah perintah, bukan pembacaan kontak fisik. Dengan blok ini, relay mempertahankan kondisi terakhir saat koneksi putus. Matikan catu beban secara manual jika diperlukan.",
+    "fix": "Jika offline, cek WiFi dan token. Jika widget bergerak tetapi relay diam, periksa V0, trigger aktif-HIGH 3,3 V, catu koil, dan GND.",
+    "challenge": "Buat notifikasi suhu serta otomasi jadwal mati dari Console.",
+    "blocks": [
+      "blynk-1.png",
+      "blynk-2.png",
+      "blynk-3.png"
+    ],
+    "wiring": [
+      "blynk-topologi.svg",
+      "blynk.svg"
+    ]
+  }
+]

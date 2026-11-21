@@ -17,6 +17,9 @@ import { TerminalPanel } from './components/layout/TerminalPanel';
 import { PythonLogo } from './components/icons/PythonLogo';
 import { ArduinoLogo } from './components/icons/ArduinoLogo';
 import { MicroPythonLogo } from './components/icons/MicroPythonLogo';
+import { BlockFieldGuide } from './components/learning/BlockFieldGuide';
+import { ProjectWorkshop } from './components/learning/ProjectWorkshop';
+import { LessonMission } from './components/learning/LessonMission';
 import { KidsAnalogyCard } from './components/learning/KidsAnalogyCards';
 import { CloudFooter, TwinklingStars, MascotRobot, RocketBanner } from './components/decorations/KidsThemeDecorations';
 import type { BlocklyEditor as BlocklyEditorType } from './components/BlocklyEditor';
@@ -3294,6 +3297,20 @@ interface AuthUser {
 }
 
 function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => void }) {
+  const [libraryFocus,setLibraryFocus] = useState('');
+  function openLibraryBlocks(name: string) {
+    setLibraryFocus(name);
+    if (!activeFile || !activeFile.endsWith('.ino')) {
+      const sketch = Object.keys(files).find(path => path.endsWith('.ino')) || 'firmware/main.ino';
+      setFiles(prev => sketch in prev ? prev : {...prev,[sketch]:''});
+      setActiveFile(sketch);
+    }
+    setIsTerminalCollapsed(true);
+    setShowLibraryManagerModal(false);
+    setWorkspaceMode('blockly');
+    setStudentSubMode('block');
+    setCurrentTab('ide');
+  }
   // Navigation
   const [currentTab, setCurrentTab] = useState<'home' | 'ide' | 'packages' | 'learning' | 'settings' | 'simulator'>('ide');
   const [projectName, setProjectName] = useState<string | null>(() => {
@@ -3729,6 +3746,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [uiMode, setUiMode] = useState<'student' | 'pro'>('pro');
   const [studentSubMode, setStudentSubMode] = useState<'block' | 'code'>('block');
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
+  const [showLearningProjects, setShowLearningProjects] = useState(false);
   const [learningCategory, setLearningCategory] = useState<'fundamental' | 'micropython' | 'hardware'>('fundamental');
   const [showTechDetails, setShowTechDetails] = useState<boolean>(false);
 
@@ -4174,8 +4192,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const req = (window as any).__electronRequire || (window as any).require;
       if (req) {
         try {
-          await req('electron').ipcRenderer.invoke('install-arduino-lib', libName);
-        } catch (_) {}
+          const result = await req('electron').ipcRenderer.invoke('install-arduino-lib', libName);
+          if (result?.success === false) throw new Error(result.error || 'Instalasi gagal');
+        } catch (err) {
+          setTerminalLogs(prev => [...prev, {text: 'Blok aktif, tetapi instalasi untuk kompilasi gagal: ' + String(err), type: 'error'}]);
+        }
       }
 
       setInstallingLib(null);
@@ -9633,6 +9654,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           >
                             <BlocklyEditor 
                               key={projectName + "_" + ((activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'main_workspace' : activeFile) + "_" + themeMode + "_" + learningLessonLoadedCount + "_" + packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}
+                              libraryFocus={libraryFocus}
                               codeType={activeFile.endsWith('.py') ? 'python' : 'arduino'} 
                               board={board}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
@@ -10100,8 +10122,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
                                     <Check className="w-3.5 h-3.5" />
-                                    <span>Terpasang</span>
+                                    <span>Blok aktif</span>
                                   </span>
+                                  <button className="rounded-lg bg-sky-100 px-2 py-2 text-xs font-bold text-sky-900" onClick={() => openLibraryBlocks(lib.name)}>Lihat blok</button>
                                   <button
                                     disabled={isUninstalling}
                                     onClick={() => handleToggleLibraryBlock(lib, false)}
@@ -10764,78 +10787,32 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             
             return (
               <div className={`absolute inset-0 p-4 sm:p-6 lg:p-7 overflow-y-auto space-y-5 transition ${themeMode === 'light' ? 'bg-[#f8fafc] text-slate-800' : 'bg-[#0a0b10] text-slate-100'}`}>
-                {/* Header */}
-                <div className="w-full flex flex-wrap items-center justify-between gap-3 select-none pb-2 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md text-sm font-bold">
-                        🚀
-                      </div>
-                      <h2 className={`text-base sm:text-lg font-extrabold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`} style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
-                        {t(language, 'learning', 'title')}
-                      </h2>
-                    </div>
-                    <p className={`text-[11px] font-medium ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
-                      {t(language, 'learning', 'subtitle')}
-                    </p>
-                  </div>
-
-                  {/* Fun Gamified Progress Badge */}
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-xs font-bold ${
-                    themeMode === 'light' ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
-                  }`}>
-                    <span>⭐ Materi: {activeLessonIndex + 1} / {currentLessons.length}</span>
-                  </div>
-                </div>
-
-                {/* 3-Column Responsive Layout */}
+                <header className={`rounded-2xl border p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-700'}`}>
+                  <h2 className="text-lg font-bold tracking-tight">{t(language, 'learning', 'title')}</h2>
+                  <nav aria-label="Jalur belajar" className="grid grid-cols-2 sm:flex gap-1 rounded-xl bg-slate-500/10 p-1 w-full sm:w-auto">
+                    {(['fundamental','micropython','hardware','projects'] as const).map((key,i) => {
+                      const active = showLearningProjects ? key === 'projects' : key === learningCategory;
+                      return <button key={key} type="button" aria-pressed={active}
+                        onClick={() => {
+                          setShowLearningProjects(key === 'projects');
+                          if (key !== 'projects' && key !== learningCategory) { setLearningCategory(key); setActiveLessonIndex(0); }
+                        }}
+                        className={`min-h-11 rounded-lg px-3 text-sm font-semibold transition focus-visible:outline-blue-500 ${active ? 'bg-blue-700 text-white shadow-sm' : 'hover:bg-blue-500/10'}`}>
+                        {['Python','MicroPython','Arduino','Proyek modul'][i]}
+                      </button>;
+                    })}
+                  </nav>
+                </header>
+                {showLearningProjects ? <ProjectWorkshop /> : (
                 <div className="flex flex-col lg:flex-row gap-5 w-full min-h-[580px] items-stretch">
                   {/* Column 1 (Left): Category Selector + Nav List */}
                   <div className="w-full lg:w-64 xl:w-72 flex flex-col gap-3 flex-shrink-0">
-                    {/* Category Switcher Tabs with Real Logos */}
-                    <div className={`flex p-1 rounded-2xl gap-1 border ${themeMode === 'light' ? 'bg-slate-200/70 border-slate-300/60' : 'bg-slate-900/80 border-slate-800'}`}>
-                      <button
-                        onClick={() => { setLearningCategory('fundamental'); setActiveLessonIndex(0); }}
-                        className={`flex-1 py-2 text-[9.5px] font-bold rounded-xl transition select-none cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-                          learningCategory === 'fundamental'
-                            ? 'bg-blue-600 text-white shadow-md font-extrabold'
-                            : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                        title="Python Fundamental (Dasar Pemrograman)"
-                      >
-                        <PythonLogo className="w-3.5 h-3.5" />
-                        <span className="truncate">{t(language, 'learning', 'pythonBasic')}</span>
-                      </button>
-
-                      <button
-                        onClick={() => { setLearningCategory('micropython'); setActiveLessonIndex(0); }}
-                        className={`flex-1 py-2 text-[9.5px] font-bold rounded-xl transition select-none cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-                          learningCategory === 'micropython'
-                            ? 'bg-[#E03A3E] text-white shadow-md font-extrabold'
-                            : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                        title="MicroPython Robotika & IoT"
-                      >
-                        <MicroPythonLogo className="w-3.5 h-3.5" />
-                        <span className="truncate">{t(language, 'learning', 'microPython')}</span>
-                      </button>
-
-                      <button
-                        onClick={() => { setLearningCategory('hardware'); setActiveLessonIndex(0); }}
-                        className={`flex-1 py-2 text-[9.5px] font-bold rounded-xl transition select-none cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-                          learningCategory === 'hardware'
-                            ? 'bg-[#00979C] text-white shadow-md font-extrabold'
-                            : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                        title="Hardware Arduino Uno & Sensor"
-                      >
-                        <ArduinoLogo className="w-4 h-4" />
-                        <span className="truncate">Arduino</span>
-                      </button>
-                    </div>
-
-                    {/* Lesson Buttons List */}
-                    <div className="flex flex-col gap-2 overflow-y-auto max-h-[300px] lg:max-h-[580px] pr-1">
+                    <label className="lg:hidden text-sm font-semibold">Pilih pelajaran
+                      <select className="block w-full mt-1 p-2 rounded-xl bg-white text-slate-900 border" value={activeLessonIndex} onChange={e=>setActiveLessonIndex(Number(e.target.value))}>
+                        {currentLessons.map((lesson,i)=><option key={lesson.title} value={i}>{lesson.title}</option>)}
+                      </select>
+                    </label>
+                    <div className="hidden lg:flex flex-col gap-2 overflow-y-auto lg:max-h-[580px] pr-1">
                       {currentLessons.map((lesson, idx) => (
                         <button
                           key={idx}
@@ -10962,7 +10939,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       </button>
                     </div>
 
-                    {/* HERO: Kid-Friendly Visual Analogy Card */}
+                    <LessonMission category={learningCategory} index={activeLessonIndex} />
+                    <BlockFieldGuide />
                     <KidsAnalogyCard
                       category={learningCategory}
                       lessonIndex={activeLessonIndex}
@@ -11061,6 +11039,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     {renderLearningVisualizer()}
                   </div>
                 </div>
+                )}
               </div>
             );
           })()}
@@ -12389,7 +12368,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   return (
                     <div
                       key={lib.name}
-                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition ${
+                      className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition ${
                         isLibInstalled
                           ? themeMode === 'light'
                             ? 'bg-emerald-50/70 border-emerald-300 shadow-xs'
@@ -12445,7 +12424,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow-xs">
                               <Check className="w-3 h-3" /> Terpasang di Blok
                             </span>
-                            <button
+                            <button className="rounded-lg bg-sky-100 px-2 py-2 text-xs font-bold text-sky-900" onClick={() => openLibraryBlocks(lib.name)}>Lihat blok</button>
+                                  <button
                               disabled={isUninstalling}
                               onClick={() => handleToggleLibraryBlock(lib, false)}
                               className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/25 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
