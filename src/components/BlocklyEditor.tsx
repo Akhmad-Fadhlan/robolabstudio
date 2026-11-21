@@ -4086,52 +4086,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const getToolboxXml = (libs: (string | { name: string; [key: string]: any })[] = [], boardType?: string) => {
     // ── BBC micro:bit: isolated toolbox with only Micro:bit categories ──
     if (boardType === 'BBC micro:bit') {
+      const language = localStorage.getItem('robolab_language') || 'id';
       return `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-      <category name="Logic" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
-        <block type="controls_if"></block>
-        <block type="robolab_logic_compare"></block>
-        <block type="logic_operation"></block>
-        <block type="logic_negate"></block>
-        <block type="logic_boolean"></block>
-      </category>
-      <category name="Loops" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
-        <block type="arduino_setup"></block>
-        <block type="arduino_loop"></block>
-        <block type="controls_repeat_ext">
-          <value name="TIMES">
-            <block type="math_number">
-              <field name="NUM">10</field>
-            </block>
-          </value>
-        </block>
-        <block type="controls_whileUntil"></block>
-        <block type="controls_for">
-          <value name="FROM">
-            <block type="math_number"><field name="NUM">1</field></block>
-          </value>
-          <value name="TO">
-            <block type="math_number"><field name="NUM">10</field></block>
-          </value>
-          <value name="BY">
-            <block type="math_number"><field name="NUM">1</field></block>
-          </value>
-        </block>
-      </category>
-      <category name="Math" colour="#40BF4A" css-container="cat-math" css-row="cat-math">
-        <block type="math_number"></block>
-        <block type="math_arithmetic"></block>
-        <block type="math_single"></block>
-        <block type="math_round"></block>
-      </category>
-      <category name="Text" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
-        <block type="text"></block>
-        <block type="text_join"></block>
-      </category>
-      <category name="Variables" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
-      </category>
-      <category name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
-        <category name="Basic" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
+      <category expanded="true" name="Micro:bit" colour="#2AC1BC" css-container="cat-microbit" css-row="cat-microbit">
+        <category name="${language === 'id' ? 'Layar &amp; waktu' : 'Basic'}" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
           <block type="arduino_setup"></block>
           <block type="arduino_loop"></block>
           <block type="basic_show_string">
@@ -4159,7 +4118,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             </value>
           </block>
         </category>
-        <category name="Input" colour="#12B886" css-container="cat-mb-input" css-row="cat-mb-input">
+        <category name="${language === 'id' ? 'Tombol &amp; sensor' : 'Input'}" colour="#12B886" css-container="cat-mb-input" css-row="cat-mb-input">
           <block type="input_on_button_pressed"></block>
           <block type="input_button_is_pressed"></block>
           <block type="input_on_gesture"></block>
@@ -4167,7 +4126,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           <block type="input_light_level"></block>
           <block type="input_compass_heading"></block>
         </category>
-        <category name="Music" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
+        <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
           <block type="music_play_tone">
             <value name="NOTE">
               <block type="math_number"><field name="NUM">440</field></block>
@@ -4184,7 +4143,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             </value>
           </block>
         </category>
-        <category name="Pins" colour="#4a90e2" css-container="cat-mb-pins" css-row="cat-mb-pins">
+        <category name="${language === 'id' ? 'Pin &amp; kabel' : 'Pins'}" colour="#4a90e2" css-container="cat-mb-pins" css-row="cat-mb-pins">
           <block type="pins_digital_write">
             <field name="PIN">P0</field>
             <value name="VALUE">
@@ -4207,6 +4166,47 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           <block type="pins_analog_read"></block>
         </category>
       </category>
+      <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
+        <block type="controls_if"></block>
+        <block type="robolab_logic_compare"></block>
+        <block type="logic_operation"></block>
+        <block type="logic_negate"></block>
+        <block type="logic_boolean"></block>
+      </category>
+      <category name="${language === 'id' ? 'Perulangan' : 'Loops'}" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
+        <block type="controls_repeat_ext">
+          <value name="TIMES">
+            <block type="math_number">
+              <field name="NUM">10</field>
+            </block>
+          </value>
+        </block>
+        <block type="controls_whileUntil"></block>
+        <block type="controls_for">
+          <value name="FROM">
+            <block type="math_number"><field name="NUM">1</field></block>
+          </value>
+          <value name="TO">
+            <block type="math_number"><field name="NUM">10</field></block>
+          </value>
+          <value name="BY">
+            <block type="math_number"><field name="NUM">1</field></block>
+          </value>
+        </block>
+      </category>
+      <category name="${language === 'id' ? 'Angka' : 'Math'}" colour="#40BF4A" css-container="cat-math" css-row="cat-math">
+        <block type="math_number"></block>
+        <block type="math_arithmetic"></block>
+        <block type="math_single"></block>
+        <block type="math_round"></block>
+      </category>
+      <category name="${language === 'id' ? 'Teks' : 'Text'}" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
+        <block type="text"></block>
+        <block type="text_join"></block>
+      </category>
+      <category name="${language === 'id' ? 'Variabel' : 'Variables'}" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
+      </category>
+
     </xml>`;
     }
     const curSc = activeRobotHwConfig?.sensorCount || 6;
@@ -6851,7 +6851,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const isLight = themeMode === 'light';
 
   return (
-    <div className={`w-full h-full relative overflow-hidden flex flex-col ${isLight ? 'bg-white' : 'bg-[#08090d]'} ${compact ? 'compact-blockly' : ''}`}>
+    <div className={`w-full h-full relative overflow-hidden flex flex-col ${isLight ? 'bg-white' : 'bg-[#08090d]'} ${compact ? 'compact-blockly' : ''} ${board === 'BBC micro:bit' ? 'microbit-blockly' : ''}`}>
       {/* ✨ Kids-Friendly Card Header */}
       <div className={`flex items-center justify-between backdrop-blur-md border-b ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))]' : 'bg-[#0b0d14]/95 border-slate-800/80'} ${compact ? 'px-3 py-1.5' : 'px-4 py-2.5'} z-20 shadow-sm relative`}>
         <div className="flex items-center gap-2">
@@ -6939,10 +6939,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
       </div>
 
-      {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 overflow-auto rounded-xl bg-white text-slate-800 shadow-lg p-4">
-        <header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>
-        <input autoFocus placeholder="Cari label, fungsi, atau kategori" aria-label="Cari di kamus blok" value={guideFilter} onChange={e=>setGuideFilter(e.target.value)} className="w-full my-3 border rounded-lg p-2"/>
+      {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 flex min-h-0 flex-col overflow-hidden rounded-xl bg-white text-slate-800 shadow-lg">
+        <div className="shrink-0 border-b border-slate-200 p-4"><header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>
+        <input autoFocus placeholder="Cari label, fungsi, atau kategori" aria-label="Cari di kamus blok" value={guideFilter} onChange={e=>setGuideFilter(e.target.value)} className="w-full mt-3 border rounded-lg p-2"/></div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4" aria-label="Daftar blok">
         {guideEntries.filter(e=>[e.label,e.category,e.help].join(' ').toLowerCase().includes(guideFilter.toLowerCase())).map((e,i)=><article className="border-t py-2 text-sm" key={i}><small className="text-sky-700">{e.category}</small><BlocklyPreview xml={e.xml} /><h3 className="font-bold">{e.label}</h3><p>{e.help}</p></article>)}
+      </div>
       </section>}
       {blockHelp && <p role="status" className="px-4 py-2 bg-sky-50 text-sky-950 text-xs leading-relaxed">{blockHelp}</p>}
       <div className="flex-1 w-full relative z-10 overflow-hidden">

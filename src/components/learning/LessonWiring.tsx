@@ -45,19 +45,30 @@ const espRoutes: Record<number, WireRoute[]> = {
   10: [['GPIO14', 'INMP441 SCK'], ['GPIO15', 'INMP441 WS'], ['GPIO32', 'INMP441 SD'], ['3V3', 'INMP441 VDD'], ['GND', 'INMP441 GND dan L/R'], ...ledOnGpio2],
 };
 
-function WiringDiagram({ routes }: { routes: WireRoute[] }) {
+function WiringDiagram({ routes, boardImage, boardName, images }: {
+  routes: WireRoute[]; boardImage: string; boardName: string; images: string[];
+}) {
   return <figure className="my-3 overflow-hidden rounded-xl border border-slate-300 bg-white p-2 text-slate-800">
-    <figcaption className="mb-2 text-xs font-semibold">Pin board dan terminal komponen</figcaption>
-    <div className="grid grid-cols-[3.5rem_minmax(2rem,1fr)_minmax(5rem,1fr)] items-center gap-y-2 text-[11px]">
+    <figcaption className="mb-2 text-xs font-semibold">Rangkaian dan jalur kabel</figcaption>
+    <div className="grid grid-cols-[3.5rem_minmax(2rem,1fr)_minmax(5rem,1fr)] items-center text-[11px]">
+      <div className="flex flex-col items-center self-end gap-1 rounded-t-lg border p-1 text-center font-bold">
+        <img src={boardImage} alt="" className="h-16 max-w-full object-contain" />
+        {boardName}
+      </div>
+      <div />
+      <div className="flex flex-wrap items-center justify-center gap-1 self-end rounded-t-lg border p-1">
+        {images.map(image => <img key={image} src={'/' + image} alt="" className="h-12 max-w-full object-contain" />)}
+        <span className="w-full text-center font-bold">Komponen</span>
+      </div>
       {routes.map(([pin, terminal, inline]) => {
         const color = pin === 'GND' ? '#475569' : /^(3V3|5V)$/.test(pin) ? '#b91c1c' : '#0369a1';
         return <div className="contents" key={terminal}>
-          <span className="rounded-l border px-1 py-1 font-mono font-bold">{pin}</span>
+          <span className="relative self-stretch border-x bg-slate-100 px-1 py-2 font-mono font-bold">{pin}<span aria-hidden="true" className="absolute right-0 top-1/2 z-10 h-2 w-2 translate-x-1/2 -translate-y-1/2 rounded-full" style={{ backgroundColor: color }} /></span>
           <span className="relative flex min-h-9 items-center justify-center px-1 text-center">
             <span aria-hidden="true" className="absolute inset-x-0 top-1/2 h-0.5" style={{ backgroundColor: color }} />
             {inline && <span className="relative rounded border border-current bg-white px-1 leading-tight" style={{ color }}>{inline}</span>}
           </span>
-          <span className="rounded-r border px-1 py-1">{terminal}</span>
+          <span className="relative self-stretch border-x bg-slate-100 px-1 py-2"><span aria-hidden="true" className="absolute left-0 top-1/2 z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ backgroundColor: color }} />{terminal}</span>
         </div>;
       })}
     </div>
@@ -72,11 +83,9 @@ export function LessonWiring({category, index}: {category: 'fundamental' | 'hard
   const routes = (arduino ? unoRoutes : espRoutes)[index];
   return <section className="rounded-xl border border-[var(--theme-border,#64748b)] p-3">
     <h3 className="text-sm font-bold">Rangkaian untuk kode ini</h3>
-    <div className="my-3 flex flex-wrap items-center gap-3">
-      <img className="h-24 w-auto max-w-full object-contain" src={arduino ? '/Arduino-Fixed.svg' : '/1666364456Esp32_devkitc_v4.svg'} alt={arduino ? 'Arduino Uno' : 'ESP32 DevKit'} />
-      {wiring.images?.map(image => <img key={image} className="h-16 w-auto max-w-full object-contain" src={'/' + image} alt="" />)}
-    </div>
-    {routes && <WiringDiagram routes={routes} />}
+    {routes && <WiringDiagram routes={routes} images={wiring.images || []}
+      boardImage={arduino ? '/Arduino-Fixed.svg' : '/1666364456Esp32_devkitc_v4.svg'}
+      boardName={arduino ? 'Uno' : 'ESP32'} />}
     <ul className="list-disc space-y-1 pl-4 text-sm">{wiring.connections.map(connection => <li key={connection}>{connection}</li>)}</ul>
   </section>;
 }

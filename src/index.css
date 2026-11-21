@@ -2425,3 +2425,13 @@ nav[aria-label="Jalur belajar"] button:focus-visible {
 .theme-light .simulator-component-popup :is([class*="text-slate-3"], [class*="text-slate-4"], [class*="text-white"]) {
   color: #334155;
 }
+
+.microbit-blockly :is(.blocklyTreeRow, .blocklyToolboxCategory)[class*="cat-mb-"] {
+  min-height: 38px;
+  margin-block: 4px;
+  border-radius: 9px;
+}
+.microbit-blockly :is(.blocklyTreeRow, .blocklyToolboxCategory)[class*="cat-mb-"] :is(.blocklyTreeLabel, .blocklyToolboxCategoryLabel) {
+  font-size: 13px;
+  font-weight: 650;
+}

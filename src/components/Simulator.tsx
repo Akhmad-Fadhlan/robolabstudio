@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, ChevronDown, Lock, Palette, Check, Bot } from 'lucide-react';
+import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, Palette, Check, Bot } from 'lucide-react';
 import { RobotArena3D } from './RobotArena3D';
 import {
   type RobotHardwareConfig,
@@ -310,10 +310,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
   onBlynkVirtualWrite: _onBlynkVirtualWrite,
   isWifiConnected: isWifiConnectedProp,
   onWifiConnectedChange,
-  selectedWifi: selectedWifiProp,
-  onSelectedWifiChange,
-  wifiPassword: wifiPasswordProp,
-  onWifiPasswordChange,
   themeMode = 'dark',
   simulatorMode: simulatorModeProp,
   onSimulatorModeChange,
@@ -358,21 +354,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const isEsp8266 = board.toLowerCase().includes('esp8266') || board.toLowerCase().includes('esp266') || board.toLowerCase().includes('nodemcu');
 
   // Wifi Simulator State
-  const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
-  const [localSelectedWifi, setLocalSelectedWifi] = useState<string>('');
-  const selectedWifi = selectedWifiProp !== undefined ? selectedWifiProp : localSelectedWifi;
-  const setSelectedWifi = (val: string | ((prev: string) => string)) => {
-    const nextVal = typeof val === 'function' ? val(selectedWifi) : val;
-    if (onSelectedWifiChange) onSelectedWifiChange(nextVal);
-    else setLocalSelectedWifi(nextVal);
-  };
-  const [localWifiPassword, setLocalWifiPassword] = useState<string>('');
-  const wifiPassword = wifiPasswordProp !== undefined ? wifiPasswordProp : localWifiPassword;
-  const setWifiPassword = (val: string | ((prev: string) => string)) => {
-    const nextVal = typeof val === 'function' ? val(wifiPassword) : val;
-    if (onWifiPasswordChange) onWifiPasswordChange(nextVal);
-    else setLocalWifiPassword(nextVal);
-  };
+  const [checkingNetwork, setCheckingNetwork] = useState(false);
+  const [networkError, setNetworkError] = useState('');
   const [localWifiConnected, setLocalWifiConnected] = useState<boolean>(false);
   const isWifiConnected = isWifiConnectedProp !== undefined ? isWifiConnectedProp : localWifiConnected;
   const setIsWifiConnected = (val: boolean | ((prev: boolean) => boolean)) => {
@@ -380,8 +363,6 @@ export const Simulator: React.FC<SimulatorProps> = ({
     if (onWifiConnectedChange) onWifiConnectedChange(nextVal);
     else setLocalWifiConnected(nextVal);
   };
-  const [isScanningWifi, setIsScanningWifi] = useState<boolean>(false);
-  const [isWifiDropdownOpen, setIsWifiDropdownOpen] = useState<boolean>(false);
 
   // Simulator state
   const [activePopup, setActivePopup] = useState<string | null>(null);
@@ -823,38 +804,29 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const [ledFrames, setLedFrames] = useState<string[]>([]);
   const [currentFrameIdx, setCurrentFrameIdx] = useState(0);
 
-  // Fetch WiFi Networks
-  useEffect(() => {
-    const fetchWifi = async () => {
-      try {
-        const req = (window as any).__electronRequire || (window as any).require;
-        const electron = req('electron');
-        if (electron && electron.ipcRenderer) {
-          setIsScanningWifi(true);
-          const networks = await electron.ipcRenderer.invoke('scan-wifi');
-          setWifiNetworks(networks);
-          if (networks.length > 0) setSelectedWifi(networks[0]);
-          setIsScanningWifi(false);
-        }
-      } catch (err) {
-        console.log("Could not scan wifi", err);
-        setWifiNetworks(['Jaringan browser']);
-        setSelectedWifi('Jaringan browser');
-        setIsScanningWifi(false);
+  const handleWifiConnectToggle = async () => {
+    setNetworkError('');
+    if (isWifiConnected) {
+      setIsWifiConnected(false);
+      return;
+    }
+    if (!navigator.onLine) {
+      setNetworkError('Perangkat offline. Sambungkan Wi-Fi atau hotspot di pengaturan perangkat.');
+      return;
+    }
+    setCheckingNetwork(true);
+    try {
+      const url = new URL('https://robolabstudios.vercel.app/favicon.svg');
+      if (location.protocol !== 'file:') url.href = new URL('./favicon.svg', document.baseURI).href;
+      const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      if (!response.ok || !response.headers.get('content-type')?.includes('image/svg+xml')) {
+        throw new Error('Uji jaringan gagal');
       }
-    };
-    fetchWifi();
-  }, []);
-
-  const handleWifiConnectToggle = () => {
-    const nextState = !isWifiConnected && navigator.onLine;
-    setIsWifiConnected(nextState);
-    if (nextState) {
-      localStorage.setItem('simulatorWifiSSID', selectedWifi);
-      localStorage.removeItem('simulatorWifiPwd');
-    } else {
-      localStorage.removeItem('simulatorWifiSSID');
-      localStorage.removeItem('simulatorWifiPwd');
+      setIsWifiConnected(true);
+    } catch {
+      setNetworkError('Aplikasi tidak dapat dijangkau melalui jaringan perangkat. Periksa koneksi dan coba lagi.');
+    } finally {
+      setCheckingNetwork(false);
     }
   };
 
@@ -3855,79 +3827,17 @@ export const Simulator: React.FC<SimulatorProps> = ({
           </span>
         </div>
 
-        {/* WiFi Simulator Panel */}
-        {board !== 'Arduino Uno R3' && board !== 'BBC micro:bit' && (
-          <div className={`flex flex-col gap-2.5 p-3.5 rounded-2xl border shadow-sm transition-colors ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' : 'bg-[#0f131f] border-slate-800/90'}`}>
-            <div className="flex items-center justify-between">
-              <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                <Wifi className={`w-3.5 h-3.5 ${isWifiConnected ? 'text-emerald-500' : 'text-slate-400'}`} />
-                Virtual WiFi
-              </div>
-              {isWifiConnected && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
-            </div>
-            
-            <div className="flex flex-col gap-2">
-              <div className="relative">
-                <button 
-                  onClick={() => setIsWifiDropdownOpen(!isWifiDropdownOpen)}
-                  disabled={isWifiConnected}
-                  className={`w-full text-left border ${
-                    isWifiConnected
-                      ? 'border-emerald-500/40 text-emerald-500 bg-emerald-500/5'
-                      : isLight
-                        ? 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-400'
-                        : 'bg-[#090b12] border-slate-700/80 text-slate-200 hover:border-indigo-500/60'
-                  } rounded-lg px-3 py-2 text-[11px] font-medium flex items-center justify-between transition-colors cursor-pointer`}
-                >
-                  <span className="truncate">{isScanningWifi ? 'Scanning networks...' : (selectedWifi || 'Select Network')}</span>
-                  {!isWifiConnected && <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
-                </button>
-                
-                {isWifiDropdownOpen && !isWifiConnected && wifiNetworks.length > 0 && (
-                  <div className={`absolute top-full left-0 mt-1.5 w-full max-h-40 overflow-y-auto border rounded-lg shadow-xl z-50 py-1 ${isLight ? 'bg-white border-slate-200' : 'bg-[#141826] border-slate-700'}`}>
-                    {wifiNetworks.map(net => (
-                      <div 
-                        key={net}
-                        className={`px-3 py-2 text-[11px] font-medium cursor-pointer truncate transition-colors ${isLight ? 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600' : 'text-slate-200 hover:bg-indigo-500/20 hover:text-indigo-300'}`}
-                        onClick={() => { setSelectedWifi(net); setIsWifiDropdownOpen(false); }}
-                      >
-                        {net}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <Lock className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    type="password" 
-                    placeholder="Password"
-                    value={wifiPassword}
-                    onChange={e => setWifiPassword(e.target.value)}
-                    disabled={isWifiConnected}
-                    className={`w-full border rounded-lg px-3 pl-8 py-2 text-[11px] focus:outline-none focus:border-indigo-500 disabled:opacity-60 transition-colors ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700 placeholder:text-slate-400' : 'bg-[#090b12] border-slate-700/80 text-slate-200 placeholder:text-slate-500'}`}
-                  />
-                </div>
-                
-                <button 
-                  onClick={handleWifiConnectToggle}
-                  className={`px-4 py-2 text-[10px] font-bold rounded-lg flex-shrink-0 transition-all shadow-sm cursor-pointer ${
-                    isWifiConnected
-                      ? isLight
-                        ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200'
-                        : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30'
-                      : isLight
-                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200'
-                        : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30'
-                  }`}
-                >
-                  {isWifiConnected ? 'DISCONNECT' : 'CONNECT'}
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* Wi-Fi uses the active network of the device running the simulator. */}
+        {(isEsp8266 || board.toLowerCase().includes('esp32')) && (
+          <section className={`space-y-3 rounded-2xl border p-3.5 ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800'}`}>
+            <h3 className="flex items-center gap-2 text-xs font-bold"><Wifi className="h-4 w-4" /> Wi-Fi simulator</h3>
+            <p className="text-xs">Simulator memakai jaringan aktif perangkat. Pilih hotspot lewat pengaturan Wi-Fi perangkat, lalu aktifkan jaringan simulator.</p>
+            <button type="button" disabled={checkingNetwork} onClick={handleWifiConnectToggle}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-60 ${isLight ? 'bg-slate-50 border-slate-300' : 'bg-slate-800 border-slate-700'}`}>
+              {checkingNetwork ? 'Memeriksa koneksi…' : isWifiConnected ? 'Putuskan jaringan simulator' : 'Aktifkan jaringan simulator'}
+            </button>
+            <p role="status" className="text-xs">{networkError || (isWifiConnected ? 'Jaringan simulator aktif. Jalankan program untuk menguji alamat tujuan.' : 'Jaringan simulator belum aktif.')}</p>
+          </section>
         )}
 
         {/* Wiring & Components Panel */}
