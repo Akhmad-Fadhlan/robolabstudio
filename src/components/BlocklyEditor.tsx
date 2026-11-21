@@ -1487,6 +1487,30 @@ try {
       "colour": "#12B886",
       "tooltip": "Run code when a gesture is detected"
     },
+    { type: 'mb_serial_line', message0: 'Serial: tulis baris %1', args0: [{ type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#357D91' },
+    { type: 'mb_serial_write', message0: 'Serial: tulis %1', args0: [{ type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#357D91' },
+    { type: 'mb_serial_value', message0: 'Serial: tulis nama %1 dan nilai %2', args0: [{ type: 'input_value', name: 'LABEL', check: 'String' }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#357D91' },
+    { type: 'mb_serial_baud', message0: 'Serial: atur baud %1', args0: [{ type: 'field_dropdown', name: 'BAUD', options: [['115200','115200'], ['9600','9600'], ['57600','57600'], ['38400','38400']] }], previousStatement: null, nextStatement: null, colour: '#357D91' },
+    { type: 'mb_serial_ready', message0: 'Serial: ada data?', output: 'Boolean', colour: '#357D91' },
+    { type: 'mb_serial_read', message0: 'Serial: baca teks', output: 'String', colour: '#357D91' },
+    { type: 'mb_pin_touched', message0: 'pin %1 disentuh?', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2']] }], output: 'Boolean', colour: '#4a90e2' },
+    { type: 'mb_pin_pull', message0: 'pin %1 mode pull %2', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] }, { type: 'field_dropdown', name: 'MODE', options: [['naik','PULL_UP'], ['turun','PULL_DOWN'], ['tanpa pull','NO_PULL']] }], previousStatement: null, nextStatement: null, colour: '#4a90e2' },
+    { type: 'mb_pin_period', message0: 'pin %1 periode PWM %2 µs', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] }, { type: 'input_value', name: 'VALUE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#4a90e2' },
+    { type: 'mb_servo_pulse', message0: 'servo pin %1 pulsa %2 µs', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] }, { type: 'input_value', name: 'VALUE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#4a90e2' },
+    { type: 'mb_running_time', message0: 'waktu sejak dinyalakan (ms)', output: 'Number', colour: '#12B886' },
+    { type: 'mb_led_plot', message0: 'nyalakan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#2AC1BC' },
+    { type: 'mb_led_unplot', message0: 'matikan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#2AC1BC' },
+    { type: 'mb_acceleration', message0: 'percepatan %1 (mg)', args0: [{ type: 'field_dropdown', name: 'AXIS', options: [['X', 'x'], ['Y', 'y'], ['Z', 'z'], ['besar', 'strength']] }], output: 'Number', colour: '#12B886' },
+    { type: 'music_ring_tone', message0: 'bunyikan nada %1 Hz', args0: [{ type: 'input_value', name: 'NOTE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#E286F2' },
+    { type: 'music_rest', message0: 'jeda musik %1 ms', args0: [{ type: 'input_value', name: 'DURATION', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#E286F2' },
+    { type: 'music_stop', message0: 'hentikan musik', previousStatement: null, nextStatement: null, colour: '#E286F2' },
+    { type: 'music_set_tempo', message0: 'atur tempo %1 BPM', args0: [{ type: 'input_value', name: 'BPM', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#E286F2' },
+    { type: 'music_tempo', message0: 'tempo (BPM)', output: 'Number', colour: '#E286F2' },
+    { type: 'music_beat', message0: 'durasi %1 ketuk (ms)', args0: [{ type: 'field_dropdown', name: 'BEAT', options: [['1', '1'], ['½', '0.5'], ['¼', '0.25'], ['2', '2'], ['4', '4']] }], output: 'Number', colour: '#E286F2' },
+    { type: 'music_note_frequency', message0: 'frekuensi nada %1 (Hz)', args0: [{ type: 'field_dropdown', name: 'NOTE', options: [['C4', '262'], ['D4', '294'], ['E4', '330'], ['F4', '349'], ['G4', '392'], ['A4', '440'], ['B4', '494'], ['C5', '523']] }], output: 'Number', colour: '#E286F2' },
+    { type: 'radio_set_group', message0: 'atur grup radio %1', args0: [{ type: 'input_value', name: 'GROUP', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#74C0FC' },
+    { type: 'radio_send_string', message0: 'kirim teks radio %1', args0: [{ type: 'input_value', name: 'TEXT', check: 'String' }], previousStatement: null, nextStatement: null, colour: '#74C0FC' },
+    { type: 'radio_receive_string', message0: 'terima teks radio', output: 'String', colour: '#74C0FC' },
     {
       "type": "music_play_tone",
       "message0": "play tone %1 for (ms) %2",
@@ -3874,7 +3898,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       if (activeBoard === 'BBC micro:bit') {
         // === BBC micro:bit: MicroPython langsung, tanpa wrapper def ===
         generatedCode += '# RoboLab Studio - Generated MicroPython Code (BBC micro:bit)\n';
-        generatedCode += 'from microbit import *\n\n';
+        generatedCode += 'from microbit import *\n';
+        const microbitTypes = workspace.getAllBlocks(false).filter(isBlockActive).map(block => block.type);
+        if (microbitTypes.some(type => type.startsWith('music_') && type !== 'music_note_frequency')) generatedCode += 'import music\n';
+        if (microbitTypes.some(type => type.startsWith('radio_'))) generatedCode += 'import radio\nradio.on()\n';
+        generatedCode += '\n';
 
         const mbFuncBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn'));
         mbFuncBlocks.forEach((funcBlock: any) => {
@@ -3920,34 +3948,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           }
         });
 
-        // Loop langsung dengan while True:
-        if (mbLoopBlocks.length > 0) {
+        if (mbLoopBlocks.length || mbForeverBlocks.length || mbEventBlocks.length) {
           generatedCode += '\nwhile True:\n';
-          let hasContent = false;
-          mbLoopBlocks.forEach(lb => {
-            const loopContent = lb.getInputTargetBlock('STACK');
-            if (loopContent) {
-              generatedCode += generateBlockCode(loopContent, '    ', 'python');
-              hasContent = true;
-            }
-          });
-          if (!hasContent) {
-            generatedCode += '    pass\n';
+          for (const event of mbEventBlocks) generatedCode += generateBlockCode(event, '    ', 'python');
+          for (const loop of [...mbLoopBlocks, ...mbForeverBlocks]) {
+            const body = loop.getInputTargetBlock(loop.type === 'arduino_loop' ? 'STACK' : 'HANDLER');
+            if (body) generatedCode += generateBlockCode(body, '    ', 'python');
           }
-        }
-
-        // basic_forever blocks
-        mbForeverBlocks.forEach(fb => {
-          generatedCode += '\n' + generateBlockCode(fb, '', 'python');
-        });
-
-        // Event blocks
-        mbEventBlocks.forEach(eb => {
-          generatedCode += '\n' + generateBlockCode(eb, '', 'python');
-        });
-
-        if (mbSetupBlocks.length === 0 && mbLoopBlocks.length === 0 && mbForeverBlocks.length === 0 && mbEventBlocks.length === 0 && mbFuncBlocks.length === 0) {
-          generatedCode += 'pass\n';
+          generatedCode += '    sleep(20)\n';
         }
       } else {
         // === Arduino / ESP32: Standard MicroPython ===
@@ -4121,6 +4129,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="basic_show_leds"></block>
         <block type="basic_show_icon"></block>
         <block type="basic_clear_screen"></block>
+        <block type="mb_led_plot"></block>
+        <block type="mb_led_unplot"></block>
         <block type="basic_pause">
           <value name="MS">
             <block type="math_number">
@@ -4136,6 +4146,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="input_temperature"></block>
         <block type="input_light_level"></block>
         <block type="input_compass_heading"></block>
+        <block type="mb_acceleration"></block>
+        <block type="mb_running_time"></block>
       </category>
       <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
         <block type="music_play_tone">
@@ -4146,8 +4158,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             <block type="math_number"><field name="NUM">500</field></block>
           </value>
         </block>
+        <block type="music_ring_tone"></block>
+        <block type="music_rest"></block>
+        <block type="music_stop"></block>
+        <block type="music_set_tempo"></block>
+        <block type="music_tempo"></block>
+        <block type="music_beat"></block>
+        <block type="music_note_frequency"></block>
       </category>
       <category name="Radio" colour="#74C0FC" css-container="cat-mb-radio" css-row="cat-mb-radio">
+        <block type="radio_set_group"></block>
+        <block type="radio_send_string"></block>
+        <block type="radio_receive_string"></block>
         <block type="radio_send_number">
           <value name="NUMBER">
             <block type="math_number"><field name="NUM">0</field></block>
@@ -4175,6 +4197,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </block>
         <block type="pins_digital_read"></block>
         <block type="pins_analog_read"></block>
+        <block type="mb_pin_touched"></block>
+        <block type="mb_pin_pull"></block>
+        <block type="mb_pin_period"></block>
+        <block type="mb_servo_pulse"></block>
+      </category>
+      <category name="Serial" colour="#357D91" css-container="cat-serial" css-row="cat-serial">
+        <block type="mb_serial_line"></block>
+        <block type="mb_serial_write"></block>
+        <block type="mb_serial_value"></block>
+        <block type="mb_serial_baud"></block>
+        <block type="mb_serial_ready"></block>
+        <block type="mb_serial_read"></block>
       </category>
       <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
         <block type="controls_if"></block>
@@ -5655,6 +5689,20 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `param_val`;
     }
     
+    if (block.type === 'mb_serial_ready') return 'bool(uart.any())';
+    if (block.type === 'mb_serial_read') return '(uart.read() or b"").decode()';
+    if (block.type === 'mb_pin_touched') return `pin${block.getFieldValue('PIN')}.is_touched()`;
+    if (block.type === 'mb_running_time') return 'running_time()';
+
+    if (block.type === 'mb_acceleration') {
+      const axis = block.getFieldValue('AXIS');
+      return axis === 'strength' ? 'int(sum(v * v for v in accelerometer.get_values()) ** 0.5)' : `accelerometer.get_${axis}()`;
+    }
+    if (block.type === 'music_note_frequency') return block.getFieldValue('NOTE');
+    if (block.type === 'music_tempo') return 'music.get_tempo()[1]';
+    if (block.type === 'music_beat') return `int(60000 * ${block.getFieldValue('BEAT')} / music.get_tempo()[1])`;
+    if (block.type === 'radio_receive_string') return '(radio.receive() or "")';
+
     // Microbit E-Learning Expressions
     if (block.type === 'input_button_is_pressed') {
       const btn = block.getFieldValue('BUTTON');
@@ -6732,7 +6780,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           code += `${indent}Microbit.showNumber(${val});\n`;
         } else {
-          code += `${indent}display.show(${val})\n`;
+          code += `${indent}display.scroll(str(${val}))\n`;
         }
       } else if (currentBlock.type === 'basic_show_leds') {
         if (lang === 'arduino') {
@@ -6755,6 +6803,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}Microbit.showIcon("${icon}");\n`;
         } else {
           code += `${indent}display.show(Image.${icon.toUpperCase()})\n`;
+        }
+      } else if (currentBlock.type === 'mb_led_plot' || currentBlock.type === 'mb_led_unplot') {
+        if (lang === 'python') {
+          code += `${indent}display.set_pixel(${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}, ${currentBlock.type === 'mb_led_plot' ? 9 : 0})\n`;
         }
       } else if (currentBlock.type === 'basic_clear_screen') {
         if (lang === 'arduino') {
@@ -6781,7 +6833,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           code += `${indent}// ketika tombol ${btn} ditekan\n`;
         } else {
-          code += `${indent}if button_${btn.toLowerCase()}.is_pressed():\n${handlerCode}`;
+          code += `${indent}if button_${btn.toLowerCase()}.was_pressed():\n${handlerCode}`;
         }
       } else if (currentBlock.type === 'input_on_gesture') {
         const gesture = currentBlock.getFieldValue('GESTURE');
@@ -6800,7 +6852,25 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (lang === 'arduino') {
           code += `${indent}tone(PIN_BUZZER, ${note}, ${dur});\n`;
         } else {
-          code += `${indent}music.pitch(${note}, ${dur})\n`;
+          code += `${indent}music.pitch(int(${note}), int(${dur}))\n`;
+        }
+      } else if (currentBlock.type === 'music_ring_tone' || currentBlock.type === 'music_rest' || currentBlock.type === 'music_stop' || currentBlock.type === 'music_set_tempo') {
+        if (lang === 'python') {
+          const value = (name: string, fallback: string) => {
+            const input = currentBlock?.getInputTargetBlock(name);
+            return input ? getBlockValue(input, lang) : fallback;
+          };
+          if (currentBlock.type === 'music_ring_tone') code += `${indent}music.pitch(int(${value('NOTE', '440')}), -1, wait=False)\n`;
+          if (currentBlock.type === 'music_rest') code += `${indent}music.stop()\n${indent}sleep(int(${value('DURATION', '500')}))\n`;
+          if (currentBlock.type === 'music_stop') code += `${indent}music.stop()\n`;
+          if (currentBlock.type === 'music_set_tempo') code += `${indent}music.set_tempo(bpm=max(1, int(${value('BPM', '120')})))\n`;
+        }
+      } else if (currentBlock.type === 'radio_set_group' || currentBlock.type === 'radio_send_string') {
+        if (lang === 'python') {
+          const group = currentBlock.type === 'radio_set_group';
+          const input = currentBlock.getInputTargetBlock(group ? 'GROUP' : 'TEXT');
+          const value = input ? getBlockValue(input, lang) : group ? '0' : '""';
+          code += group ? `${indent}radio.config(group=int(${value}) & 255)\n` : `${indent}radio.send(str(${value}))\n`;
         }
       } else if (currentBlock.type === 'radio_send_number') {
         const numBlock = currentBlock.getInputTargetBlock('NUM');
@@ -6810,6 +6880,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         } else {
           code += `${indent}radio.send(str(${num}))\n`;
         }
+      } else if (currentBlock.type.startsWith('mb_serial_') || ['mb_pin_pull', 'mb_pin_period', 'mb_servo_pulse'].includes(currentBlock.type)) {
+        if (lang === 'python') {
+          const input = currentBlock.getInputTargetBlock('VALUE');
+          const labelInput = currentBlock.getInputTargetBlock('LABEL');
+          const label = labelInput ? getBlockValue(labelInput, lang) : '"nilai"';
+          const pin = `pin${currentBlock.getFieldValue('PIN')}`;
+          const value = (fallback: string) => input ? getBlockValue(input, lang) : fallback;
+          switch (currentBlock.type) {
+            case 'mb_serial_line': code += `${indent}print(${value('""')})\n`; break;
+            case 'mb_serial_write': code += `${indent}uart.write(str(${value('""')}))\n`; break;
+            case 'mb_serial_value': code += `${indent}print(str(${label}) + ":" + str(${value('0')}))\n`; break;
+            case 'mb_serial_baud': code += `${indent}uart.init(baudrate=${currentBlock.getFieldValue('BAUD')})\n`; break;
+            case 'mb_pin_pull': code += `${indent}${pin}.set_pull(${pin}.${currentBlock.getFieldValue('MODE')})\n`; break;
+            case 'mb_pin_period': code += `${indent}${pin}.set_analog_period_microseconds(max(256, int(${value('20000')})))\n`; break;
+            case 'mb_servo_pulse':
+              code += `${indent}${pin}.set_analog_period(20)\n`;
+              code += `${indent}${pin}.write_analog(int(min(2500, max(500, ${value('1500')})) * 1023 / 20000))\n`;
+              break;
+          }
+        }
       } else if (currentBlock.type === 'pins_digital_write') {
         const pin = currentBlock.getFieldValue('PIN');
         const valBlock = currentBlock.getInputTargetBlock('VALUE');
@@ -6818,7 +6908,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}digitalWrite(${pin}, ${val});\n`;
         } else {
           const pinNum = pin.replace(/\D/g, '');
-          code += `${indent}pin${pinNum}.write_digital(${val})\n`;
+          code += `${indent}pin${pinNum}.write_digital(1 if ${val} else 0)\n`;
         }
       } else if (currentBlock.type === 'pins_analog_write') {
         const pin = currentBlock.getFieldValue('PIN');
@@ -6828,7 +6918,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}analogWrite(${pin}, ${val});\n`;
         } else {
           const pinNum = pin.replace(/\D/g, '');
-          code += `${indent}pin${pinNum}.write_analog(${val})\n`;
+          code += `${indent}pin${pinNum}.write_analog(min(1023, max(0, int(${val}))))\n`;
         }
       } else if (currentBlock.type === 'pins_servo_write') {
         const pin = currentBlock.getFieldValue('PIN');
@@ -6841,10 +6931,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         } else {
           const pinNum = pin.replace(/\D/g, '');
           if (board === 'BBC micro:bit') {
-            code += `${indent}if 'pin${pinNum}_servo' not in globals():\n`;
-            code += `${indent}    pin${pinNum}.set_analog_period(20)\n`;
-            code += `${indent}    pin${pinNum}_servo = True\n`;
-            code += `${indent}pin${pinNum}.write_analog(int(30 + (${val} * 90) / 180)) # Servo\n`;
+            code += `${indent}pin${pinNum}.set_analog_period(20)\n`;
+            code += `${indent}pin${pinNum}.write_analog(int((500 + min(180, max(0, ${val})) * 2000 / 180) * 1023 / 20000)) # Servo\n`;
           } else {
             code += `${indent}pin${pinNum}.write_analog(${val}) # Servo\n`;
           }
