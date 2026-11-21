@@ -132,6 +132,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const [toolsOpen, setToolsOpen] = useState(false);
   const isDark = themeMode === 'dark';
   const isFileModified = files[activeFile] !== savedFiles[activeFile];
 
@@ -141,11 +142,11 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[1];
 
   return (
-    <div className={`flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
+    <div className={`studio-topbar flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
       isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-sm text-slate-800'
     }`}>
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
-      <div className="h-12 px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-auto overflow-y-hidden no-scrollbar flex-shrink-0 flex-nowrap">
+      <div className="studio-strip px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-auto overflow-y-hidden no-scrollbar flex-shrink-0 flex-nowrap">
         
         {/* Left: Branding + Main Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
@@ -155,7 +156,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               <img src="./icon-only.png" className="w-4 h-4 sm:w-5 sm:h-5 object-contain" alt="RoboLab Logo" />
             </div>
             <div>
-              <h1 className="text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap hidden 2xl:block" style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
+              <h1 className="text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap" style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
                 RoboLab Studio
               </h1>
             </div>
@@ -171,7 +172,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               title="Buka File (Ctrl+O)"
             >
               <FolderOpen className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <span className="hidden 2xl:inline">{tb('open')}</span>
+              <span >{tb('open')}</span>
             </button>
 
             <button
@@ -182,7 +183,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               title="Simpan File (Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-              <span className="hidden 2xl:inline">{tb('save')}</span>
+              <span >{tb('save')}</span>
               {isFileModified && (
                 <span className="w-1.5 h-1.5 bg-amber-400 rounded-full absolute top-1 right-1" title="File belum disimpan" />
               )}
@@ -331,8 +332,9 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           </div>
         </div>
 
+        <button className="studio-disclosure" aria-expanded={toolsOpen} aria-controls="studio-tools" onClick={() => setToolsOpen(!toolsOpen)}>{language === "id" ? "Alat proyek" : "Project tools"} {toolsOpen ? "−" : "+"}</button>
         {/* Right: Mode Switchers, Selectors & Command Palette Trigger */}
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 min-w-0">
+        <div id="studio-tools" data-open={toolsOpen} className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 min-w-0">
           
           {/* Mode Switcher: Student Mode 🎓 vs Professional Mode ⚡ */}
           <div className={`flex items-center p-0.5 rounded-xl border flex-shrink-0 ${
@@ -347,8 +349,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               }`}
               title="Student Mode: Tampilan sederhana untuk pemula"
             >
-              <span>🎓</span>
-              <span className="hidden sm:inline">{tb('student')}</span>
+
+              <span >{tb('student')}</span>
             </button>
             <button
               onClick={() => setUiMode('pro')}
@@ -359,8 +361,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               }`}
               title="Professional Mode: Tampilan lengkap dengan Explorer & Multi-editor"
             >
-              <span>⚡</span>
-              <span className="hidden sm:inline">{tb('pro')}</span>
+
+              <span >{tb('pro')}</span>
             </button>
           </div>
 
