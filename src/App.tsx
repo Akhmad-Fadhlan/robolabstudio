@@ -7943,7 +7943,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     let activeCode = files[activeFile] || '';
     if (board === 'BBC micro:bit') {
-      activeCode = files['python/main.py'] || files[activeFile] || '';
+      activeCode = activeFile.endsWith('.py') ? (files[activeFile] || '') :
+        (files['python/main.py'] ?? Object.entries(files).find(([name]) => name.endsWith('.py'))?.[1] ?? '');
     } else if (!activeFile.toLowerCase().endsWith('.ino')) {
       // If user is currently editing a .h, .cpp, or .c file, find the primary .ino sketch file
       const mainInoKey = Object.keys(files).find(f => f.toLowerCase().endsWith('.ino'));
@@ -7951,7 +7952,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         activeCode = files[mainInoKey];
       }
     }
-    const fileExt = activeFile.split('.').pop() || 'ino';
+    const fileExt = board === 'BBC micro:bit' ? 'py' : activeFile.split('.').pop() || 'ino';
 
     const urlEncodeHelperCode = `#include <Arduino.h>\nstatic inline String urlEncode(String str) {
   String encodedString = "";
@@ -8043,7 +8044,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           board,
           port,
           fileExt,
-          files: preparedFiles,
+          files: board === 'BBC micro:bit' ? { 'main.py': activeCode } : preparedFiles,
           onLog: (log) => {
             setTerminalLogs(prev => [...prev, log]);
             setInteractiveTerminalLogs(prev => [
@@ -8081,7 +8082,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               const targetPortAddr = webRes.selectedPort || port;
               const started = await startWebSerialMonitor(
                 targetPortAddr,
-                serialBaudrate,
+                board === 'BBC micro:bit' ? 115200 : serialBaudrate,
                 (chunk: string) => setSerialRawOutput(prev => (prev + chunk).slice(-50000)),
                 () => setIsSerialConnected(false)
               );

@@ -1,3 +1,4 @@
+import { writeMicrobitProgram } from './microbitUpload';
 // ============================================================================
 // RoboLab Studio — Web Serial API & Cloud Compiler Service (Schematik.io Style)
 // Enables direct browser-to-hardware communication (Verify, Upload, Flash
@@ -244,7 +245,7 @@ export async function getWebSerialPorts(): Promise<WebSerialPortEntry[]> {
  * Prompts the user with the browser's native Web Serial device chooser modal
  * (like Schematik.io's "Connect Device" / "Select Port" popup).
  */
-export async function requestWebSerialPort(): Promise<WebSerialPortEntry | null> {
+export async function requestWebSerialPort(usbVendorId?: number): Promise<WebSerialPortEntry | null> {
   if (!isWebSerialSupported()) {
     alert(
       'Browser Anda belum mendukung Web Serial API.\n\nGunakan Google Chrome, Microsoft Edge, Brave, atau Opera versi desktop untuk menghubungkan mikrokontroler via USB langsung dari browser.'
@@ -254,7 +255,7 @@ export async function requestWebSerialPort(): Promise<WebSerialPortEntry | null>
 
   try {
     const serial = (navigator as any).serial;
-    const selectedPort = await serial.requestPort();
+    const selectedPort = await serial.requestPort(usbVendorId ? { filters: [{ usbVendorId }] } : undefined);
     const browserPorts = await listBrowserAuthorizedSerialPorts();
     const match = browserPorts.find((p) => p.rawPort === selectedPort);
     if (match) return match;
@@ -1501,6 +1502,44 @@ export async function executeWebHardwareAction(params: {
   const isPython = fileExt === 'py';
   const isLocalComPort = Boolean(port && /^COM\d+$/i.test(port));
 
+  if (boardLower.includes('micro:bit') && action === 'flash-firmware') {
+    const error = 'Pasang firmware MicroPython awal dari editor resmi micro:bit lewat drive MICROBIT. Setelah itu gunakan Upload di RoboLab.';
+    onLog({ text: error, type: 'info' });
+    return { success: false, error };
+  }
+
+  if (boardLower.includes('micro:bit') && action === 'upload') {
+    const code = files['main.py'] ?? files['python/main.py'] ?? Object.entries(files).find(([name]) => name.endsWith('.py'))?.[1] ?? '';
+    if (!code.trim()) {
+      const error = 'Program MicroPython kosong.';
+      onLog({ text: error, type: 'error' });
+      return { success: false, error };
+    }
+
+    await stopWebSerialMonitor();
+    const ports = (await listBrowserAuthorizedSerialPorts()).filter(entry => entry.usbVendorId === 0x0d28);
+    const target = ports.find(entry => entry.address === port)
+      ?? (ports.length === 1 ? ports[0] : await requestWebSerialPort(0x0d28));
+    if (!target?.rawPort) {
+      const error = 'Pilih port USB micro:bit untuk melanjutkan upload.';
+      onLog({ text: error, type: 'error' });
+      return { success: false, error };
+    }
+    onPortSelected?.(target.address);
+    try {
+      onProgress?.(35);
+      onLog({ text: 'Menulis dan memeriksa main.py di micro:bit…', type: 'info' });
+      await writeMicrobitProgram(target.rawPort, code);
+      onProgress?.(100);
+      onLog({ text: 'main.py terverifikasi dan micro:bit telah restart.', type: 'success' });
+      return { success: true, selectedPort: target.address };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      onLog({ text: error, type: 'error' });
+      return { success: false, error, selectedPort: target.address };
+    }
+  }
+
   // 1. If action requires a hardware port ('upload' or 'flash-firmware'), ensure Web Serial port is selected & verified
   // IMPORTANT: Verify/open Web Serial port BEFORE any network/timer awaits so browser user gesture activation is preserved!
   let targetWebPort: { port: any; address: string; openError?: string } | null = null;
@@ -1509,7 +1548,7 @@ export async function executeWebHardwareAction(params: {
     if (!isLocalComPort || isRemoteWebOrigin() || isPython || action === 'flash-firmware' || isWebSerialSupported()) {
       targetWebPort = await ensureWebSerialPort(port, true, 115200);
     }
-    if (!targetWebPort && (isPython || action === 'flash-firmware') && !(boardLower.includes('micro:bit') && isPython)) {
+    if (!targetWebPort && (isPython || action === 'flash-firmware')) {
       onLog({
         text: '⚠️ Pilih port USB perangkat Anda pada jendela popup browser (Web Serial API) untuk melanjutkan.',
         type: 'error',
@@ -1551,23 +1590,6 @@ export async function executeWebHardwareAction(params: {
   if (isPython && action === 'upload') {
     const pyEntry = Object.entries(files).find(([k]) => k.endsWith('.py'));
     const pyCode = pyEntry ? pyEntry[1] : Object.values(files)[0] || '';
-
-    if (boardLower.includes('micro:bit') && !targetWebPort) {
-      // Download .py / .hex for micro:bit drag-and-drop USB drive
-      onLog({ text: '📦 Menyiapkan berkas MicroPython untuk drive USB MICROBIT...', type: 'info' });
-      const blob = new Blob([pyCode], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'microbit_main.py';
-      a.click();
-      URL.revokeObjectURL(url);
-      onLog({
-        text: '✓ Berkas microbit_main.py diunduh! Anda juga dapat memilih port WebUSB micro:bit untuk upload langsung.',
-        type: 'success',
-      });
-      return { success: true };
-    }
 
     if (targetWebPort) {
       onProgress?.(35);
