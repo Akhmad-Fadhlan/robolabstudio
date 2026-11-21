@@ -25,6 +25,9 @@ interface ProgramPinConfig {
   i2c?: boolean;
   i2cSda?: string;
   i2cScl?: string;
+  buzzerPins?: string[];
+  pixelPins?: string[];
+  sdCsPin?: string;
 }
 
 export interface Wire {
@@ -248,6 +251,7 @@ const wokwiInputs: Record<string, { label: string; analog?: string; digital?: st
 
 const simulatedType = (id: string) => wokwiNativeParts[getBaseComponentType(id)]?.type ?? getBaseComponentType(id);
 const isWokwiPart = (id: string) => id.startsWith('wokwi-');
+const wokwiPixelParts = ['wokwi-neopixel', 'wokwi-neopixel-matrix', 'wokwi-led-ring'];
 const wiringAliases: Record<string, string> = {
   hcsr04: 'ultrasonic', sr04: 'ultrasonic', potentiometer: 'pot',
   dht: 'dht11', mfrc522: 'rfid', rc522: 'rfid',
@@ -608,9 +612,28 @@ export const Simulator: React.FC<SimulatorProps> = ({
       return (isArduino || isEsp8266 ? 'D' : isMicrobit ? 'P' : 'G') + pin.replace(/^[ADPG]/i, '');
     }
 
-    const usedSignalPins = new Set<string>();
+    const catalog = list.filter(isWokwiPart);
+    const i2cRole = (pin: WokwiPin) =>
+      pin.signals?.find(signal => signal.signal === 'SDA' || signal.signal === 'SCL')?.signal ?? pin.name;
+    const i2cParts = catalog.filter(id => {
+      const pins = wokwiPins[id] ?? [];
+      return pins.some(pin => i2cRole(pin) === 'SDA') && pins.some(pin => i2cRole(pin) === 'SCL');
+    });
+    const hasI2c = i2cParts.length > 0 || list.some(id => wiringType(id) === 'lcd');
+    const spiParts = catalog.filter(id => getBaseComponentType(id) === 'wokwi-microsd-card');
+    const spi = isArduino ? { SCK: 'D13', DI: 'D11', DO: 'D12', CS: 'D10' }
+      : isMicrobit ? { SCK: 'P13', DI: 'P15', DO: 'P14', CS: 'P16' }
+      : isEsp8266 ? { SCK: 'D5', DI: 'D7', DO: 'D6', CS: 'D8' }
+      : { SCK: 'G18', DI: 'G23', DO: 'G19', CS: 'G5' };
+    const hasSpi = spiParts.length > 0 || list.some(id => wiringType(id) === 'rfid');
+    const busPins = new Set([
+      ...(hasI2c ? [sdaPin, sclPin] : []),
+      ...(hasSpi ? [spi.SCK, spi.DI, spi.DO] : []),
+    ]);
+    const usedSignalPins = new Set(busPins);
 
     const getMcuPinId = (type: 'digital' | 'analog', programPin: string | undefined, defaultNum?: string): string => {
+      if (isArduino && programPin && /^A\d+$/i.test(programPin)) return programPin.toUpperCase();
       const cleanProgramPin = programPin ? programPin.replace(/^[ADPG]/i, '') : undefined;
       if (isArduino) {
         const prefix = type === 'analog' ? 'A' : 'D';
@@ -626,30 +649,26 @@ export const Simulator: React.FC<SimulatorProps> = ({
       }
     };
 
+    const codeSignalPins = new Set([
+      ...(programPins.ledPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      ...(programPins.btnPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      ...(programPins.potPins ?? []).map(pin => getMcuPinId('analog', pin)),
+      ...(programPins.servoPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      ...(programPins.dhtPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      ...(programPins.buzzerPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      ...(programPins.pixelPins ?? []).map(pin => getMcuPinId('digital', pin)),
+      getMcuPinId('digital', programPins.sdCsPin),
+      getMcuPinId('digital', programPins.ultrasonicTrigPin),
+      getMcuPinId('digital', programPins.ultrasonicEchoPin),
+    ]);
+    const boardPins = new Set(getPins().filter(pin => pin.type === 'mcu').map(pin => pin.id));
+    const isAvailable = (pin: string) => boardPins.has(pin) && !usedSignalPins.has(pin) && !codeSignalPins.has(pin);
+
     const allocatePin = (type: 'digital' | 'analog', preferredPin?: string, fallbackDefault?: string): string => {
-      if (preferredPin && preferredPin !== '' && !usedSignalPins.has(preferredPin)) {
-        usedSignalPins.add(preferredPin);
-        return preferredPin;
-      }
-      if (fallbackDefault && fallbackDefault !== '' && !usedSignalPins.has(fallbackDefault)) {
-        usedSignalPins.add(fallbackDefault);
-        return fallbackDefault;
-      }
       const pool = type === 'analog' ? availableAnalog : availableDigital;
-      for (const p of pool) {
-        if (!usedSignalPins.has(p)) {
-          usedSignalPins.add(p);
-          return p;
-        }
-      }
-      const allPool = [...availableDigital, ...availableAnalog];
-      for (const p of allPool) {
-        if (!usedSignalPins.has(p)) {
-          usedSignalPins.add(p);
-          return p;
-        }
-      }
-      return fallbackDefault || (type === 'analog' ? 'A0' : 'D2');
+      const pin = [preferredPin, fallbackDefault, ...pool].find(candidate => candidate && isAvailable(candidate)) ?? '';
+      if (pin) usedSignalPins.add(pin);
+      return pin;
     };
 
     const autoWires: Wire[] = [];
@@ -780,6 +799,8 @@ export const Simulator: React.FC<SimulatorProps> = ({
       const sckPinRfid = isArduino ? 'D13' : (isMicrobit ? 'P13' : (isEsp8266 ? 'D5' : 'G18'));
       const mosiPinRfid = isArduino ? 'D11' : (isMicrobit ? 'P15' : (isEsp8266 ? 'D7' : 'G23'));
       const misoPinRfid = isArduino ? 'D12' : (isMicrobit ? 'P14' : (isEsp8266 ? 'D6' : 'G19'));
+      usedSignalPins.add(sdaPinRfid);
+      usedSignalPins.add(rstPinRfid);
       autoWires.push({ from: sdaPinRfid, to: getInstancePinId(id, 'RFID_SDA'), color: '#06b6d4', bendPoints: [] });
       autoWires.push({ from: sckPinRfid, to: getInstancePinId(id, 'RFID_SCK'), color: '#3b82f6', bendPoints: [] });
       autoWires.push({ from: mosiPinRfid, to: getInstancePinId(id, 'RFID_MOSI'), color: '#10b981', bendPoints: [] });
@@ -789,41 +810,71 @@ export const Simulator: React.FC<SimulatorProps> = ({
       autoWires.push({ from: p3v3Pin, to: getInstancePinId(id, 'RFID_3V3'), color: '#f43f5e', bendPoints: [] });
     });
 
-    const analogInputs = (programPins.potPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('analog', pin)));
-    const digitalInputs = (programPins.btnPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('digital', pin)));
-    const outputs = (programPins.ledPins || []).filter(pin => !usedSignalPins.has(getMcuPinId('digital', pin)));
-    for (const id of list.filter(isWokwiPart)) {
-      const tag = getBaseComponentType(id);
-      const model = wokwiInputs[tag];
-      if (!model && tag !== 'wokwi-rgb-led') continue;
-      const wiring: Record<string, string> = model ? { VCC: p3v3Pin, GND: gndPin } : { COM: gndPin };
-      if (model?.analog && analogInputs.length) wiring[model.analog] = getMcuPinId('analog', analogInputs.shift());
-      if (model?.digital && digitalInputs.length) wiring[model.digital] = getMcuPinId('digital', digitalInputs.shift());
-      if (!model) for (const channel of ['R', 'G', 'B']) {
-        if (outputs.length) wiring[channel] = getMcuPinId('digital', outputs.shift());
+    const analogInputs = (programPins.potPins || []).map(pin => getMcuPinId('analog', pin));
+    const digitalInputs = (programPins.btnPins || []).map(pin => getMcuPinId('digital', pin));
+    const outputs = (programPins.ledPins || []).map(pin => getMcuPinId('digital', pin));
+    const buzzers = (programPins.buzzerPins || []).map(pin => getMcuPinId('digital', pin));
+    const pixels = (programPins.pixelPins || []).map(pin => getMcuPinId('digital', pin));
+    const sdCsPins = programPins.sdCsPin ? [getMcuPinId('digital', programPins.sdCsPin)] : [];
+    const nextPin = (type: 'digital' | 'analog', pins: string[], fallback?: string) => {
+      while (pins.length) {
+        const pin = pins.shift()!;
+        if (boardPins.has(pin) && !usedSignalPins.has(pin)) {
+          usedSignalPins.add(pin);
+          return pin;
+        }
       }
-      (wokwiPins[id] || []).forEach((pin, index) => {
-        const from = wiring[pin.name];
-        if (from) autoWires.push({ from, to: wokwiPartPinId(id, index), color: ['COM','GND'].includes(pin.name) ? '#1e293b' : '#0284c7', bendPoints: [] });
+      return allocatePin(type, fallback);
+    };
+    const addCatalogWires = (id: string, wiring: Record<string, string>, pinRole = (pin: WokwiPin) => pin.name) => {
+      (wokwiPins[id] ?? []).forEach((pin, index) => {
+        const from = wiring[pinRole(pin)];
+        if (!from) return;
+        const color = from === gndPin ? '#1e293b' : from === p3v3Pin || from === vccPin ? '#ef4444' : '#0284c7';
+        autoWires.push({ from, to: wokwiPartPinId(id, index), color, bendPoints: [] });
       });
+    };
+
+    for (const id of spiParts) {
+      const cs = nextPin('digital', sdCsPins, spi.CS);
+      addCatalogWires(id, { SCK: spi.SCK, DI: spi.DI, DO: spi.DO, CS: cs, VCC: p3v3Pin, GND: gndPin });
     }
 
-    // Generic components are wired only where the part pinout and program are unambiguous.
-    for (const id of list.filter(id => isWokwiPart(id) && !wokwiNativeParts[getBaseComponentType(id)])) {
-      if (!programPins.i2c) continue;
-      const terminals = wokwiPins[id] || [];
-      const role = (pin: WokwiPin) => pin.signals?.find(signal => signal.signal === 'SDA' || signal.signal === 'SCL')?.signal || pin.name;
-      if (!terminals.some(pin => role(pin) === 'SDA') || !terminals.some(pin => role(pin) === 'SCL')) continue;
-      const powerIndex = terminals.findIndex(pin => ['3V3', 'VDD', 'VCC', 'VIN'].includes(pin.name));
-      terminals.forEach((pin, index) => {
-        const name = role(pin);
-        const declaredVoltage = pin.signals?.find(signal => signal.type === 'power')?.voltage;
-        const from = name === 'SDA' ? sdaPin : name === 'SCL' ? sclPin : name === 'GND' ? gndPin
-          : index === powerIndex ? (declaredVoltage === 5 ? vccPin : p3v3Pin) : undefined;
-        if (from) autoWires.push({ from, to: wokwiPartPinId(id, index), color: name === 'GND' ? '#1e293b' : index === powerIndex ? '#ef4444' : '#0284c7', bendPoints: [] });
-      });
+    for (const id of catalog) {
+      if (!wokwiPins[id]?.length) continue;
+      const tag = getBaseComponentType(id);
+      const model = wokwiInputs[tag];
+      if (model) {
+        const wiring: Record<string, string> = { VCC: p3v3Pin, GND: gndPin };
+        if (model.analog) wiring[model.analog] = nextPin('analog', analogInputs);
+        if (model.digital) wiring[model.digital] = nextPin('digital', digitalInputs);
+        addCatalogWires(id, wiring);
+      } else if (tag === 'wokwi-rgb-led') {
+        addCatalogWires(id, { COM: gndPin, R: nextPin('digital', outputs), G: nextPin('digital', outputs), B: nextPin('digital', outputs) });
+      } else if (tag === 'wokwi-analog-joystick') {
+        addCatalogWires(id, { VCC: p3v3Pin, GND: gndPin, HORZ: nextPin('analog', analogInputs), VERT: nextPin('analog', analogInputs), SEL: nextPin('digital', digitalInputs) });
+      } else if (tag === 'wokwi-heart-beat-sensor' || tag === 'wokwi-ir-receiver') {
+        const signal = tag === 'wokwi-heart-beat-sensor' ? 'OUT' : 'DAT';
+        addCatalogWires(id, { VCC: p3v3Pin, GND: gndPin, [signal]: nextPin('digital', digitalInputs) });
+      } else if (tag === 'wokwi-slide-switch') {
+        addCatalogWires(id, { '1': p3v3Pin, '2': nextPin('digital', digitalInputs), '3': gndPin });
+      } else if (tag === 'wokwi-ky-040') {
+        addCatalogWires(id, { VCC: p3v3Pin, GND: gndPin, CLK: nextPin('digital', digitalInputs), DT: nextPin('digital', digitalInputs), SW: nextPin('digital', digitalInputs) });
+      } else if (tag === 'wokwi-buzzer') {
+        addCatalogWires(id, { '1': gndPin, '2': nextPin('digital', buzzers) });
+      } else if (wokwiPixelParts.includes(tag)) {
+        const pixelPower = isArduino ? vccPin : '';
+        addCatalogWires(id, { VCC: pixelPower, VDD: pixelPower, GND: gndPin, VSS: gndPin, DIN: nextPin('digital', pixels) });
+      }
     }
-    const boardPins = new Set(getPins().filter(pin => pin.type === 'mcu').map(pin => pin.id));
+
+    for (const id of i2cParts) {
+      const terminals = wokwiPins[id];
+      const power = terminals.find(pin => ['3V3', '5V', 'VDD', 'VCC', 'VIN'].includes(pin.name));
+      const wiring: Record<string, string> = { SDA: sdaPin, SCL: sclPin, GND: gndPin };
+      if (power && (power.name !== '5V' || isArduino)) wiring[power.name] = power.name === '5V' ? vccPin : p3v3Pin;
+      addCatalogWires(id, wiring, i2cRole);
+    }
     const validWires = autoWires.filter(wire => boardPins.has(wire.from));
     if (validWires.length > 0) {
       setWires(prev => {
@@ -1097,8 +1148,9 @@ export const Simulator: React.FC<SimulatorProps> = ({
     detected.forEach(c => { const covered = mergedList.some(id => {
         const tag = getBaseComponentType(id);
         const input = wokwiInputs[tag];
-        return simulatedType(id) === c || (c === 'led' && tag === 'wokwi-rgb-led') ||
-          (c === 'pot' && !!input?.analog) || (c === 'button' && !!input?.digital);
+        return simulatedType(id) === c || (c === 'led' && (tag === 'wokwi-rgb-led' || wokwiPixelParts.includes(tag))) ||
+          (c === 'pot' && (!!input?.analog || tag === 'wokwi-analog-joystick')) ||
+          (c === 'button' && (!!input?.digital || ['wokwi-analog-joystick', 'wokwi-slide-switch', 'wokwi-ky-040'].includes(tag)));
       });
       if (!covered) mergedList.push(c); });
     setActiveComponents(mergedList);
@@ -4026,7 +4078,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
         {/* Wiring & Components Panel */}
         <div className={`p-3.5 rounded-2xl border shadow-sm space-y-3.5 transition-colors ${isLight ? 'bg-white/95 border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' : 'bg-[#0f131f] border-slate-800/90'}`}>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
              <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                <Edit3 className="w-3.5 h-3.5 text-indigo-400" /> Circuit Builder
              </div>
@@ -4037,7 +4089,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
                  onClick={handleAutoWire}
                  className={`flex justify-center items-center gap-1 px-2.5 py-1.5 rounded-lg text-[9px] font-bold cursor-pointer transition-all shadow-sm border ${isLight ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border-indigo-500/30'}`}
                >
-                 <Zap className="w-3 h-3" /> Auto
+                 <Zap className="w-3 h-3" /> Auto Wire
                </button>
                <button 
                  onClick={handleClearWires}
@@ -4084,7 +4136,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>
 
-          <p className="text-[10px]">Auto Wire mengikuti pin kode untuk komponen yang didukung. Komponen katalog lain dapat dikabelkan secara manual. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
+          <p className="text-[10px]">Auto Wire memakai pin dari kode atau pin bawaan board untuk komponen yang didukung. Kabel lain dapat dipasang secara manual. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
 
           <div className={`border-t ${isLight ? 'border-slate-100' : 'border-slate-800/80'}`} />
 

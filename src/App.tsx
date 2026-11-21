@@ -185,6 +185,9 @@ interface ProgramPinConfig {
   i2c?: boolean;
   i2cSda?: string;
   i2cScl?: string;
+  buzzerPins?: string[];
+  pixelPins?: string[];
+  sdCsPin?: string;
 }
 
 const PYTHON_LESSONS = [
@@ -4943,7 +4946,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       servoPins: [],
       potPins: [],
       btnPins: [],
-      dhtPins: []
+      dhtPins: [],
+      buzzerPins: [],
+      pixelPins: []
     };
     const codeLines = codeText.split('\n');
     const vars: { [key: string]: string } = {};
@@ -5072,6 +5077,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         if (sda || wirePins) config.i2cSda = resolvePin((sda || wirePins)![1]);
         if (scl || wirePins) config.i2cScl = resolvePin(scl ? scl[1] : wirePins![2]);
       }
+      const buzzer = trimmed.match(/\b(?:tone|noTone|no_tone)\(\s*(\w+)/);
+      if (buzzer) addPin(config.buzzerPins, buzzer[1]);
+      const pixel = trimmed.match(/\bAdafruit_NeoPixel\s+\w+\(\s*\w+\s*,\s*(\w+)/) ||
+        trimmed.match(/\b(?:neopixel\.)?NeoPixel\(\s*(?:(?:machine\.)?Pin\(\s*)?(\w+)/);
+      if (pixel) addPin(config.pixelPins, pixel[1]);
+      const sd = trimmed.match(/\bSD\.begin\(\s*(\w+)/);
+      if (sd) config.sdCsPin = resolvePin(sd[1]);
+
       // 5. Ultrasonic Pins (Trig & Echo)
       const ultraMatch = trimmed.match(/(?:readUltrasonic|read_ultrasonic|readDistance)\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)/);
       if (ultraMatch) {
