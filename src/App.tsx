@@ -1,3 +1,4 @@
+import { BlocklyPreview } from './components/learning/BlocklyPreview';
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
 import type { LangCode } from './i18n';
 import { t } from './i18n';
@@ -10825,6 +10826,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {currentTab === 'learning' && (() => {
             const currentLessons = learningCategory === 'fundamental' ? PYTHON_LESSONS : (learningCategory === 'hardware' ? ARDUINO_HARDWARE_LESSONS : MICROPYTHON_LESSONS);
             const currentLesson = currentLessons[activeLessonIndex] || currentLessons[0];
+            const exampleBlocks = showLearningProjects ? '' : learningCategory === 'hardware'
+              ? arduinoToBlocklyXml(currentLesson.code)
+              : pythonToBlocklyXml(currentLesson.code);
             
             return (
               <div className={`absolute inset-0 p-4 sm:p-6 lg:p-7 overflow-y-auto space-y-5 transition ${themeMode === 'light' ? 'bg-[#f8fafc] text-slate-800' : 'bg-[#0a0b10] text-slate-100'}`}>
@@ -10962,6 +10966,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       </button>
                     </div>
 
+                    <section className="min-w-0 rounded-xl border border-slate-400/40 p-3">
+                      <h3 className="mb-1 font-bold">Contoh program Blockly</h3>
+                      <p className="mb-3 text-xs">Blok kode bebas menampung bagian yang belum punya blok khusus. Lihat kode teks untuk contoh lengkap.</p>
+                      <BlocklyPreview key={currentLesson.title} xml={exampleBlocks} />
+                    </section>
                     <LessonMission category={learningCategory} index={activeLessonIndex} />
                     {learningCategory === 'hardware' && <BlockFieldGuide />}
                     <KidsAnalogyCard
