@@ -1,5 +1,5 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Blocks, BookOpen, ChevronLeft, ChevronRight, FolderOpen, LoaderCircle, Maximize2, Terminal, X, Zap } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Blocks, BookOpen, FolderOpen, LoaderCircle, Terminal, Zap } from 'lucide-react';
 import robolabLogo from '../assets/robolab-logo-only.png';
 import circuitImage from '../assets/showcase-circuit.png';
 import blocksImage from '../assets/showcase-blocks.png';
@@ -56,19 +56,22 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
   const showcase = useRef<ReturnType<typeof import('./loginShowcaseScene').mountLoginShowcase> | null>(null);
   const [selected, setSelected] = useState(0);
   const current = previews[selected];
-  const nextPreview = previews[selected + 1];
   const selectedImage = useRef(current.image);
   const [ready, setReady] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const startTouch = useRef<{ x: number; y: number } | null>(null);
 
-  function selectPreview(index: number) {
-    const next = Math.max(0, Math.min(index, previews.length - 1));
-    if (next === selected) return;
-    selectedImage.current = previews[next].image;
-    setSelected(next);
-    void showcase.current?.show(selectedImage.current);
-  }
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!document.hidden && !document.querySelector('.rl-login:focus-within')) {
+        setSelected(index => (index + 1) % previews.length);
+      }
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    selectedImage.current = current.image;
+    void showcase.current?.show(current.image);
+  }, [current.image]);
 
   useEffect(() => {
     const host = scene.current;
@@ -91,7 +94,7 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
   }, []);
 
   return (
-    <main className="rl-login" style={{ '--rl-backdrop': `url("${current.image}")` } as CSSProperties}>
+    <main className="rl-login">
       <div className="rl-login__layout">
         <section className="rl-login__auth" aria-labelledby="rl-login-title">
           <div className="rl-login__brand">
@@ -112,65 +115,23 @@ export function LoginPage({ onSignIn, error, loading }: LoginPageProps) {
             <p className="rl-login__account">Gunakan akun belajar.id atau akun Google pribadi.</p>
           </div>
 
-          <a className="rl-login__explore" href="#rl-login-journey">Jelajahi lab dulu <ArrowRight size={17} aria-hidden="true" /></a>
+
         </section>
 
         <section id="rl-login-journey" className="rl-login__lab" aria-labelledby="rl-login-preview-title" tabIndex={-1}>
-          <div className="rl-login__chapter" aria-live="polite" aria-atomic="true">
-            <p>Jelajahi lab <span>·</span> {selected + 1} / {previews.length}</p>
+          <div className="rl-login__chapter">
+            <p>{current.label} <span>·</span> {selected + 1} / {previews.length}</p>
             <h2 id="rl-login-preview-title">{current.title}</h2>
             <p>{current.description}</p>
           </div>
-          <div className="rl-login__stage"
-            onTouchStart={event => {
-              const touch = event.touches[0];
-              startTouch.current = { x: touch.clientX, y: touch.clientY };
-            }}
-            onTouchEnd={event => {
-              const start = startTouch.current;
-              startTouch.current = null;
-              if (!start) return;
-              const touch = event.changedTouches[0];
-              const dx = touch.clientX - start.x;
-              if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(touch.clientY - start.y)) {
-                selectPreview(selected + (dx < 0 ? 1 : -1));
-              }
-            }}
-            onTouchCancel={() => { startTouch.current = null; }}>
+          <div className="rl-login__stage">
             <img className={ready ? 'rl-login__preview-image is-textured' : 'rl-login__preview-image'}
               src={current.image} alt={current.alt} width="1024" height="489" />
             <div className="rl-login__scene" ref={scene} aria-hidden="true" data-ready={ready} />
           </div>
-          <div className="rl-login__browse" onKeyDown={event => {
-            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-            event.preventDefault();
-            selectPreview(selected + (event.key === 'ArrowLeft' ? -1 : 1));
-          }}>
-            <div className="rl-login__switcher" role="group" aria-label="Pilih tahap perjalanan">
-              {previews.map(({ label, icon: Icon }, index) => (
-                <button key={label} type="button" aria-pressed={selected === index} onClick={() => selectPreview(index)}>
-                  <Icon size={16} aria-hidden="true" /> {label}
-                </button>
-              ))}
-            </div>
-            <div className="rl-login__tools">
-              <button type="button" onClick={() => dialog.current?.showModal()}><Maximize2 size={17} aria-hidden="true" /> Perbesar</button>
-              <div className="rl-login__paging">
-                <button type="button" aria-label="Fitur sebelumnya" disabled={selected === 0} onClick={() => selectPreview(selected - 1)}><ChevronLeft size={21} /></button>
-                <button className="rl-login__next" type="button" onClick={() => {
-                  if (nextPreview) selectPreview(selected + 1);
-                  else signIn.current?.focus();
-                }}>
-                  {nextPreview ? nextPreview.label : 'Masuk ke lab'}
-                  {nextPreview ? <ChevronRight size={20} aria-hidden="true" /> : <ArrowRight size={18} aria-hidden="true" />}
-                </button>
-              </div>
-            </div>
+          <div className="rl-login__dots" aria-hidden="true">
+            {previews.map((item, i) => <i key={item.label} className={i === selected ? 'current' : ''} />)}
           </div>
-          <dialog ref={dialog} className="rl-login__zoom" aria-label={current.label}>
-            <header><strong>{current.label}</strong><button type="button" aria-label="Tutup pratinjau" onClick={() => dialog.current?.close()}><X size={21} /></button></header>
-            <img src={current.image} alt={current.alt} />
-          </dialog>
         </section>
       </div>
     </main>

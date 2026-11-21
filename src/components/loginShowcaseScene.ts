@@ -25,6 +25,21 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
   screen.position.z = .118;
   display.add(screen);
 
+  // A small robot peeks over the preview frame.
+  const buddy = new T.Group();
+  const shell = new T.Mesh(
+    new RoundedBoxGeometry(.78, .53, .32, 4, .11),
+    new T.MeshStandardMaterial({ color: 0xe0f2fe }),
+  );
+  buddy.add(shell);
+  for (const x of [-.17, .17]) {
+    const eye = new T.Mesh(new T.SphereGeometry(.065, 12, 8), new T.MeshBasicMaterial({ color: 0x075985 }));
+    eye.position.set(x, .03, .16);
+    buddy.add(eye);
+  }
+  buddy.position.set(2.32, 1.58, .22);
+  display.add(buddy);
+
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const loader = new T.TextureLoader();
   const textures = new Map<string, T.Texture>();
@@ -48,13 +63,14 @@ export function mountLoginShowcase(host: HTMLElement, onReadyChange: (ready: boo
       0,
     );
     display.position.z = -entrance * .6;
+    buddy.rotation.z = animated ? .08 + Math.sin(now / 1050) * .08 : .08;
     renderer.render(scene, camera);
   };
   const resize = () => {
     const { clientWidth: width, clientHeight: height } = host;
     if (!width || !height || lost) return;
     camera.aspect = width / height;
-    camera.position.set(0, 0, Math.max(3.22, 6.32 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
+    camera.position.set(0, 0, Math.max(4.22, 6.65 / camera.aspect) / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2))));
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
     render(performance.now());
