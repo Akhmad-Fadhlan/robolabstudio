@@ -7,14 +7,14 @@ export function canFlashMicrobitViaUsb() {
   return typeof navigator !== 'undefined' && 'usb' in navigator;
 }
 
-export async function flashMicrobitViaUsb(source: string, reportProgress?: (percent: number) => void) {
+export async function flashMicrobitViaUsb(source: string, reportProgress?: (percent: number) => void, modules: Record<string, string> = {}) {
   const connection = createUSBConnection({ pauseOnHidden: false });
   try {
     await connection.initialize();
     // Ask for the device before starting any network requests for the firmware.
     await connection.connect();
     reportProgress?.(20);
-    const filesystem = await loadMicrobitFilesystem(source);
+    const filesystem = await loadMicrobitFilesystem(source, modules);
     await connection.flash(async version => filesystem.getIntelHex(microbitBoardId[version]), {
       partial: true,
       progress: (stage, value) => {

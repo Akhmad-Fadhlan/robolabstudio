@@ -1,3 +1,4 @@
+import { MicrobitPxtWorkspace } from './MicrobitPxtWorkspace';
 import { MicrobitExtensions, readMicrobitExtensions, type MicrobitExtensionId } from './MicrobitExtensions';
 import { BlocklyPreview } from './learning/BlocklyPreview';
 import React, { useEffect, useRef, useCallback } from 'react';
@@ -48,6 +49,7 @@ const MICROBIT_CATEGORY_COLOURS: Record<string, string> = {
   'cat-mb-i2c': '#316A86',
   'cat-mb-compass': '#396F58',
   'cat-mb-speech': '#6D5294',
+  'cat-mb-sonar': '#26716F',
   'cat-mb-microphone': '#A34E63',
   'cat-mb-extensions': '#475569',
 };
@@ -1580,6 +1582,11 @@ try {
     {"type": "mb_led_point", "message0": "LED x %1 y %2 menyala?", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}], "output": "Boolean"},
     {"type": "mb_led_brightness", "message0": "atur LED x %1 y %2 kecerahan %3", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "LEVEL", "value": 9, "min": 0, "max": 9, "precision": 1}], "previousStatement": null, "nextStatement": null},
     {"type": "mb_control_reset", "message0": "mulai ulang micro:bit", "colour": "#5D537B", "previousStatement": null, "nextStatement": null},
+    { type: 'mb_ext_sonar_distance', message0: 'jarak sonar (cm) Trig %1 Echo %2',
+      args0: [
+        { type: 'field_dropdown', name: 'TRIG', options: [['P1','1'], ['P0','0'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] },
+        { type: 'field_dropdown', name: 'ECHO', options: [['P2','2'], ['P0','0'], ['P1','1'], ['P8','8'], ['P12','12'], ['P16','16']] },
+      ], output: 'Number', colour: '#26716F', tooltip: 'Gunakan pin Trig dan Echo yang berbeda. Gunakan sensor 3,3 V atau penyesuai level pada Echo. Hasil -1 jika tidak ada gema.' },
     { type: 'mb_ext_i2c_scan', message0: 'pindai alamat I²C', output: 'Array', colour: '#316A86' },
     { type: 'mb_ext_compass_calibrate', message0: 'kalibrasi kompas', previousStatement: null, nextStatement: null, colour: '#396F58' },
     { type: 'mb_ext_compass_strength', message0: 'kuat medan magnet', output: 'Number', colour: '#396F58' },
@@ -2023,6 +2030,8 @@ interface BlocklyEditorProps {
   onMicrobitPreview?: (frames: string[]) => void;
   compact?: boolean;
   microbitExtensionScope?: string;
+  microbitModules?: Record<string, string>;
+  onUpdateMicrobitModule?: (path: string, source: string | null) => void;
   showRobotPlan?: boolean;
   robotHardwareConfig?: RobotHardwareConfig;
   activeRobotHighlight?: ActiveExecutionHighlight;
@@ -2652,6 +2661,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   onMicrobitPreview,
   compact = false,
   microbitExtensionScope = 'global',
+  microbitModules,
+  onUpdateMicrobitModule,
   showRobotPlan = false,
   robotHardwareConfig,
   activeRobotHighlight,
@@ -2698,9 +2709,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const extensionKey = `robolab_microbit_extensions_${microbitExtensionScope}`;
   const [microbitExtensions, setMicrobitExtensions] = React.useState(() => readMicrobitExtensions(extensionKey));
   const [extensionsOpen, setExtensionsOpen] = React.useState(false);
+  const [pxtDependency, setPxtDependency] = React.useState<string | null | undefined>(undefined);
+  const canOpenPxt = typeof window !== 'undefined' && !('__electronRequire' in window && window.__electronRequire);
   useEffect(() => {
     setMicrobitExtensions(readMicrobitExtensions(extensionKey));
     setExtensionsOpen(false);
+    setPxtDependency(undefined);
   }, [extensionKey]);
   const toggleMicrobitExtension = (id: MicrobitExtensionId) => {
     const next = microbitExtensions.includes(id) ? microbitExtensions.filter(item => item !== id) : [...microbitExtensions, id];
@@ -3973,6 +3987,23 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (microbitTypes.some(type => type.startsWith('music_') && type !== 'music_note_frequency')) generatedCode += 'import music\n';
         if (microbitTypes.some(type => type.startsWith('radio_'))) generatedCode += 'import radio\nradio.on()\n';
         if (microbitTypes.some(type => type.startsWith('mb_ext_neo_'))) generatedCode += 'import neopixel\n__robolab_pixels = {}\n';
+        if (microbitTypes.includes('mb_ext_sonar_distance')) generatedCode += [
+          'from machine import time_pulse_us',
+          'from utime import sleep_us',
+          '',
+          'def _robolab_sonar_cm(trigger, echo):',
+          '    if trigger is echo:',
+          '        return -1',
+          '    echo.read_digital()',
+          '    trigger.write_digital(0)',
+          '    sleep_us(2)',
+          '    trigger.write_digital(1)',
+          '    sleep_us(10)',
+          '    trigger.write_digital(0)',
+          '    pulse = time_pulse_us(echo, 1, 30000)',
+          '    return (pulse + 29) // 58 if pulse >= 0 else -1',
+          '',
+        ].join('\n') + '\n';
         if (microbitTypes.includes('mb_ext_speech_say')) generatedCode += 'import speech\n';
         if (microbitTypes.some(type => type.startsWith('mb_ext_log_'))) generatedCode += 'import log  # micro:bit V2\n';
         generatedCode += '\n';
@@ -4348,6 +4379,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       ${microbitExtensions.includes('speech') ? `<category name="Speech" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-speech']}" css-row="cat-mb-speech"><block type="mb_ext_speech_say"/></category>` : ''}
       ${microbitExtensions.includes('compass') ? `<category name="Compass" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-compass']}" css-row="cat-mb-compass"><block type="mb_ext_compass_calibrate"/><block type="input_compass_heading"/><block type="mb_ext_compass_strength"/></category>` : ''}
       ${microbitExtensions.includes('i2c') ? `<category name="I²C Tools" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-i2c']}" css-row="cat-mb-i2c"><block type="mb_ext_i2c_scan"/></category>` : ''}
+      ${microbitExtensions.includes('sonar') ? `<category name="Sonar" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-sonar']}" css-row="cat-mb-sonar"><block type="mb_ext_sonar_distance"/></category>` : ''}
       <category name="${language === 'id' ? 'Ekstensi' : 'Extensions'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-extensions']}" css-row="cat-mb-extensions">
         <button text="${language === 'id' ? 'Cari ekstensi' : 'Find extensions'}" callbackKey="robolabMicrobitExtensions"></button>
       </category>
@@ -5813,6 +5845,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const list = value ? getBlockValue(value, lang) : '[]';
       return block.type === 'lists_length' ? `len(${list})` : `(not ${list})`;
     }
+    if (lang === 'python' && block.type === 'mb_ext_sonar_distance') {
+      return `_robolab_sonar_cm(pin${block.getFieldValue('TRIG')}, pin${block.getFieldValue('ECHO')})`;
+    }
     if (lang === 'python' && block.type === 'mb_ext_i2c_scan') return 'i2c.scan()';
     if (lang === 'python' && block.type === 'mb_ext_compass_strength') return 'compass.get_field_strength()';
     if (lang === 'python' && block.type === 'mb_ext_mic_level') return 'microphone.sound_level()';
@@ -7228,8 +7263,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
       </div>
 
-      {board === 'BBC micro:bit' && extensionsOpen && (
-        <MicrobitExtensions installed={microbitExtensions} onToggle={toggleMicrobitExtension} onClose={() => setExtensionsOpen(false)} />
+      {board === 'BBC micro:bit' && extensionsOpen && pxtDependency === undefined && (
+        <MicrobitExtensions installed={microbitExtensions} onToggle={toggleMicrobitExtension}
+          onClose={() => setExtensionsOpen(false)} onOpenPxt={canOpenPxt ? setPxtDependency : undefined} modules={microbitModules} onUpdateModule={onUpdateMicrobitModule} />
+      )}
+      {board === 'BBC micro:bit' && pxtDependency !== undefined && (
+        <MicrobitPxtWorkspace scope={microbitExtensionScope} dependency={pxtDependency} onClose={() => setPxtDependency(undefined)} />
       )}
       {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 flex min-h-0 flex-col overflow-hidden rounded-xl bg-white text-slate-800 shadow-lg">
         <div className="shrink-0 border-b border-slate-200 p-4"><header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>

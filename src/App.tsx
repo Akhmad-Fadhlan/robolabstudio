@@ -1,3 +1,4 @@
+import { getMicrobitModules, isMicrobitModulePath } from './services/microbitModules';
 import { PYTHON_PACKAGE_CATALOG, normalizePythonPackageName } from './data/pythonPackageCatalog';
 import { SERIAL_BAUD_RATES } from './data/serialBaudRates';
 import { BlocklyPreview } from './components/learning/BlocklyPreview';
@@ -3549,7 +3550,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   };
 
-  const buildRoboLabBlockHex = (payload: { xml: string; ino: string; py: string; board: string }): string => {
+  const buildRoboLabBlockHex = (payload: { xml: string; ino: string; py: string; board: string; modules: Record<string, string> }): string => {
     const lines: string[] = [
       '; ROBOLAB_BLOCK_HEX_V1',
       `; BOARD: ${payload.board || 'Arduino Uno'}`,
@@ -3557,6 +3558,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       `; INO_BASE64: ${toBase64Utf8(payload.ino || '')}`,
       `; PY_BASE64: ${toBase64Utf8(payload.py || '')}`,
     ];
+
+    if (Object.keys(payload.modules).length > 0) {
+      lines.push(`; MODULES_BASE64: ${toBase64Utf8(JSON.stringify(payload.modules))}`);
+    }
 
     // Encode Blockly XML payload as standard Intel HEX records (:LLAAAATTDD...CC)
     const dataBytes = new TextEncoder().encode(payload.xml || '');
@@ -3591,7 +3596,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return lines.join('\n') + '\n';
   };
 
-  const parseRoboLabBlockHex = (content: string): { xml: string; ino: string; py: string; board: string | null } => {
+  const parseRoboLabBlockHex = (content: string): { xml: string; ino: string; py: string; board: string | null; modules: Record<string, string> } => {
     let xml = '';
     let ino = '';
     let py = '';
@@ -3669,7 +3674,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       } catch (_) {}
     }
 
-    return { xml, ino, py, board: detectedBoard };
+    const encodedModules = content.match(/^;\s*MODULES_BASE64:\s*([A-Za-z0-9+/=]+)\s*$/m)?.[1];
+    const modules: Record<string, string> = {};
+    if (encodedModules && detectedBoard === 'BBC micro:bit') {
+      try {
+        const data: unknown = JSON.parse(fromBase64Utf8(encodedModules));
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          for (const [path, source] of Object.entries(data)) {
+            if (isMicrobitModulePath(path) && typeof source === 'string') modules[path] = source;
+          }
+        }
+      } catch {
+        // Older or damaged metadata does not prevent opening the main program.
+      }
+    }
+    return { xml, ino, py, board: detectedBoard, modules };
   };
 
   // Save active workspace as Block HEX (.hex) containing Blockly XML + Arduino + Python
@@ -3703,6 +3722,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       ino: inoCode,
       py: pyCode,
       board: targetBoard,
+      modules: targetBoard === 'BBC micro:bit'
+        ? Object.fromEntries(Object.entries(targetFiles).filter(([path]) => isMicrobitModulePath(path)))
+        : {},
     });
 
     const rawBaseName =
@@ -5360,6 +5382,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     if (extension === 'hex') {
       const parsedHex = parseRoboLabBlockHex(content);
+      Object.assign(updatedFiles, parsedHex.modules);
       let xml = parsedHex.xml;
       const inoCode = parsedHex.ino || files[inoFilename] || 'void setup() {\n}\n\nvoid loop() {\n}\n';
       const pyCode = parsedHex.py || files[pyFilename] || '# RoboLab Studio - Auto Synced Python\n';
@@ -5381,12 +5404,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         updatedXmls[pyFilename] = xml;
       }
 
-      // Enable block sync so BlocklyEditor loads the XML blocks and automatically generates/syncs both Arduino (.ino) and Python (.py)
+      // Preserve manual module imports when opening a saved MicroPython project.
+      const autoSyncPython = Object.keys(parsedHex.modules).length === 0;
       setSyncStatuses(prev => ({
         ...prev,
         [filename]: true,
         [inoFilename]: true,
-        [pyFilename]: true,
+        [pyFilename]: autoSyncPython,
       }));
 
       // Also sync into Simulator workspace so blocks are ready if user is in or switches to Simulator
@@ -5399,11 +5423,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setSimSyncStatuses(prev => ({
           ...prev,
           'firmware/main.ino': true,
-          'python/main.py': true,
+          'python/main.py': autoSyncPython,
         }));
         setSimFiles(prev => ({
           ...prev,
           ...(parsedHex.ino ? { 'firmware/main.ino': parsedHex.ino } : {}),
+          ...parsedHex.modules,
           ...(parsedHex.py ? { 'python/main.py': parsedHex.py } : {}),
         }));
         setSimResetKey(prev => prev + 1);
@@ -5516,12 +5541,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   useEffect(() => {
     if (board !== 'BBC micro:bit' || currentTab !== 'ide' || activeFile.endsWith('.py')) return;
-    const path = 'python/main.py' in files ? 'python/main.py' : Object.keys(files).find(name => name.endsWith('.py')) || 'python/main.py';
+    const path = 'python/main.py' in files ? 'python/main.py' : Object.keys(files).find(name => name.endsWith('.py') && !isMicrobitModulePath(name)) || 'python/main.py';
     if (!(path in files)) setFiles(previous => ({ ...previous, [path]: '' }));
     setActiveFile(path);
   }, [board, currentTab, activeFile, files]);
 
   const handleFileSelect = (filename: string, explicitFilesMap?: { [key: string]: string }) => {
+    if (isMicrobitModulePath(filename)) {
+      setWorkspaceMode('code');
+      setActiveFile(filename);
+      return;
+    }
     const sourceFiles = explicitFilesMap || files;
     const content = sourceFiles[filename] || '';
     
@@ -5530,6 +5560,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     let updatedXmls: { [key: string]: string } = {};
     const pyFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'python/main.py' : filename.replace(/\.(ino|hex|cpp|c)$/i, '.py');
     const inoFilename = (filename === 'firmware/main.ino' || filename === 'python/main.py' || extension === 'hex') ? 'firmware/main.ino' : filename.replace(/\.py$/i, '.ino');
+    let hexBoard: string | null = null;
     const existingSharedXml = workspaceXmls[filename] || workspaceXmls[inoFilename] || workspaceXmls[pyFilename] || '';
     
     if (extension === 'ino') {
@@ -5558,6 +5589,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
     else if (extension === 'hex') {
       const parsedHex = parseRoboLabBlockHex(content);
+      Object.assign(updatedFiles, parsedHex.modules);
+      hexBoard = parsedHex.board;
       const xml = parsedHex.xml || existingSharedXml;
       if (xml && xml.includes('<block')) {
         updatedXmls[filename] = xml;
@@ -5566,7 +5599,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
       if (parsedHex.ino) updatedFiles[inoFilename] = parsedHex.ino;
       if (parsedHex.py) updatedFiles[pyFilename] = parsedHex.py;
-      setSyncStatuses(prev => ({ ...prev, [filename]: true, [inoFilename]: true, [pyFilename]: true }));
+      setSyncStatuses(prev => ({ ...prev, [filename]: true, [inoFilename]: true, [pyFilename]: Object.keys(parsedHex.modules).length === 0 }));
     }
     else if (extension === 'py') {
       let xml = existingSharedXml;
@@ -5599,7 +5632,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         detectedBoard = 'Arduino Uno';
       }
     } else if (extension === 'hex') {
-      if (filename.toLowerCase().includes('esp32')) {
+      if (hexBoard === 'Arduino Uno' || hexBoard === 'ESP32 DevKit V1' || hexBoard === 'BBC micro:bit') {
+        detectedBoard = hexBoard;
+      } else if (filename.toLowerCase().includes('esp32')) {
         detectedBoard = 'ESP32 DevKit V1';
       } else if (filename.toLowerCase().includes('microbit') || filename.toLowerCase().includes('soccer')) {
         detectedBoard = 'BBC micro:bit';
@@ -7817,9 +7852,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
 
     let activeCode = files[activeFile] || '';
+    const microbitModules = board === 'BBC micro:bit' ? getMicrobitModules(files) : {};
     if (board === 'BBC micro:bit') {
-      activeCode = activeFile.endsWith('.py') ? (files[activeFile] || '') :
-        (files['python/main.py'] ?? Object.entries(files).find(([name]) => name.endsWith('.py'))?.[1] ?? '');
+      activeCode = files['python/main.py'] ?? files['main.py'] ??
+        Object.entries(files).find(([name]) => name.endsWith('.py') && !isMicrobitModulePath(name))?.[1] ?? '';
     } else if (!activeFile.toLowerCase().endsWith('.ino')) {
       // If user is currently editing a .h, .cpp, or .c file, find the primary .ino sketch file
       const mainInoKey = Object.keys(files).find(f => f.toLowerCase().endsWith('.ino'));
@@ -7889,8 +7925,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     const req = (window as any).__electronRequire || (window as any).require;
 
-    // ── WEB BROWSER MODE: Cloud Compiler + Web Serial API Flashing (Schematik.io style) ──
-    if (!req) {
+    // Legacy desktop uflash only accepts one script. Export the complete filesystem for projects with modules.
+    const useDesktopMicrobitHex = Boolean(req) && action !== 'verify' && Object.keys(microbitModules).length > 0;
+    if (!req || useDesktopMicrobitHex) {
       isHardwareActionRef.current = true;
       setIsTerminalCollapsed(false);
       setTerminalTab('terminal');
@@ -7919,7 +7956,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           board,
           port,
           fileExt,
-          files: board === 'BBC micro:bit' ? { 'main.py': activeCode } : preparedFiles,
+          files: board === 'BBC micro:bit'
+            ? { ...files, 'main.py': activeCode }
+            : preparedFiles,
+          forceMicrobitHex: useDesktopMicrobitHex,
           onLog: (log) => {
             setTerminalLogs(prev => [...prev, log]);
             setInteractiveTerminalLogs(prev => [
@@ -9643,6 +9683,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               codeType={board === 'BBC micro:bit' || activeFile.endsWith('.py') ? 'python' : 'arduino'}
                               board={board}
                               microbitExtensionScope={`project:${authUser?.id ?? 'local'}:${projectName}`}
+                              microbitModules={getMicrobitModules(files)}
+                              onUpdateMicrobitModule={(path, source) => {
+                                setFiles(previous => {
+                                  if (source !== null) return { ...previous, [path]: source };
+                                  const next = { ...previous };
+                                  delete next[path];
+                                  return next;
+                                });
+                                if (source === null && activeFile === path) setActiveFile('python/main.py');
+                              }}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                                 name: p.name,
                                 parsedApi: p.parsedApi,
@@ -9652,6 +9702,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               isSyncWithBlocks={(activeFile.endsWith('.ino') || activeFile.endsWith('.py')) && syncStatuses[activeFile] === true}
                               workspaceXml={workspaceXmls[activeFile] || workspaceXmls['firmware/main.ino'] || workspaceXmls['python/main.py'] || null}
                               onWorkspaceChange={(xmlText) => {
+                                if (isMicrobitModulePath(activeFile)) return;
                                 const pyFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'python/main.py' : activeFile.replace(/\.(ino|hex)$/i, '.py');
                                 const inoFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'firmware/main.ino' : activeFile.replace(/\.py$/i, '.ino');
                                 setWorkspaceXmls(prev => ({
@@ -9664,7 +9715,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 }));
                               }}
                               onCodeChange={(newCode, otherCode) => {
-                                if (board === 'BBC micro:bit' && !activeFile.endsWith('.py')) return;
+                                if (isMicrobitModulePath(activeFile) || (board === 'BBC micro:bit' && !activeFile.endsWith('.py'))) return;
                                 if (syncStatuses[activeFile] === false) {
                                   return;
                                 }
@@ -9700,6 +9751,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 }));
                               }}
                               onSyncToCode={(arduinoCode, pythonCode) => {
+                                if (isMicrobitModulePath(activeFile)) return;
                                 if (board === 'BBC micro:bit') {
                                   const path = activeFile.endsWith('.py') ? activeFile : 'python/main.py';
                                   setFiles(prev => ({ ...prev, [path]: pythonCode }));
@@ -9817,7 +9869,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   ...prev,
                                   [filename]: content
                                 }));
-                                if (syncStatuses[filename] === false) {
+                                if (!isMicrobitModulePath(filename) && syncStatuses[filename] === false) {
                                   const inoFile = Object.keys(files).find(f => f.endsWith('.ino')) || 'firmware/main.ino';
                                   const pyFile = Object.keys(files).find(f => f.endsWith('.py')) || 'python/main.py';
                                   try {
@@ -10459,6 +10511,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
                           microbitExtensionScope="simulator"
+                          microbitModules={getMicrobitModules(simFiles)}
+                          onUpdateMicrobitModule={(path, source) => {
+                            setSimFiles(previous => {
+                              if (source !== null) return { ...previous, [path]: source };
+                              const next = { ...previous };
+                              delete next[path];
+                              return next;
+                            });
+                            if (source === null && simActiveFile === path) setSimActiveFile('python/main.py');
+                          }}
                           showRobotPlan={simulatorMode === 'robot'}
                           installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                             name: p.name,

@@ -1,3 +1,4 @@
+import { getMicrobitModules } from './microbitModules';
 import { canFlashMicrobitViaUsb, flashMicrobitViaUsb } from './microbitWebUsb';
 import { MicrobitReplUnavailableError, writeMicrobitProgram } from './microbitUpload';
 // ============================================================================
@@ -1470,6 +1471,7 @@ export async function executeWebHardwareAction(params: {
   action: 'verify' | 'upload' | 'flash-firmware';
   fileExt: string;
   files: Record<string, string>;
+  forceMicrobitHex?: boolean;
   onLog: HardwareLogCallback;
   onProgress?: (pct: number) => void;
   onPortSelected?: (newAddress: string) => void;
@@ -1482,10 +1484,12 @@ export async function executeWebHardwareAction(params: {
   if (boardLower.includes('micro:bit') && action !== 'verify') {
     const code = files['main.py'] ?? files['python/main.py'] ?? Object.entries(files).find(([name]) => name.endsWith('.py'))?.[1] ?? '';
 
+    const modules = getMicrobitModules(files);
+
     async function prepareHex() {
       try {
         const { downloadMicrobitHex } = await import('./microbitHex');
-        await downloadMicrobitHex(code);
+        await downloadMicrobitHex(code, modules);
         onProgress?.(100);
         onLog({ text: 'robolab-microbit.hex siap. Salin file ini ke drive MICROBIT dan tunggu LED transfer berhenti berkedip. File memuat firmware dan program Anda.', type: 'info' });
         return { success: false, hexDownloaded: true };
@@ -1502,20 +1506,23 @@ export async function executeWebHardwareAction(params: {
       return { success: false, error };
     }
 
+    if (params.forceMicrobitHex) return prepareHex();
+
     if (canFlashMicrobitViaUsb()) {
       try {
         onLog({ text: 'Pilih micro:bit pada dialog USB. RoboLab akan mengirim firmware dan program.', type: 'info' });
-        await flashMicrobitViaUsb(code, onProgress);
+        await flashMicrobitViaUsb(code, onProgress, modules);
         onLog({ text: 'micro:bit mengonfirmasi flash selesai dan telah di-reset.', type: 'success' });
         return { success: true, flashedViaWebUsb: true };
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
         onLog({ text: `Upload WebUSB gagal: ${error}`, type: 'error' });
+        if (Object.keys(modules).length > 0) return prepareHex();
         return { success: false, error };
       }
     }
 
-    if (action === 'flash-firmware') return prepareHex();
+    if (action === 'flash-firmware' || Object.keys(modules).length > 0) return prepareHex();
     await stopWebSerialMonitor();
     const ports = (await listBrowserAuthorizedSerialPorts()).filter(entry => entry.usbVendorId === 0x0d28);
     const target = ports.find(entry => entry.address === port)
