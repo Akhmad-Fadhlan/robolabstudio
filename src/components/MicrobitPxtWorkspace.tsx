@@ -5,12 +5,16 @@ import {
   readPxtProject, savePxtProject, type PxtProject,
 } from '../services/microbitPxt';
 
+import { readPxtHex } from '../services/microbitPxtFirmware';
+
 type PendingRequest = { resolve: () => void; reject: (error: Error) => void; timer: number };
 
-export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
+export function MicrobitPxtWorkspace({ scope, dependency, onClose, onUpload, uploadBlocked }: {
   scope: string;
   dependency: string | null;
   onClose: () => void;
+  onUpload: (compile: () => Promise<string>, reportProgress: (percent: number) => void) => Promise<'V1' | 'V2'>;
+  uploadBlocked: boolean;
 }) {
   const storageKey = `robolab_microbit_pxt_${scope}`;
   const dialog = useRef<HTMLDialogElement>(null);
@@ -25,6 +29,9 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
   const [message, setMessage] = useState('Memuat ruang kerja PXT…');
   const [error, setError] = useState('');
   const closing = useRef(false);
+  const pendingFirmware = useRef<{ payload?: unknown } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const webUsb = typeof navigator !== 'undefined' && 'usb' in navigator;
 
   useEffect(() => {
     const node = dialog.current;
@@ -65,6 +72,12 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
         }
         return;
       }
+      // Controller mode App sends the compiled firmware separately, before the
+      // compile command's acknowledgement. It has no request ID of its own.
+      if (Object.hasOwn(data, 'download') && pendingFirmware.current) {
+        if (pendingFirmware.current.payload === undefined) pendingFirmware.current.payload = data.download;
+        return;
+      }
       if (data.type !== 'pxthost') return;
       const reply = (fields: Record<string, unknown> = {}) => target.postMessage({
         type: 'pxthost', id: data.id, success: true, ...fields,
@@ -95,7 +108,7 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
         window.clearTimeout(loadTimer);
         setReady(true);
         setPythonReady(pxtPythonSource(project.current) !== undefined);
-        setMessage('Gunakan blok ekstensi, lalu pilih Ubah ke Python untuk melihat hasilnya.');
+        setMessage('Susun blok PXT, jalankan simulator, atau unggah program ke board.');
       }
       if (data.response && typeof data.id === 'string') reply();
     };
@@ -116,7 +129,7 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
     };
   }, [dependency, storageKey]);
 
-  const send = (action: 'switchpython' | 'saveproject', timeout = 7_000) => new Promise<void>((resolve, reject) => {
+  const send = (action: 'switchpython' | 'saveproject' | 'startsimulator' | 'compile', timeout = 7_000) => new Promise<void>((resolve, reject) => {
     const target = frame.current?.contentWindow;
     if (!target) { reject(new Error('Ruang kerja PXT belum siap.')); return; }
     const id = crypto.randomUUID();
@@ -178,8 +191,69 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
     }
   };
 
+  const compileFirmware = async () => {
+    await send('saveproject');
+    const result: { payload?: unknown } = {};
+    pendingFirmware.current = result;
+    try {
+      setMessage('Compiler PXT sedang membuat firmware…');
+      await send('compile', 60_000);
+      if (result.payload === undefined) {
+        throw new Error('PXT tidak mengirim HEX. Periksa status kompilasi dan kompatibilitas ekstensi di editor.');
+      }
+      return readPxtHex(result.payload);
+    } finally {
+      pendingFirmware.current = null;
+    }
+  };
+
+  const upload = async () => {
+    setBusy(true);
+    setUploadProgress(0);
+    setMessage('Pilih micro:bit di dialog USB…');
+    try {
+      const version = await onUpload(compileFirmware, setUploadProgress);
+      setMessage(`Upload selesai. micro:bit ${version} menjalankan program PXT.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Upload program PXT gagal.');
+    } finally {
+      setUploadProgress(null);
+      setBusy(false);
+    }
+  };
+
+  const downloadHex = async () => {
+    setBusy(true);
+    try {
+      const firmware = await compileFirmware();
+      const url = URL.createObjectURL(new Blob([firmware], { type: 'application/octet-stream' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'robolab-microbit-pxt.hex';
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      setMessage('File HEX siap disalin ke drive MICROBIT.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'File HEX gagal dibuat.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runSimulator = async () => {
+    setBusy(true);
+    try {
+      await send('startsimulator');
+      setMessage('Perintah Jalankan dikirim ke simulator PXT.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Simulator PXT gagal dimulai.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const close = async () => {
-    if (closing.current) return;
+    if (closing.current || busy) return;
     closing.current = true;
     try {
       if (ready) {
@@ -201,12 +275,18 @@ export function MicrobitPxtWorkspace({ scope, dependency, onClose }: {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id="pxt-workspace-title" className="font-bold">Ruang kerja micro:bit PXT</h2>
             <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={!ready || busy} onClick={() => void runSimulator()} className="lab-control rounded-lg px-3 py-1.5 text-sm">Jalankan simulator</button>
+              <button type="button" disabled={!ready || busy || !webUsb || uploadBlocked} onClick={() => void upload()} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">Upload ke micro:bit</button>
+              <button type="button" disabled={!ready || busy} onClick={() => void downloadHex()} className="lab-control rounded-lg px-3 py-1.5 text-sm">Unduh HEX</button>
               <button type="button" disabled={!ready || busy} onClick={() => void convert()} className="rounded-lg bg-sky-700 px-3 py-1.5 text-sm text-white disabled:opacity-50">Ubah ke Python</button>
               <button type="button" disabled={!pythonReady || busy} onClick={() => void download()} className="rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50">Unduh .py</button>
-              <button type="button" onClick={() => void close()} className="rounded-lg border px-3 py-1.5 text-sm">Tutup</button>
+              <button type="button" disabled={busy} onClick={() => void close()} className="rounded-lg border px-3 py-1.5 text-sm">Tutup</button>
             </div>
           </div>
-          <p className="text-xs text-slate-600">Kode hasil konversi memakai Python MakeCode. Gunakan Download di ruang kerja PXT untuk membuat HEX, atau gunakan editor MicroPython RoboLab untuk proyek MicroPython.</p>
+          <p className="text-xs text-slate-600">Mode PXT memakai compiler MakeCode di dalam RoboLab. Program PXT dan proyek MicroPython disimpan terpisah.</p>
+          {uploadBlocked && <p className="text-xs text-amber-800">Akses upload board sudah berakhir. Unduh HEX tetap tersedia.</p>}
+          {!webUsb && <p className="text-xs text-slate-700">WebUSB tidak tersedia. Buka RoboLab di Chrome atau Edge untuk upload langsung.</p>}
+          {uploadProgress !== null && <progress aria-label="Progres upload PXT" value={uploadProgress} max={100} className="w-full" />}
           <p role="status" className="text-xs text-slate-700">{message}</p>
           {error && <p role="alert" className="text-xs text-rose-800">{error}</p>}
         </header>

@@ -55,16 +55,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside 
       aria-label="Sidebar Navigation"
-      className={`flex flex-col justify-between py-3 px-1.5 sm:px-2 select-none flex-shrink-0 transition-all duration-300 z-40 w-16 sm:w-20 ${
-        isDark 
-          ? 'bg-[#0b0d14]/95 border border-white/10 rounded-2xl shadow-2xl text-slate-300' 
-          : 'bg-white/95 backdrop-blur-md border border-[var(--theme-border,rgba(186,230,253,0.9))] rounded-3xl shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.10))] text-slate-700'
-      }`}
+      className="lab-surface z-40 flex w-full shrink-0 select-none flex-col justify-between overflow-hidden rounded-xl border px-1 shadow-sm md:w-20 md:rounded-2xl md:px-2 md:py-3"
     >
       {/* ── Top Navigation Links ── */}
-      <div className="flex flex-col items-center gap-1.5 w-full">
+      <div className="lab-nav-links flex w-full items-center gap-0.5 overflow-x-auto md:flex-col md:gap-1.5 md:overflow-visible">
         {/* Brand Icon Mini */}
-        <div className="mb-1">
+        <div className="mb-1 hidden md:block">
           <div 
             style={{ background: 'var(--accent-gradient)' }}
             className="w-9 h-9 rounded-2xl p-0.5 shadow-md flex items-center justify-center transition-all"
@@ -156,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {/* Separator */}
-        <div className={`w-8 h-px my-1 ${isDark ? 'bg-white/10' : 'bg-slate-200'}`} />
+        <div className={`my-1 hidden h-px w-8 md:block ${isDark ? 'bg-white/10' : 'bg-slate-200'}`} />
 
         {/* 6. Settings */}
         <button 
@@ -197,7 +193,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* ── Bottom Mascot Avatar ── */}
-      <div className="w-full flex flex-col items-center justify-center pt-2">
+      <div className="hidden w-full flex-col items-center justify-center pt-2 md:flex">
         <div 
           className="w-10 h-10 rounded-2xl border shadow-sm flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
           style={{

@@ -144,9 +144,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[1];
 
   return (
-    <div className={`studio-topbar flex flex-col select-none flex-shrink-0 relative z-[200] border-b ${
-      isDark ? 'bg-[#0a0b10]/95 border-white/10 text-white' : 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-sm text-slate-800'
-    }`}>
+    <div className="studio-topbar lab-surface relative z-[200] flex shrink-0 select-none flex-col border-b shadow-sm">
       {/* 1. TOP HEADER & MAIN TOOLBAR */}
       <div className="studio-strip px-2 sm:px-3 flex items-center justify-between gap-1 sm:gap-2 border-b border-white/5 overflow-x-auto overflow-y-hidden no-scrollbar flex-shrink-0 flex-nowrap">
         

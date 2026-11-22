@@ -22,6 +22,7 @@
   "dependencies": {
     "@microbit/microbit-connection": "1.0.3",
     "@microbit/microbit-fs": "0.11.0",
+    "@microbit/microbit-universal-hex": "0.3.1",
     "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.109.0",
     "@tailwindcss/vite": "^4.3.2",

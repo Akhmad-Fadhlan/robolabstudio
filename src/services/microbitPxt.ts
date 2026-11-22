@@ -1,5 +1,5 @@
 export const pxtOrigin = 'https://makecode.microbit.org';
-export const pxtEditorUrl = `${pxtOrigin}/?controller=1#editor`;
+export const pxtEditorUrl = `${pxtOrigin}/?controller=2#editor`;
 
 const repoPattern = /^[a-z\d][a-z\d-]*\/[a-z\d_][a-z\d_.-]*$/i;
 const tagPattern = /^[a-z\d][a-z\d_.-]{0,95}$/i;

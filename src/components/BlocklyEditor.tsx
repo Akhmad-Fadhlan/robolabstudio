@@ -1,4 +1,5 @@
-import { MicrobitPxtWorkspace } from './MicrobitPxtWorkspace';
+import { getMicrobitDriverNames } from '../services/microbitModules';
+import { kitronikServo16Python } from '../services/microbitPxtNative';
 import { MicrobitExtensions, readMicrobitExtensions, type MicrobitExtensionId } from './MicrobitExtensions';
 import { BlocklyPreview } from './learning/BlocklyPreview';
 import React, { useEffect, useRef, useCallback } from 'react';
@@ -33,16 +34,16 @@ import {
 let activeRobotHwConfig: RobotHardwareConfig = createDefaultRobotHardwareConfig();
 
 const MICROBIT_CATEGORY_COLOURS: Record<string, string> = {
-  'cat-mb-basic': '#228994',
-  'cat-mb-input': '#12B886',
-  'cat-mb-music': '#E286F2',
-  'cat-mb-led': '#B33C6D',
-  'cat-mb-radio': '#74C0FC',
-  'cat-mb-pins': '#4A90E2',
-  'cat-mb-functions': '#775BA2',
-  'cat-mb-arrays': '#945833',
-  'cat-mb-images': '#247C8B',
-  'cat-mb-control': '#5D537B',
+  'cat-mb-basic': '#1E90FF',
+  'cat-mb-input': '#D400D4',
+  'cat-mb-music': '#E63022',
+  'cat-mb-led': '#5C2D91',
+  'cat-mb-radio': '#E3008C',
+  'cat-mb-pins': '#B22222',
+  'cat-mb-functions': '#3455DB',
+  'cat-mb-arrays': '#E65722',
+  'cat-mb-images': '#7600A8',
+  'cat-mb-control': '#333333',
   'cat-mb-neopixel': '#845CB5',
   'cat-mb-servo': '#35639D',
   'cat-mb-datalogger': '#357D67',
@@ -51,8 +52,28 @@ const MICROBIT_CATEGORY_COLOURS: Record<string, string> = {
   'cat-mb-speech': '#6D5294',
   'cat-mb-sonar': '#26716F',
   'cat-mb-microphone': '#A34E63',
+  'cat-mb-loop': '#00AA00',
+  'cat-mb-logic': '#00A4A6',
+  'cat-mb-variables': '#DC143C',
+  'cat-mb-math': '#9400D3',
+  'cat-mb-text': '#B8860B',
+  'cat-mb-stopbit': '#AF3035',
+  'cat-mb-lampbit': '#007841',
+  'cat-mb-servo16': '#35639D',
+  'cat-mb-python-lib': '#286F64',
   'cat-mb-extensions': '#475569',
 };
+
+const pythonIdentifiers = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const pythonKeywords = new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+function validPythonIdentifier(value: string) {
+  return pythonIdentifiers.test(value) && !pythonKeywords.has(value);
+}
+
+function makeDriverCall(target: string, name: string, args: string | null) {
+  if (!target || !validPythonIdentifier(name)) return null;
+  return `(${target}).${name}(${args ? `*${args}` : ''})`;
+}
 
 const registerRobotPlanBlocks = () => {
   const getDurationUnitOptions = (): [string, string][] => {
@@ -1582,6 +1603,40 @@ try {
     {"type": "mb_led_point", "message0": "LED x %1 y %2 menyala?", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}], "output": "Boolean"},
     {"type": "mb_led_brightness", "message0": "atur LED x %1 y %2 kecerahan %3", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "LEVEL", "value": 9, "min": 0, "max": 9, "precision": 1}], "previousStatement": null, "nextStatement": null},
     {"type": "mb_control_reset", "message0": "mulai ulang micro:bit", "colour": "#5D537B", "previousStatement": null, "nextStatement": null},
+    { type: 'mb_ext_lampbit_set', message0: 'LAMP:bit %1', args0: [
+      { type: 'field_dropdown', name: 'STATE', options: [['nyala','1'], ['mati','0']] },
+    ], previousStatement: null, nextStatement: null, colour: '#007841' },
+    { type: 'mb_ext_lampbit_light', message0: 'tingkat cahaya LAMP:bit', output: 'Number', colour: '#007841' },
+    { type: 'mb_ext_lampbit_set_deadband', message0: 'atur deadband LAMP:bit %1 persen', args0: [
+      { type: 'field_number', name: 'PERCENT', value: 10, min: 0, max: 50 },
+    ], previousStatement: null, nextStatement: null, colour: '#007841' },
+    { type: 'mb_ext_lampbit_deadband', message0: 'nilai deadband LAMP:bit', output: 'Number', colour: '#007841' },
+    { type: 'mb_ext_servo16_write', message0: 'I²C 16-Servo kanal %1 sudut %2 derajat', args0: [
+      { type: 'field_number', name: 'CHANNEL', value: 1, min: 1, max: 16, precision: 1 },
+      { type: 'input_value', name: 'ANGLE', check: 'Number' },
+    ], previousStatement: null, nextStatement: null, colour: '#35639D' },
+    { type: 'mb_ext_servo16_off', message0: 'matikan sinyal I²C 16-Servo kanal %1', args0: [
+      { type: 'field_number', name: 'CHANNEL', value: 1, min: 1, max: 16, precision: 1 },
+    ], previousStatement: null, nextStatement: null, colour: '#35639D' },
+    { type: 'mb_ext_stopbit_set', message0: 'STOP:bit %1 %2', args0: [
+      { type: 'field_dropdown', name: 'PIN', options: [['merah','0'], ['kuning','1'], ['hijau','2']] },
+      { type: 'field_dropdown', name: 'STATE', options: [['nyala','1'], ['mati','0']] },
+    ], previousStatement: null, nextStatement: null, colour: '#AF3035' },
+    { type: 'mb_ext_stopbit_off', message0: 'matikan semua lampu STOP:bit', previousStatement: null, nextStatement: null, colour: '#AF3035' },
+    ...['statement', 'value'].map(mode => ({
+      type: `mb_ext_python_${mode}`, message0: 'modul %1 fungsi %2 argumen %3',
+      args0: [{ type: 'field_input', name: 'MODULE', text: 'driver' }, { type: 'field_input', name: 'FUNC', text: 'read' },
+        { type: 'input_value', name: 'ARGS', check: 'Array' }],
+      ...(mode === 'value' ? { output: null } : { previousStatement: null, nextStatement: null }),
+      colour: '#286F64', inputsInline: false,
+    })),
+    ...['statement', 'value'].map(mode => ({
+      type: `mb_ext_driver_method_${mode}`, message0: 'objek %1 metode %2 argumen %3',
+      args0: [{ type: 'input_value', name: 'OBJECT' }, { type: 'field_input', name: 'FUNC', text: 'read' },
+        { type: 'input_value', name: 'ARGS', check: 'Array' }],
+      ...(mode === 'value' ? { output: null } : { previousStatement: null, nextStatement: null }),
+      colour: '#286F64', inputsInline: false,
+    })),
     { type: 'mb_ext_sonar_distance', message0: 'jarak sonar (cm) Trig %1 Echo %2',
       args0: [
         { type: 'field_dropdown', name: 'TRIG', options: [['P1','1'], ['P0','0'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] },
@@ -2030,6 +2085,7 @@ interface BlocklyEditorProps {
   onMicrobitPreview?: (frames: string[]) => void;
   compact?: boolean;
   microbitExtensionScope?: string;
+  onOpenPxt?: (dependency: string | null) => void;
   microbitModules?: Record<string, string>;
   onUpdateMicrobitModule?: (path: string, source: string | null) => void;
   showRobotPlan?: boolean;
@@ -2661,6 +2717,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   onMicrobitPreview,
   compact = false,
   microbitExtensionScope = 'global',
+  onOpenPxt,
   microbitModules,
   onUpdateMicrobitModule,
   showRobotPlan = false,
@@ -2709,17 +2766,24 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   const extensionKey = `robolab_microbit_extensions_${microbitExtensionScope}`;
   const [microbitExtensions, setMicrobitExtensions] = React.useState(() => readMicrobitExtensions(extensionKey));
   const [extensionsOpen, setExtensionsOpen] = React.useState(false);
-  const [pxtDependency, setPxtDependency] = React.useState<string | null | undefined>(undefined);
-  const canOpenPxt = typeof window !== 'undefined' && !('__electronRequire' in window && window.__electronRequire);
+  const microbitDriverBlocks = Object.entries(microbitModules ?? {}).sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([filename, source]) => {
+      const module = filename.slice(0, -3);
+      if (!validPythonIdentifier(module)) return [];
+      const functions = getMicrobitDriverNames(source).filter(validPythonIdentifier);
+      return ['', ...functions].flatMap(fn => ['statement', 'value'].map(mode =>
+        `<block type="mb_ext_python_${mode}"><field name="MODULE">${module}</field>${fn ? `<field name="FUNC">${fn}</field>` : ''}</block>`));
+    }).join('');
   useEffect(() => {
     setMicrobitExtensions(readMicrobitExtensions(extensionKey));
     setExtensionsOpen(false);
-    setPxtDependency(undefined);
   }, [extensionKey]);
-  const toggleMicrobitExtension = (id: MicrobitExtensionId) => {
-    const next = microbitExtensions.includes(id) ? microbitExtensions.filter(item => item !== id) : [...microbitExtensions, id];
+  const updateMicrobitExtensions = (next: MicrobitExtensionId[]) => {
     setMicrobitExtensions(next);
     try { localStorage.setItem(extensionKey, JSON.stringify(next)); } catch { /* The session still retains the selection. */ }
+  };
+  const toggleMicrobitExtension = (id: MicrobitExtensionId) => {
+    updateMicrobitExtensions(microbitExtensions.includes(id) ? microbitExtensions.filter(item => item !== id) : [...microbitExtensions, id]);
   };
 
   const [guideOpen,setGuideOpen] = React.useState(false);
@@ -3057,10 +3121,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           const lowerText = cleanedText.toLowerCase();
           const catKey = [...row.classList, ...treeItem.classList].find(name => name.startsWith('cat-mb-')) || getCatKey(lowerText);
-          const configuredIcon = CAT_ICON_CONFIG[catKey] || CAT_ICON_CONFIG['cat-default'];
+          const configuredIcon = CAT_ICON_CONFIG[catKey] || CAT_ICON_CONFIG[catKey.replace('cat-mb-', 'cat-')] || CAT_ICON_CONFIG['cat-default'];
           const palette = MICROBIT_CATEGORY_COLOURS[catKey] ?? '';
           const channels = /^#[0-9a-f]{6}$/i.test(palette) ? [1, 3, 5].map(index => parseInt(palette.slice(index, index + 2), 16)).join(', ') : '';
           const iconConf = channels ? { ...configuredIcon, color: palette, rgb: channels, section: 'MICRO:BIT' } : configuredIcon;
+          const luminance = channels.split(', ').reduce((light, channel, index) => {
+            const srgb = Number(channel) / 255;
+            return light + (srgb <= .04045 ? srgb / 12.92 : ((srgb + .055) / 1.055) ** 2.4) * [.2126, .7152, .0722][index];
+          }, 0);
 
           // Section header insertion
           const sectionName = iconConf.section;
@@ -3135,7 +3203,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             labelEl.style.setProperty('font-size', '13.5px', 'important');
             labelEl.style.setProperty('font-weight', isSelected ? '700' : '600', 'important');
             labelEl.style.setProperty('letter-spacing', '0.01em', 'important');
-            labelEl.style.setProperty('color', isSelected ? '#ffffff' : (isLight ? '#1e293b' : '#f1f5f9'), 'important');
+            labelEl.style.setProperty('color', isSelected ? (luminance > .179 ? '#080f1b' : '#ffffff') : (isLight ? '#1e293b' : '#f1f5f9'), 'important');
             labelEl.style.setProperty('padding-left', '0', 'important');
             labelEl.style.setProperty('flex', '1', 'important');
             labelEl.style.setProperty('background', 'transparent', 'important');
@@ -3987,6 +4055,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (microbitTypes.some(type => type.startsWith('music_') && type !== 'music_note_frequency')) generatedCode += 'import music\n';
         if (microbitTypes.some(type => type.startsWith('radio_'))) generatedCode += 'import radio\nradio.on()\n';
         if (microbitTypes.some(type => type.startsWith('mb_ext_neo_'))) generatedCode += 'import neopixel\n__robolab_pixels = {}\n';
+        const importedModules = new Set(workspace.getAllBlocks(false).filter(isBlockActive)
+          .filter(block => block.type.startsWith('mb_ext_python_'))
+          .map(block => String(block.getFieldValue('MODULE') ?? '').trim()).filter(validPythonIdentifier));
+        for (const module of importedModules) generatedCode += `import ${module} as _robolab_lib_${module}\n`;
+        if (microbitTypes.some(type => type === 'mb_ext_lampbit_set_deadband' || type === 'mb_ext_lampbit_deadband')) {
+          generatedCode += '_robolab_lampbit_deadband = [0]\n';
+        }
+        if (microbitTypes.some(type => type.startsWith('mb_ext_servo16_'))) generatedCode += kitronikServo16Python;
         if (microbitTypes.includes('mb_ext_sonar_distance')) generatedCode += [
           'from machine import time_pulse_us',
           'from utime import sleep_us',
@@ -4285,7 +4361,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           </value>
         </block>
       </category>
-      <category name="${language === 'id' ? 'Perulangan' : 'Loops'}" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
+      <category name="${language === 'id' ? 'Perulangan' : 'Loops'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-loop']}" css-container="cat-mb-loop" css-row="cat-mb-loop">
         <block type="controls_repeat_ext">
           <value name="TIMES">
             <block type="math_number">
@@ -4306,16 +4382,16 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           </value>
         </block>
       </category>
-      <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
+      <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-logic']}" css-container="cat-mb-logic" css-row="cat-mb-logic">
         <block type="controls_if"></block>
         <block type="robolab_logic_compare"></block>
         <block type="logic_operation"></block>
         <block type="logic_negate"></block>
         <block type="logic_boolean"></block>
       </category>
-      <category name="${language === 'id' ? 'Variabel' : 'Variables'}" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
+      <category name="${language === 'id' ? 'Variabel' : 'Variables'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-variables']}" custom="VARIABLE" css-container="cat-mb-variables" css-row="cat-mb-variables">
       </category>
-      <category name="${language === 'id' ? 'Angka' : 'Math'}" colour="#40BF4A" css-container="cat-math" css-row="cat-math">
+      <category name="${language === 'id' ? 'Angka' : 'Math'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-math']}" css-container="cat-mb-math" css-row="cat-mb-math">
         <block type="math_number"></block>
         <block type="math_arithmetic"></block>
         <block type="math_single"></block>
@@ -4331,7 +4407,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="mb_image_show"><value name="IMAGE"><block type="mb_image_create"></block></value></block>
         <block type="mb_image_create"></block>
       </category>
-      <category name="${language === 'id' ? 'Teks' : 'Text'}" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
+      <category name="${language === 'id' ? 'Teks' : 'Text'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-text']}" css-container="cat-mb-text" css-row="cat-mb-text">
         <block type="text"></block>
         <block type="text_join"></block>
       </category>
@@ -4380,6 +4456,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       ${microbitExtensions.includes('compass') ? `<category name="Compass" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-compass']}" css-row="cat-mb-compass"><block type="mb_ext_compass_calibrate"/><block type="input_compass_heading"/><block type="mb_ext_compass_strength"/></category>` : ''}
       ${microbitExtensions.includes('i2c') ? `<category name="I²C Tools" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-i2c']}" css-row="cat-mb-i2c"><block type="mb_ext_i2c_scan"/></category>` : ''}
       ${microbitExtensions.includes('sonar') ? `<category name="Sonar" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-sonar']}" css-row="cat-mb-sonar"><block type="mb_ext_sonar_distance"/></category>` : ''}
+      ${microbitExtensions.includes('stopbit') ? `<category name="STOP:bit" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-stopbit']}" css-row="cat-mb-stopbit"><block type="mb_ext_stopbit_set"/><block type="mb_ext_stopbit_off"/></category>` : ''}
+      ${microbitExtensions.includes('lampbit') ? `<category name="LAMP:bit" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-lampbit']}" css-row="cat-mb-lampbit">
+        <block type="mb_ext_lampbit_set"/><block type="mb_ext_lampbit_light"/><block type="mb_ext_lampbit_set_deadband"/><block type="mb_ext_lampbit_deadband"/>
+      </category>` : ''}
+      ${microbitExtensions.includes('servo16') ? `<category name="I²C 16-Servo" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-servo16']}" css-row="cat-mb-servo16">
+        <block type="mb_ext_servo16_write"><value name="ANGLE"><shadow type="math_number"><field name="NUM">90</field></shadow></value></block>
+        <block type="mb_ext_servo16_off"/>
+      </category>` : ''}
+      ${microbitDriverBlocks ? `<category name="Pustaka Python" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-python-lib']}" css-row="cat-mb-python-lib">
+        ${microbitDriverBlocks}
+        <block type="mb_ext_driver_method_statement"/><block type="mb_ext_driver_method_value"/>
+      </category>` : ''}
       <category name="${language === 'id' ? 'Ekstensi' : 'Extensions'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-extensions']}" css-row="cat-mb-extensions">
         <button text="${language === 'id' ? 'Cari ekstensi' : 'Find extensions'}" callbackKey="robolabMicrobitExtensions"></button>
       </category>
@@ -4927,7 +5015,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       setTimeout(() => updateToolboxUI(), 50);
       setTimeout(() => updateToolboxUI(), 200);
     }
-  }, [installedLibrariesStr, board, codeType, showRobotPlan, robotHardwareConfig?.sensorCount, updateToolboxUI, microbitExtensions]);
+  }, [installedLibrariesStr, board, codeType, showRobotPlan, robotHardwareConfig?.sensorCount, updateToolboxUI, microbitExtensions, microbitDriverBlocks]);
 
   useEffect(() => {
     if (!blocklyDivRef.current) return;
@@ -5845,9 +5933,18 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const list = value ? getBlockValue(value, lang) : '[]';
       return block.type === 'lists_length' ? `len(${list})` : `(not ${list})`;
     }
+    if (lang === 'python' && ['mb_ext_python_value', 'mb_ext_driver_method_value'].includes(block.type)) {
+      const module = String(block.getFieldValue('MODULE') ?? '').trim();
+      const object = block.getInput('OBJECT')?.connection?.targetBlock();
+      const target = object ? getBlockValue(object, lang) : validPythonIdentifier(module) ? `_robolab_lib_${module}` : '';
+      const args = block.getInputTargetBlock('ARGS');
+      return makeDriverCall(target, String(block.getFieldValue('FUNC')).trim(), args ? getBlockValue(args, lang) : null) ?? 'None';
+    }
     if (lang === 'python' && block.type === 'mb_ext_sonar_distance') {
       return `_robolab_sonar_cm(pin${block.getFieldValue('TRIG')}, pin${block.getFieldValue('ECHO')})`;
     }
+    if (lang === 'python' && block.type === 'mb_ext_lampbit_light') return 'pin1.read_analog()';
+    if (lang === 'python' && block.type === 'mb_ext_lampbit_deadband') return '_robolab_lampbit_deadband[0]';
     if (lang === 'python' && block.type === 'mb_ext_i2c_scan') return 'i2c.scan()';
     if (lang === 'python' && block.type === 'mb_ext_compass_strength') return 'compass.get_field_strength()';
     if (lang === 'python' && block.type === 'mb_ext_mic_level') return 'microphone.sound_level()';
@@ -6997,6 +7094,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         code += `${indent}display.set_pixel(${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}, ${currentBlock.getFieldValue('LEVEL')})\n`;
       } else if (lang === 'python' && currentBlock.type === 'mb_control_reset') {
         code += `${indent}reset()\n`;
+      } else if (lang === 'python' && ['mb_ext_python_statement', 'mb_ext_driver_method_statement'].includes(currentBlock.type)) {
+        const module = String(currentBlock.getFieldValue('MODULE') ?? '').trim();
+        const object = currentBlock.getInput('OBJECT')?.connection?.targetBlock();
+        const target = object ? getBlockValue(object, lang) : validPythonIdentifier(module) ? `_robolab_lib_${module}` : '';
+        const args = currentBlock.getInputTargetBlock('ARGS');
+        const call = makeDriverCall(target, String(currentBlock.getFieldValue('FUNC')).trim(), args ? getBlockValue(args, lang) : null);
+        code += `${indent}${call ?? 'pass'}\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_lampbit_set') {
+        code += `${indent}pin0.write_digital(${currentBlock.getFieldValue('STATE')})\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_lampbit_set_deadband') {
+        code += `${indent}_robolab_lampbit_deadband[0] = 1023 * ${currentBlock.getFieldValue('PERCENT')} / 100\n`;
+      } else if (lang === 'python' && ['mb_ext_servo16_write', 'mb_ext_servo16_off'].includes(currentBlock.type)) {
+        const channel = currentBlock.getFieldValue('CHANNEL');
+        const angle = currentBlock.getInput('ANGLE')?.connection?.targetBlock();
+        const value = currentBlock.type === 'mb_ext_servo16_off' ? 'None' : angle ? getBlockValue(angle, lang) : '90';
+        code += `${indent}_robolab_servo16(${channel}, ${value})\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_stopbit_set') {
+        code += `${indent}pin${currentBlock.getFieldValue('PIN')}.write_digital(${currentBlock.getFieldValue('STATE')})\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_stopbit_off') {
+        code += [0, 1, 2].map(pin => `${indent}pin${pin}.write_digital(0)\n`).join('');
       } else if (lang === 'python' && currentBlock.type === 'mb_ext_compass_calibrate') {
         code += `${indent}compass.calibrate()\n`;
       } else if (lang === 'python' && currentBlock.type === 'mb_ext_speech_say') {
@@ -7263,12 +7380,13 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
       </div>
 
-      {board === 'BBC micro:bit' && extensionsOpen && pxtDependency === undefined && (
+      {board === 'BBC micro:bit' && extensionsOpen && (
         <MicrobitExtensions installed={microbitExtensions} onToggle={toggleMicrobitExtension}
-          onClose={() => setExtensionsOpen(false)} onOpenPxt={canOpenPxt ? setPxtDependency : undefined} modules={microbitModules} onUpdateModule={onUpdateMicrobitModule} />
-      )}
-      {board === 'BBC micro:bit' && pxtDependency !== undefined && (
-        <MicrobitPxtWorkspace scope={microbitExtensionScope} dependency={pxtDependency} onClose={() => setPxtDependency(undefined)} />
+          onInstallAdapters={ids => updateMicrobitExtensions([...new Set([...microbitExtensions, ...ids])])}
+          onClose={() => setExtensionsOpen(false)} onOpenPxt={onOpenPxt ? dependency => {
+            setExtensionsOpen(false);
+            onOpenPxt(dependency);
+          } : undefined} modules={microbitModules} onUpdateModule={onUpdateMicrobitModule} />
       )}
       {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 flex min-h-0 flex-col overflow-hidden rounded-xl bg-white text-slate-800 shadow-lg">
         <div className="shrink-0 border-b border-slate-200 p-4"><header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>

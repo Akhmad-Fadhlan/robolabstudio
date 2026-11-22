@@ -1,3 +1,8 @@
+import { MicrobitPxtWorkspace } from './components/MicrobitPxtWorkspace';
+import { uploadPxtHex } from './services/microbitPxtFirmware';
+import HomeRobot from './components/HomeRobot';
+import { RobotPlanTable } from './components/RobotPlanTable';
+import { SimulatorDivider } from './components/layout/SimulatorDivider';
 import { getMicrobitModules, isMicrobitModulePath } from './services/microbitModules';
 import { PYTHON_PACKAGE_CATALOG, normalizePythonPackageName } from './data/pythonPackageCatalog';
 import { SERIAL_BAUD_RATES } from './data/serialBaudRates';
@@ -7,7 +12,7 @@ import type { LangCode } from './i18n';
 import { t } from './i18n';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Cpu, Activity, ChevronRight, ChevronLeft, ChevronDown, BookOpen, 
+  Bot, Cpu, Activity, ChevronRight, ChevronLeft, ChevronDown, BookOpen,
   Plus, Search, Smartphone, X, Sliders, Download, 
   File as FileIcon, FileText, Folder, Play, Square, RotateCcw, Code,
   FolderOpen, Check, Save, Upload, Terminal as TerminalIcon, Trash2,
@@ -3815,6 +3820,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     'python/main.py': '# Python RoboLab\ndef setup():\n    pass\n\ndef loop():\n    pass\n\nif __name__ == "__main__":\n    setup()\n    while True:\n        loop()\n',
   };
 
+  const [robotEditor, setRobotEditor] = useState<'blocks' | 'table'>('blocks');
+  const [simCodingWidth, setSimCodingWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('robolab_sim_coding_width');
+      if (saved === null) return 42;
+      const value = Number(saved);
+      return Number.isFinite(value) ? Math.max(30, Math.min(72, value)) : 42;
+    } catch { return 42; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('robolab_sim_coding_width', String(simCodingWidth)); } catch {}
+  }, [simCodingWidth]);
   const [simulatorMode, setSimulatorMode] = useState<'robot' | 'circuit'>('circuit');
   const [robotHardwareConfig, setRobotHardwareConfig] = useState<RobotHardwareConfig>(() => initialRobotSetup.hw);
   const [robotPlans, setRobotPlans] = useState<RobotPlan[]>(() => initialRobotSetup.plans);
@@ -3867,7 +3884,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       nextHw: RobotHardwareConfig,
       nextPlans: RobotPlan[],
       nextActiveId: number,
-      rebuildBlocklyXml = false
+      rebuildBlocklyXml = false,
+      preserveSource?: { file: string; code: string }
     ) => {
       const { xml, plansWithBlockIds } = buildRobotPlanBlocklyXml(nextHw, nextPlans, nextActiveId);
       const inoCode = generateRobotPlanArduinoCode(nextHw, plansWithBlockIds, nextActiveId);
@@ -3880,10 +3898,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setSimFiles({
         'firmware/main.ino': inoCode,
         'python/main.py': pyCode,
+        ...(preserveSource ? { [preserveSource.file]: preserveSource.code } : {}),
       });
       setSimSyncStatuses({
-        'firmware/main.ino': true,
-        'python/main.py': true,
+        'firmware/main.ino': preserveSource?.file !== 'firmware/main.ino',
+        'python/main.py': preserveSource?.file !== 'python/main.py',
       });
       if (rebuildBlocklyXml) {
         setSimWorkspaceXmls({
@@ -3948,6 +3967,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   // Board Connection (Real Hardware Device)
   const [board, setBoard] = useState<string>('ESP32 DevKit V1');
+  const [pxtWorkspace, setPxtWorkspace] = useState<{ scope: string; dependency: string | null } | null>(null);
+  // Electron currently runs with webSecurity disabled and a Node-enabled parent.
+  const canOpenPxtWorkspace = typeof (window as Window & { __electronRequire?: unknown }).__electronRequire !== 'function';
+  const pxtScope = `project:${authUser?.id ?? 'local'}:${projectName}`;
   const [port, setPort] = useState<string>('none');
   const [availablePorts, setAvailablePorts] = useState<Array<{ address: string, label: string }>>([]);
   
@@ -5243,8 +5266,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   
   // Responsive screen checker (only stack vertically on small phone screens < 640px)
   const [isMobile, setIsMobile] = useState(false);
+  const [mobileProjectFiles, setMobileProjectFiles] = useState(false);
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 639px)');
+    const mql = window.matchMedia('(max-width: 767px)');
     setIsMobile(mql.matches);
     const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mql.addEventListener('change', listener);
@@ -5547,6 +5571,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   }, [board, currentTab, activeFile, files]);
 
   const handleFileSelect = (filename: string, explicitFilesMap?: { [key: string]: string }) => {
+    setMobileProjectFiles(false);
     if (isMicrobitModulePath(filename)) {
       setWorkspaceMode('code');
       setActiveFile(filename);
@@ -9012,8 +9037,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         onLanguageChange={handleLanguageChange}
       />
 
+      {pxtWorkspace && <MicrobitPxtWorkspace key={pxtWorkspace.scope} scope={pxtWorkspace.scope}
+        dependency={pxtWorkspace.dependency} onClose={() => setPxtWorkspace(null)} uploadBlocked={trialStatus.isExpired}
+        onUpload={async (compile, reportProgress) => {
+          if (trialStatus.isExpired || isHardwareActionRef.current) throw new Error('Upload board sedang tidak tersedia.');
+          isHardwareActionRef.current = true;
+          try {
+            if (isSerialConnected) {
+              await stopWebSerialMonitor();
+              setIsSerialConnected(false);
+            }
+            return await uploadPxtHex(compile, reportProgress);
+          } finally {
+            isHardwareActionRef.current = false;
+          }
+        }} />}
+
       {/* 3. CORE PANEL CONTAINER (Left sidebar + Workspace area) */}
-      <div className="flex-1 flex min-h-0 relative z-10 p-3 gap-3">
+      <div className="flex min-h-0 flex-1 flex-col-reverse gap-2 p-1.5 md:flex-row md:gap-3 md:p-3 relative z-10">
         
         {/* A. LEFT NAVIGATION SIDEBAR (narrow layout) */}
         <Sidebar 
@@ -9072,17 +9113,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     if (diff === 0) {
                       xOffset = 0;
                       rotateYAngle = 0;
-                      scaleValue = 1.15;
+                      scaleValue = isMobile ? 1 : 1.08;
                       zIndexValue = 10;
                       opacityValue = 1;
                     } else if (diff === -1) {
-                      xOffset = -280;
+                      xOffset = isMobile ? -155 : -280;
                       rotateYAngle = 38;
                       scaleValue = 0.9;
                       zIndexValue = 5;
                       opacityValue = 0.8;
                     } else if (diff === 1) {
-                      xOffset = 280;
+                      xOffset = isMobile ? 155 : 280;
                       rotateYAngle = -38;
                       scaleValue = 0.9;
                       zIndexValue = 5;
@@ -9101,12 +9142,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       opacityValue = 0.45;
                     }
 
-                    let IconComponent = Cpu;
+                    let IconComponent = Bot;
                     let accentColor = "#10b981"; // Emerald
                     let bgGlow = "rgba(16,185,129,0.15)";
                     
                     if (proj.board === 'Arduino Uno') {
-                      IconComponent = Cpu;
+                      IconComponent = Bot;
                       accentColor = "#10b981";
                       bgGlow = "rgba(16,185,129,0.12)";
                     } else if (proj.board === 'BBC micro:bit') {
@@ -9138,7 +9179,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           handleOpenTemplate(proj.name || "");
                           setActiveCardIndex(index);
                         }}
-                        className="w-[280px] h-[340px] rounded-3xl p-6 cursor-pointer relative flex flex-col justify-between overflow-hidden"
+                        className="w-[min(74vw,280px)] h-[340px] rounded-3xl p-6 cursor-pointer relative flex flex-col justify-between overflow-hidden"
                         style={{
                           position: 'absolute',
                           zIndex: zIndexValue,
@@ -9167,7 +9208,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         {/* Card body */}
                         <div className="relative z-10 flex flex-col h-full justify-between">
                           <div>
-                            <div 
+                            {diff === 0 ? <div className="mb-3"><HomeRobot /></div> : <div
                               className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 border"
                               style={{ 
                                 color: accentColor, 
@@ -9176,7 +9217,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               }}
                             >
                               <IconComponent className="w-6 h-6" />
-                            </div>
+                            </div>}
                             
                             <h3 className={`text-sm font-bold leading-tight font-display mb-2 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{proj.name}</h3>
                             <p className={`text-[11px] leading-relaxed font-sans line-clamp-4 ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{proj.description}</p>
@@ -9312,11 +9353,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           : p.board === categoryFilter;
                     return matchesSearch && matchesCategory;
                   }).map((proj, idx) => {
-                    let IconComponent = Cpu;
+                    let IconComponent = Bot;
                     let accentColor = "#10b981"; // Emerald
                     
                     if (proj.board === 'Arduino Uno') {
-                      IconComponent = Cpu;
+                      IconComponent = Bot;
                       accentColor = "#10b981";
                     } else if (proj.board === 'BBC micro:bit') {
                       IconComponent = Activity;
@@ -9407,11 +9448,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             <div className="absolute inset-0 flex gap-3 bg-transparent">
               
               {/* SIDEBAR PANEL (Explorer / Files list) */}
-              {showExplorer && !(isMobile && workspaceMode === 'split') && (
-                <div className="panel-explorer w-56 flex flex-col flex-shrink-0 select-none overflow-hidden">
+              {((!isMobile && showExplorer) || (isMobile && mobileProjectFiles)) && (
+                <div className={`lab-surface panel-explorer w-56 ${isMobile ? 'absolute inset-y-0 left-0 z-[60] max-w-[90vw] shadow-xl' : ''} flex flex-col flex-shrink-0 select-none overflow-hidden`}>
                   {/* Panel Title */}
                   <div className="h-10 flex items-center justify-between px-4 border-b border-white/5">
-                    <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">Explorer</span>
+                    <span className="text-xs font-bold">Berkas proyek</span>
+                    {isMobile && <button type="button" aria-label="Tutup berkas proyek" className="lab-control rounded-md p-1" onClick={() => setMobileProjectFiles(false)}><X className="size-4" /></button>}
                     <div className="flex items-center gap-1.5">
                       <button 
                         onClick={handleNativeOpenFolder}
@@ -9583,11 +9625,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               <div className="flex-1 flex flex-col min-w-0 gap-0 bg-transparent relative">
                 
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-400/30 px-3 py-2">
-                  <span className="text-xs font-semibold">Tampilan proyek</span>
+                  {isMobile ? <>
+                    <button type="button" className="lab-control rounded-lg px-2.5 py-2 text-xs" aria-expanded={mobileProjectFiles} onClick={() => setMobileProjectFiles(open => !open)}>Berkas</button>
+                    {(['blockly', 'code', 'split'] as const).map(view => <button key={view} type="button" className="lab-control rounded-lg px-2.5 py-2 text-xs" aria-pressed={workspaceMode === view}
+                      onClick={() => { setUiMode('pro'); setWorkspaceMode(view); setIsBlocklyCollapsed(false); setIsEditorCollapsed(false); }}>
+                      {view === 'blockly' ? 'Blok' : view === 'code' ? 'Kode' : 'Keduanya'}
+                    </button>)}
+                  </> : <span className="text-xs font-semibold">Tampilan proyek</span>}
                   {(board === 'BBC micro:bit' ? ['.py'] : ['.ino', '.py']).map(extension => (
                     <button key={extension} type="button"
                       aria-pressed={uiMode === 'pro' && workspaceMode === 'split' && activeFile.endsWith(extension) && !isBlocklyCollapsed && !isEditorCollapsed}
-                      className="rounded-lg border border-slate-400/40 px-2.5 py-1.5 text-xs font-semibold aria-pressed:bg-sky-800 aria-pressed:text-white"
+                      className="lab-control rounded-lg px-2.5 py-1.5 text-xs font-semibold"
                       onClick={() => {
                         const defaultPath = extension === '.py' ? 'python/main.py' : 'firmware/main.ino';
                         const path = activeFile.endsWith(extension) ? activeFile : Object.keys(files).find(name => name.endsWith(extension)) ?? defaultPath;
@@ -9601,11 +9649,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       {extension === '.ino' ? 'Arduino .ino + Blok' : 'Blok + Python'}
                     </button>
                   ))}
+                  {board === 'BBC micro:bit' && <button type="button" disabled={!canOpenPxtWorkspace}
+                    title={canOpenPxtWorkspace ? undefined : 'Mode PXT tersedia di RoboLab Web.'}
+                    className="lab-control rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                    onClick={() => setPxtWorkspace({ scope: pxtScope, dependency: null })}>Proyek PXT</button>}
                 </div>
 
                 {/* Compile progress overlay */}
                 {buildProgress > 0 && buildProgress < 100 && (
-                  <div className="bg-[#0b0c10] border-b border-[#181b28] px-4 py-2 flex items-center justify-between gap-4 font-mono text-[10px] select-none">
+                  <div className="lab-surface border-b px-4 py-2 flex items-center justify-between gap-4 font-mono text-[10px] select-none">
                     <div className="flex items-center gap-2 text-slate-350">
                       <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-ping" />
                       <span>{buildStatusText}</span>
@@ -9620,15 +9672,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 {/* EDITORS SPLIT WORKSPACE */}
                 <div 
                   id="workspace-split-container" 
-                  className="flex-1 min-h-0 flex flex-col sm:flex-row gap-0 bg-transparent relative z-10 box-border"
+                  className="flex-1 min-h-0 flex flex-col md:flex-row gap-0 bg-transparent relative z-10 box-border"
                   style={{
-                    paddingBottom: isTerminalCollapsed ? '38px' : `${terminalHeight + 6}px`,
+                    paddingBottom: isTerminalCollapsed ? '38px' : `${isMobile ? Math.min(terminalHeight, 180) + 6 : terminalHeight + 6}px`,
                     transition: isResizingTerminal ? 'none' : 'padding-bottom 0.15s ease-out'
                   }}
                 >
                   
                   {/* Editors Area (Left + Center) */}
-                  <div className="flex-1 flex flex-col sm:flex-row min-w-0 h-full relative gap-0 bg-transparent">
+                  <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 h-full relative gap-0 bg-transparent">
                     {activeFile === '' ? (
                       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl min-h-[400px]">
                         <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-6 relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)]">
@@ -9682,11 +9734,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               libraryFocus={libraryFocus}
                               codeType={board === 'BBC micro:bit' || activeFile.endsWith('.py') ? 'python' : 'arduino'}
                               board={board}
-                              microbitExtensionScope={`project:${authUser?.id ?? 'local'}:${projectName}`}
+                              microbitExtensionScope={pxtScope}
+                              onOpenPxt={canOpenPxtWorkspace ? dependency => setPxtWorkspace({ scope: pxtScope, dependency }) : undefined}
                               microbitModules={getMicrobitModules(files)}
                               onUpdateMicrobitModule={(path, source) => {
                                 setFiles(previous => {
-                                  if (source !== null) return { ...previous, [path]: source };
+                                  if (source !== null) return Object.hasOwn(previous, path) ? previous : { ...previous, [path]: source };
                                   const next = { ...previous };
                                   delete next[path];
                                   return next;
@@ -9801,10 +9854,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                         {/* Collapsed Blockly bar */}
                         {uiMode === 'pro' && workspaceMode === 'split' && isBlocklyCollapsed && (
-                          <div className="glass-sidebar w-8 h-full flex flex-col items-center justify-center py-4 flex-shrink-0 select-none border-r border-indigo-500/20">
+                          <div className="glass-sidebar h-8 w-full flex items-center justify-center md:h-full md:w-8 md:flex-col md:py-4 flex-shrink-0 select-none border-r border-indigo-500/20">
                             <button 
                               onClick={() => setIsBlocklyCollapsed(false)}
-                              className="text-[9px] font-mono font-bold text-indigo-400 hover:text-indigo-300 cursor-pointer select-none [writing-mode:vertical-lr] rotate-180"
+                              className="text-[9px] font-mono font-bold text-indigo-400 hover:text-indigo-300 cursor-pointer select-none md:[writing-mode:vertical-lr] rotate-180"
                             >
                               BUKA BLOCKLY
                             </button>
@@ -9897,10 +9950,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                         {/* Collapsed Editor bar */}
                         {workspaceMode === 'split' && isEditorCollapsed && (
-                          <div className="glass-sidebar w-8 h-full flex flex-col items-center justify-center py-4 flex-shrink-0 select-none border-l border-cyan-500/20">
+                          <div className="glass-sidebar h-8 w-full flex items-center justify-center md:h-full md:w-8 md:flex-col md:py-4 flex-shrink-0 select-none border-l border-cyan-500/20">
                             <button 
                               onClick={() => setIsEditorCollapsed(false)}
-                              className="text-[9px] font-mono font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer select-none [writing-mode:vertical-lr] flex items-center justify-center gap-1 rotate-180"
+                              className="text-[9px] font-mono font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer select-none md:[writing-mode:vertical-lr] flex items-center justify-center gap-1 md:rotate-180"
                             >
                               <span>BUKA EDITOR</span>
                             </button>
@@ -9917,7 +9970,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     <TerminalPanel
                       isTerminalCollapsed={isTerminalCollapsed}
                       setIsTerminalCollapsed={setIsTerminalCollapsed}
-                      terminalHeight={terminalHeight}
+                      terminalHeight={isMobile ? Math.min(terminalHeight, 180) : terminalHeight}
                       setIsResizingTerminal={setIsResizingTerminal}
                       terminalTab={terminalTab}
                       setTerminalTab={setTerminalTab}
@@ -10349,53 +10402,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
             <div className={`absolute inset-0 p-2 sm:p-3 flex flex-col min-w-0 min-h-0 overflow-hidden transition-colors ${themeMode === 'light' ? 'bg-transparent text-slate-900' : 'bg-[#090a0f] text-slate-100'}`}>
-              {/* Floating Simulator Menu Bar - Hanya 2 Menu: Simulator Rangkaian & Simulator Robot */}
-              <div className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-2xl border shadow-sm select-none mb-3 flex-shrink-0 ${
-                themeMode === 'light' 
-                  ? 'bg-white/95 backdrop-blur-md border-[var(--theme-border,rgba(186,230,253,0.9))] text-slate-800 shadow-[0_4px_16px_var(--theme-active-shadow,rgba(59,130,246,0.06))]' 
-                  : 'bg-[#0f111a]/95 border-white/10 text-white'
-              }`}>
-                {/* Left: Hanya 2 Menu Simulator (Simulator Rangkaian & Simulator Robot) */}
-                <div className="flex items-center gap-2">
-                  {/* Menu 1: Simulator Rangkaian */}
-                  <button
-                    type="button"
-                    onClick={() => handleSimulatorModeChange('circuit')}
-                    style={simulatorMode === 'circuit' ? { background: 'var(--accent-gradient)' } : {}}
-                    className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 shadow-sm ${
-                      simulatorMode === 'circuit'
-                        ? 'text-white shadow-md'
-                        : themeMode === 'light'
-                        ? 'text-slate-700 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200'
-                        : 'text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10'
-                    }`}
-                  >
-                    <span>🔌</span>
-                    <span>Simulator Rangkaian</span>
-                    {simulatorMode === 'circuit' && <span className="text-yellow-300 text-xs">⭐</span>}
+              <div className="lab-surface mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border p-2 shadow-sm">
+                <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Mode simulator">
+                  <button type="button" onClick={() => handleSimulatorModeChange('circuit')} aria-pressed={simulatorMode === 'circuit'}
+                    className="lab-control flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
+                    <Cpu className="size-4" /> Rangkaian
                   </button>
-
-                  {/* Menu 2: Simulator Robot */}
-                  <button
-                    type="button"
-                    onClick={() => handleSimulatorModeChange('robot')}
-                    style={simulatorMode === 'robot' ? { background: 'var(--accent-gradient)' } : {}}
-                    className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 shadow-sm ${
-                      simulatorMode === 'robot'
-                        ? 'text-white shadow-md'
-                        : themeMode === 'light'
-                        ? 'text-slate-700 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200'
-                        : 'text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10'
-                    }`}
-                  >
-                    <span>🤖</span>
-                    <span>Simulator Robot</span>
-                    {simulatorMode === 'robot' && <span className="text-yellow-300 text-xs">⭐</span>}
+                  <button type="button" onClick={() => handleSimulatorModeChange('robot')} aria-pressed={simulatorMode === 'robot'}
+                    className="lab-control flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold">
+                    <Activity className="size-4" /> Robot
                   </button>
                 </div>
-
-                {/* Right: Run, Language, Board, Robot Action, Log */}
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 lg:hidden" aria-label="Navigasi panel simulator">
+                  <button type="button" className="lab-control rounded-lg px-2 py-1 text-xs" onClick={() => document.getElementById('sim-coding-pane')?.scrollIntoView({ block: 'start' })}>Ke editor</button>
+                  <button type="button" className="lab-control rounded-lg px-2 py-1 text-xs" onClick={() => document.getElementById('sim-preview-pane')?.scrollIntoView({ block: 'start' })}>Ke arena</button>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   {/* Run / Stop Simulation Button */}
                   {isRunning ? (
                     <button
@@ -10407,6 +10429,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   ) : (
                     <button
                       onClick={() => {
+                        if (simulatorMode === 'robot') { toggleRobotRun(); return; }
                         const codeToRun = simFiles[simActiveFile] || '';
                         if (simActiveFile.endsWith('.py') || simBoard === 'BBC micro:bit') {
                           handleRunPython(codeToRun);
@@ -10435,11 +10458,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   </div>
 
                   {/* Simulator Virtual Board dropdown */}
-                  <div className={`hidden md:flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm ${
+                  <div className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm ${
                     themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
                   }`}>
                     <select
                       value={simBoard}
+                      disabled={simulatorMode === 'robot'}
+                      aria-label="Board simulator"
                       onChange={(e) => setSimBoard(e.target.value)}
                       className="bg-transparent outline-none cursor-pointer text-xs font-bold"
                     >
@@ -10498,15 +10523,29 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               </div>
 
               {/* Simulator workspace */}
-              <div className={`flex-1 min-w-0 min-h-0 flex gap-3 ${simulatorMode === 'robot' ? 'flex-col overflow-y-auto xl:flex-row xl:overflow-hidden' : 'overflow-hidden'}`}>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto lg:flex-row lg:overflow-hidden">
                 {/* Simulator Blockly and code editor */}
-                  <div className={`${simulatorMode === 'circuit' ? 'h-full w-[42%] min-w-[340px]' : 'order-2 h-[680px] w-full xl:order-none xl:h-full xl:w-[42%] xl:min-w-[340px]'} flex flex-col gap-2 min-h-0 flex-shrink-0`}>
+                  <div id="sim-coding-pane" className="sim-coding-pane flex min-w-0 shrink-0 flex-col gap-2"
+                    style={{ '--sim-coding-width': `${simCodingWidth}%` } as React.CSSProperties}>
+                    {simulatorMode === 'robot' && <div className="lab-surface flex shrink-0 gap-2 rounded-lg p-1.5" aria-label="Cara coding Robot Plan">
+                      <button type="button" className="lab-control rounded-lg px-3 py-2 text-xs" aria-pressed={robotEditor === 'blocks'} onClick={() => setRobotEditor('blocks')}>Blok</button>
+                      <button type="button" className="lab-control rounded-lg px-3 py-2 text-xs" aria-pressed={robotEditor === 'table'} onClick={() => setRobotEditor('table')}>Tabel</button>
+                    </div>}
                     {/* Blockly Visual Editor (shown in 'blockly' or top half of 'split') */}
                       <div
                         className="panel-3d panel-blockly min-w-0 relative overflow-hidden glass-panel rounded-3xl border border-[var(--theme-border,rgba(186,230,253,0.9))] shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))]"
-                        style={{ height: showSimulatorCode ? (simulatorMode === 'circuit' ? '52%' : '56%') : '100%' }}
+                        style={{ flex: showSimulatorCode ? '1.2 1 0' : '1', minHeight: 0 }}
                       >
-                        <BlocklyEditor
+                        {simulatorMode === 'robot' && robotEditor === 'table' ? (
+                          <RobotPlanTable plans={robotPlans} activeId={activeRobotPlanId} sensorCount={robotHardwareConfig.sensorCount} running={isRunning}
+                            onChange={(plans, id) => syncRobotToSimulatorWorkspace(robotHardwareConfig, plans, id, true)}
+                            onImport={() => {
+                              const parsed = parseRobotPlansFromCode(simFiles[simActiveFile] || '', robotHardwareConfig.sensorCount);
+                              if (!parsed || !parsed.plans.some(plan => plan.items.length)) return 'Plan belum terbaca dari kode teks.';
+                              syncRobotToSimulatorWorkspace(robotHardwareConfig, parsed.plans, parsed.activePlanId, true, { file: simActiveFile, code: simFiles[simActiveFile] || '' });
+                              return 'Plan dari teks sudah masuk ke tabel dan blok.';
+                            }} />
+                        ) : <BlocklyEditor
                           key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
@@ -10514,7 +10553,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           microbitModules={getMicrobitModules(simFiles)}
                           onUpdateMicrobitModule={(path, source) => {
                             setSimFiles(previous => {
-                              if (source !== null) return { ...previous, [path]: source };
+                              if (source !== null) return Object.hasOwn(previous, path) ? previous : { ...previous, [path]: source };
                               const next = { ...previous };
                               delete next[path];
                               return next;
@@ -10606,7 +10645,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               }));
                             }
                           }}
-                        />
+                        />}
                       </div>
 
                     {/* Text code editor */}
@@ -10614,7 +10653,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       <div
                         className="panel-3d panel-code min-w-0 relative overflow-hidden rounded-2xl glass-panel border border-cyan-500/20"
                         id="simulator-code-panel"
-                        style={{ height: simulatorMode === 'circuit' ? '46%' : '42%' }}
+                        style={{ flex: '1 1 0', minHeight: 0 }}
                       >
                         <CodeEditor
                           files={simFiles}
@@ -10712,7 +10751,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   </div>
 
                 {/* RIGHT PANE: Hardware Circuit / 3D Robot Simulator + Collapsible Virtual Serial Console */}
-                <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${simulatorMode === 'robot' ? 'order-1 min-h-[520px] xl:order-none xl:min-h-0' : ''}`}>
+                <SimulatorDivider value={simCodingWidth} onChange={setSimCodingWidth} />
+                <div id="sim-preview-pane" className="flex min-h-[480px] min-w-0 flex-1 flex-col gap-2 lg:min-h-0">
                   <div className={`flex-1 min-w-0 min-h-0 relative rounded-3xl overflow-hidden border shadow-[0_10px_30px_var(--theme-active-shadow,rgba(59,130,246,0.08))] ${themeMode === 'light' ? 'border-[var(--theme-border,rgba(186,230,253,0.9))] bg-white/95 backdrop-blur-md' : 'border-slate-800 bg-slate-950'}`}>
                     <Simulator
                       isExpanded={true}

@@ -861,7 +861,7 @@ html body.light .blockly-search-container,
   color: #0f172a !important;
 }
 
-html body:not(.light) .blockly-search-container,
+html body:not(.light):not(.theme-light) .blockly-search-container,
 .theme-dark .blockly-search-container {
   background-color: #1e293b !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -889,12 +889,12 @@ html body.light .blockly-search-container input::placeholder,
   color: #94a3b8 !important;
 }
 
-html body:not(.light) .blockly-search-container input,
+html body:not(.light):not(.theme-light) .blockly-search-container input,
 .theme-dark .blockly-search-container input {
   color: #f8fafc !important;
 }
 
-html body:not(.light) .blockly-search-container input::placeholder,
+html body:not(.light):not(.theme-light) .blockly-search-container input::placeholder,
 .theme-dark .blockly-search-container input::placeholder {
   color: #64748b !important;
 }
@@ -2067,7 +2067,7 @@ html body.light .blocklyToolboxDiv,
   border-right: 1px solid #e2e8f0 !important;
 }
 
-html body:not(.light) .blocklyToolboxDiv,
+html body:not(.light):not(.theme-light) .blocklyToolboxDiv,
 .theme-dark .blocklyToolboxDiv {
   background-color: #0b1120 !important;
   border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -2094,7 +2094,7 @@ html body.light .codekit-toolbox-header,
   border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
 }
 
-html body:not(.light) .codekit-toolbox-header,
+html body:not(.light):not(.theme-light) .codekit-toolbox-header,
 .theme-dark .codekit-toolbox-header {
   background: rgba(11, 17, 32, 0.92) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
@@ -2263,7 +2263,7 @@ html body.light .cat-section-header {
   color: #64748b !important;
 }
 
-html body:not(.light) .cat-section-header {
+html body:not(.light):not(.theme-light) .cat-section-header {
   color: #94a3b8 !important;
 }
 
@@ -2293,7 +2293,6 @@ html body:not(.light) .cat-section-header {
    never render past the space actually available, and let it scroll
    internally so every category (including the last one) stays reachable.
    ------------------------------------------------------------ */
-.panel-blockly,
 .panel-blockly > div {
   height: 100% !important;
   max-height: 100% !important;
@@ -2434,4 +2433,72 @@ nav[aria-label="Jalur belajar"] button:focus-visible {
 .microbit-blockly :is(.blocklyTreeRow, .blocklyToolboxCategory)[class*="cat-mb-"] :is(.blocklyTreeLabel, .blocklyToolboxCategoryLabel) {
   font-size: 13px;
   font-weight: 650;
+}
+
+/* Shared workbench surfaces and focus states. */
+:root {
+  --lab-surface: #111827;
+  --lab-control: #192437;
+  --lab-control-hover: #223047;
+  --lab-stroke: #344159;
+  --lab-ink: #e8edf6;
+  --lab-selected: color-mix(in srgb, var(--accent-primary) 25%, var(--lab-surface));
+}
+.theme-light {
+  --lab-surface: #ffffff;
+  --lab-control: #f3f7fc;
+  --lab-control-hover: #e9f0f8;
+  --lab-stroke: #cad7e6;
+  --lab-ink: #172a43;
+  --lab-selected: color-mix(in srgb, var(--accent-primary) 17%, var(--lab-surface));
+}
+.lab-surface {
+  color: var(--lab-ink);
+  background: var(--lab-surface);
+  border-color: var(--lab-stroke);
+}
+.lab-control {
+  border: 1px solid var(--lab-stroke);
+  color: var(--lab-ink);
+  background: var(--lab-control);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.lab-control:hover:not(:disabled), .lab-divider:hover {
+  background-color: var(--lab-control-hover);
+}
+.lab-control[aria-pressed="true"] {
+  background: var(--lab-selected);
+  border-color: var(--accent-primary);
+}
+.lab-control:disabled { opacity: .55; }
+.lab-control:focus-visible, .lab-divider:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+.lab-divider {
+  color: var(--accent-primary);
+  background: var(--lab-surface);
+}
+.home-robot {
+  background: radial-gradient(ellipse at 50% 70%, rgba(var(--accent-rgb), .24), rgba(var(--accent-rgb), .07));
+  border: 1px solid rgba(var(--accent-rgb), .26);
+}
+.sim-coding-pane {
+  width: 100%;
+  height: clamp(490px, 72dvh, 730px);
+}
+@media (min-width: 1024px) {
+  .sim-coding-pane { width: var(--sim-coding-width, 42%); height: 100%; }
+}
+.panel-blockly { container-type: inline-size; }
+@container (max-width: 560px) {
+  .blocklyToolboxDiv { width: 136px !important; min-width: 136px !important; max-width: 136px !important; }
+  .blocklyToolboxDiv .codekit-icon-box { width: 22px !important; min-width: 22px !important; height: 24px !important; margin-right: 5px !important; }
+}
+.app-root.theme-light :is([class~="bg-slate-950"], [class~="bg-slate-950/70"], [class~="bg-slate-950/80"], [class~="bg-slate-900/80"], [class~="bg-slate-900/90"], [class~="bg-[#090a0f]"], [class~="bg-[#0a0b12]"], [class~="bg-[#0b0c10]"], [class~="bg-[#0f111a]/95"]):not([role="presentation"]) {
+  background-color: var(--lab-surface) !important;
+}
+
+@media (max-width: 767px) {
+  .lab-nav-links > button { flex: 1 0 44px; padding-block: 4px; border-radius: 8px; }
 }

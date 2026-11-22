@@ -18,3 +18,21 @@ export function getMicrobitModules(files: Record<string, string>): Record<string
     }),
   );
 }
+
+export const microbitModuleBudget = 20 * 1024;
+
+export function microbitModulesBytes(modules: Record<string, string>) {
+  const encoder = new TextEncoder();
+  return Object.values(modules).reduce((sum, source) => sum + encoder.encode(source).length, 0);
+}
+
+export function getMicrobitDriverNames(source: string) {
+  const names = new Set<string>();
+  // This detects common single-file drivers. The generic call block handles other layouts.
+  const withoutMultilineStrings = source.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, '');
+  for (const [, name] of withoutMultilineStrings.matchAll(/^(?:def|class)[ \t]+([A-Za-z][A-Za-z0-9_]*)[ \t]*(?:\(|:)/gm)) {
+    names.add(name);
+    if (names.size === 8) break;
+  }
+  return [...names];
+}
