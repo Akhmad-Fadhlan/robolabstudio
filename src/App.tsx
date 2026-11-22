@@ -9682,14 +9682,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   {/* Editors Area (Left + Center) */}
                   <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 h-full relative gap-0 bg-transparent">
                     {activeFile === '' ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-2xl min-h-[400px]">
-                        <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-6 relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)]">
-                          <div className="absolute inset-0 rounded-[2rem] bg-indigo-500/5 blur-xl animate-pulse" />
-                          <Cpu className="w-12 h-12 text-indigo-500 dark:text-cyan-400" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-3 font-sans tracking-tight">Workspace Kosong</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-10 leading-relaxed">
-                          Workspace RoboLab Studio Anda kosong. Mulailah dengan membuat berkas baru, atau buka proyek yang sudah ada untuk mulai memprogram robot Anda.
+                      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto rounded-2xl p-5 text-center [justify-content:safe_center] sm:p-8">
+                        <div className="mb-5 shrink-0"><HomeRobot variant="project" /></div>
+                        <h3 className="mb-2 text-2xl font-bold tracking-tight">Mulai proyek baru</h3>
+                        <p className="mb-6 max-w-sm text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                          Buat berkas, buka folder proyek, atau lanjutkan pekerjaan yang sudah tersimpan.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4">
                           <button
