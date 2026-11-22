@@ -1,3 +1,4 @@
+import robolabMark from '../../assets/robolab-logo-only.png';
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -153,9 +154,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
         <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
           {/* Logo & Title */}
           <div className="flex items-center gap-1.5 mr-0.5 flex-shrink-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center shadow-lg shadow-purple-500/10 flex-shrink-0">
-              <img src="./icon-only.png" className="w-4 h-4 sm:w-5 sm:h-5 object-contain" alt="RoboLab Logo" />
-            </div>
+            <img src={robolabMark} className="h-8 w-8 shrink-0 object-contain sm:h-9 sm:w-9" alt="" />
             <div>
               <h1 className="text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap" style={{ fontFamily: 'Outfit, Inter, sans-serif' }}>
                 RoboLab Studio

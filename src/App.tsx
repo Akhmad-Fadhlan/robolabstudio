@@ -9604,6 +9604,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               libraryFocus={libraryFocus}
                               codeType={board === 'BBC micro:bit' || activeFile.endsWith('.py') ? 'python' : 'arduino'}
                               board={board}
+                              microbitExtensionScope={`project:${authUser?.id ?? 'local'}:${projectName}`}
                               installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                                 name: p.name,
                                 parsedApi: p.parsedApi,
@@ -10417,6 +10418,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           key={`sim_blockly_${themeMode}_${simResetKey}_${packages.arduino.filter((p: any) => p.installed).map((p: any) => p.name).sort().join(',')}`}
                           codeType={simActiveFile.endsWith('.py') ? 'python' : 'arduino'}
                           board={simBoard}
+                          microbitExtensionScope="simulator"
                           showRobotPlan={simulatorMode === 'robot'}
                           installedLibraries={packages.arduino.filter((p: any) => p.installed).map((p: any) => ({
                             name: p.name,

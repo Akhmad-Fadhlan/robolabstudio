@@ -1,3 +1,4 @@
+import { MicrobitExtensions, readMicrobitExtensions, type MicrobitExtensionId } from './MicrobitExtensions';
 import { BlocklyPreview } from './learning/BlocklyPreview';
 import React, { useEffect, useRef, useCallback } from 'react';
 import * as Blockly from 'blockly';
@@ -29,6 +30,23 @@ import {
 
 // Live hardware config reference used by dynamic Blockly dropdowns & pattern validators
 let activeRobotHwConfig: RobotHardwareConfig = createDefaultRobotHardwareConfig();
+
+const MICROBIT_CATEGORY_COLOURS: Record<string, string> = {
+  'cat-mb-basic': '#228994',
+  'cat-mb-input': '#12B886',
+  'cat-mb-music': '#E286F2',
+  'cat-mb-led': '#B33C6D',
+  'cat-mb-radio': '#74C0FC',
+  'cat-mb-pins': '#4A90E2',
+  'cat-mb-functions': '#775BA2',
+  'cat-mb-arrays': '#945833',
+  'cat-mb-images': '#247C8B',
+  'cat-mb-control': '#5D537B',
+  'cat-mb-neopixel': '#845CB5',
+  'cat-mb-servo': '#35639D',
+  'cat-mb-datalogger': '#357D67',
+  'cat-mb-extensions': '#475569',
+};
 
 const registerRobotPlanBlocks = () => {
   const getDurationUnitOptions = (): [string, string][] => {
@@ -1554,8 +1572,21 @@ try {
     { type: 'mb_pin_period', message0: 'pin %1 periode PWM %2 µs', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] }, { type: 'input_value', name: 'VALUE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#4a90e2' },
     { type: 'mb_servo_pulse', message0: 'servo pin %1 pulsa %2 µs', args0: [{ type: 'field_dropdown', name: 'PIN', options: [['P0','0'], ['P1','1'], ['P2','2'], ['P8','8'], ['P12','12'], ['P16','16']] }, { type: 'input_value', name: 'VALUE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#4a90e2' },
     { type: 'mb_running_time', message0: 'waktu sejak dinyalakan (ms)', output: 'Number', colour: '#12B886' },
-    { type: 'mb_led_plot', message0: 'nyalakan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#2AC1BC' },
-    { type: 'mb_led_unplot', message0: 'matikan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#2AC1BC' },
+    {"type": "mb_led_toggle", "message0": "balik LED x %1 y %2", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_led_point", "message0": "LED x %1 y %2 menyala?", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}], "output": "Boolean"},
+    {"type": "mb_led_brightness", "message0": "atur LED x %1 y %2 kecerahan %3", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "LEVEL", "value": 9, "min": 0, "max": 9, "precision": 1}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_control_reset", "message0": "mulai ulang micro:bit", "colour": "#5D537B", "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_servo_stop", "message0": "hentikan servo pada pin %1", "colour": "#35639D", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_neo_init", "message0": "buat NeoPixel pin %1 jumlah %2", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}, {"type": "field_number", "name": "COUNT", "value": 8, "min": 1, "max": 256, "precision": 1}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_neo_set", "message0": "NeoPixel pin %1 piksel %2 merah %3 hijau %4 biru %5", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}, {"type": "field_number", "name": "INDEX", "value": 0, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "RED", "value": 32, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "GREEN", "value": 16, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "BLUE", "value": 0, "min": 0, "max": 255, "precision": 1}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_neo_show", "message0": "tampilkan warna NeoPixel pin %1", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_neo_clear", "message0": "matikan NeoPixel pin %1", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_log_label", "message0": "atur kolom log %1", "colour": "#357D67", "args0": [{"type": "field_input", "name": "LABEL", "text": "temperature"}], "previousStatement": null, "nextStatement": null},
+    {"type": "mb_ext_log_add", "message0": "catat %1 nilai %2", "colour": "#357D67", "args0": [{"type": "field_input", "name": "LABEL", "text": "temperature"}, {"type": "input_value", "name": "VALUE"}], "previousStatement": null, "nextStatement": null},
+    { type: 'mb_image_create', message0: 'gambar LED %1', args0: [{ type: 'field_input', name: 'IMAGE', text: '09090:99999:99999:09990:00900' }], output: 'MicrobitImage', colour: '#247C8B', tooltip: 'Isi lima baris dengan lima angka (0–9), dipisahkan oleh titik dua.' },
+    { type: 'mb_image_show', message0: 'tampilkan gambar %1', args0: [{ type: 'input_value', name: 'IMAGE', check: 'MicrobitImage' }], previousStatement: null, nextStatement: null, colour: '#247C8B' },
+    { type: 'mb_led_plot', message0: 'nyalakan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#B33C6D' },
+    { type: 'mb_led_unplot', message0: 'matikan LED x %1 y %2', args0: [{ type: 'field_number', name: 'X', value: 2, min: 0, max: 4, precision: 1 }, { type: 'field_number', name: 'Y', value: 2, min: 0, max: 4, precision: 1 }], previousStatement: null, nextStatement: null, colour: '#B33C6D' },
     { type: 'mb_acceleration', message0: 'percepatan %1 (mg)', args0: [{ type: 'field_dropdown', name: 'AXIS', options: [['X', 'x'], ['Y', 'y'], ['Z', 'z'], ['besar', 'strength']] }], output: 'Number', colour: '#12B886' },
     { type: 'music_ring_tone', message0: 'bunyikan nada %1 Hz', args0: [{ type: 'input_value', name: 'NOTE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#E286F2' },
     { type: 'music_rest', message0: 'jeda musik %1 ms', args0: [{ type: 'input_value', name: 'DURATION', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#E286F2' },
@@ -1982,6 +2013,7 @@ interface BlocklyEditorProps {
   themeMode?: 'dark' | 'light';
   onMicrobitPreview?: (frames: string[]) => void;
   compact?: boolean;
+  microbitExtensionScope?: string;
   showRobotPlan?: boolean;
   robotHardwareConfig?: RobotHardwareConfig;
   activeRobotHighlight?: ActiveExecutionHighlight;
@@ -2610,6 +2642,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   themeMode = 'dark',
   onMicrobitPreview,
   compact = false,
+  microbitExtensionScope = 'global',
   showRobotPlan = false,
   robotHardwareConfig,
   activeRobotHighlight,
@@ -2652,6 +2685,19 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
   boardRef.current = board;
   const codeTypeRef = useRef<'arduino' | 'python'>(codeType);
   codeTypeRef.current = codeType;
+
+  const extensionKey = `robolab_microbit_extensions_${microbitExtensionScope}`;
+  const [microbitExtensions, setMicrobitExtensions] = React.useState(() => readMicrobitExtensions(extensionKey));
+  const [extensionsOpen, setExtensionsOpen] = React.useState(false);
+  useEffect(() => {
+    setMicrobitExtensions(readMicrobitExtensions(extensionKey));
+    setExtensionsOpen(false);
+  }, [extensionKey]);
+  const toggleMicrobitExtension = (id: MicrobitExtensionId) => {
+    const next = microbitExtensions.includes(id) ? microbitExtensions.filter(item => item !== id) : [...microbitExtensions, id];
+    setMicrobitExtensions(next);
+    try { localStorage.setItem(extensionKey, JSON.stringify(next)); } catch { /* The session still retains the selection. */ }
+  };
 
   const [guideOpen,setGuideOpen] = React.useState(false);
   const [guideFilter,setGuideFilter] = React.useState('');
@@ -2988,7 +3034,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
 
           const lowerText = cleanedText.toLowerCase();
           const catKey = [...row.classList, ...treeItem.classList].find(name => name.startsWith('cat-mb-')) || getCatKey(lowerText);
-          const iconConf = CAT_ICON_CONFIG[catKey] || CAT_ICON_CONFIG['cat-default'];
+          const configuredIcon = CAT_ICON_CONFIG[catKey] || CAT_ICON_CONFIG['cat-default'];
+          const palette = MICROBIT_CATEGORY_COLOURS[catKey] ?? '';
+          const channels = /^#[0-9a-f]{6}$/i.test(palette) ? [1, 3, 5].map(index => parseInt(palette.slice(index, index + 2), 16)).join(', ') : '';
+          const iconConf = channels ? { ...configuredIcon, color: palette, rgb: channels, section: 'MICRO:BIT' } : configuredIcon;
 
           // Section header insertion
           const sectionName = iconConf.section;
@@ -3914,6 +3963,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         const microbitTypes = workspace.getAllBlocks(false).filter(isBlockActive).map(block => block.type);
         if (microbitTypes.some(type => type.startsWith('music_') && type !== 'music_note_frequency')) generatedCode += 'import music\n';
         if (microbitTypes.some(type => type.startsWith('radio_'))) generatedCode += 'import radio\nradio.on()\n';
+        if (microbitTypes.some(type => type.startsWith('mb_ext_neo_'))) generatedCode += 'import neopixel\n__robolab_pixels = {}\n';
+        if (microbitTypes.some(type => type.startsWith('mb_ext_log_'))) generatedCode += 'import log  # micro:bit V2\n';
         generatedCode += '\n';
 
         const mbFuncBlocks = topBlocks.filter(b => isBlockActive(b) && (b.type === 'procedures_defnoreturn' || b.type === 'procedures_defreturn'));
@@ -4121,9 +4172,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const language = localStorage.getItem('robolab_language') || 'id';
       return `
     <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
-      <category name="${language === 'id' ? 'Layar &amp; waktu' : 'Basic'}" colour="#2AC1BC" css-container="cat-mb-basic" css-row="cat-mb-basic">
-        <block type="arduino_setup"></block>
-        <block type="arduino_loop"></block>
+      <category name="${language === 'id' ? 'Dasar' : 'Basic'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-basic']}" css-container="cat-mb-basic" css-row="cat-mb-basic">
+        <block type="basic_on_start"></block>
+        <block type="basic_forever"></block>
         <block type="basic_show_string">
           <value name="TEXT">
             <block type="text">
@@ -4141,8 +4192,6 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="basic_show_leds"></block>
         <block type="basic_show_icon"></block>
         <block type="basic_clear_screen"></block>
-        <block type="mb_led_plot"></block>
-        <block type="mb_led_unplot"></block>
         <block type="basic_pause">
           <value name="MS">
             <block type="math_number">
@@ -4151,7 +4200,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           </value>
         </block>
       </category>
-      <category name="${language === 'id' ? 'Tombol &amp; sensor' : 'Input'}" colour="#12B886" css-container="cat-mb-input" css-row="cat-mb-input">
+      <category name="${language === 'id' ? 'Tombol &amp; sensor' : 'Input'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-input']}" css-container="cat-mb-input" css-row="cat-mb-input">
         <block type="input_on_button_pressed"></block>
         <block type="input_button_is_pressed"></block>
         <block type="input_on_gesture"></block>
@@ -4161,7 +4210,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="mb_acceleration"></block>
         <block type="mb_running_time"></block>
       </category>
-      <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="#E286F2" css-container="cat-mb-music" css-row="cat-mb-music">
+      <category name="${language === 'id' ? 'Bunyi' : 'Music'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-music']}" css-container="cat-mb-music" css-row="cat-mb-music">
         <block type="music_play_tone">
           <value name="NOTE">
             <block type="math_number"><field name="NUM">440</field></block>
@@ -4178,7 +4227,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="music_beat"></block>
         <block type="music_note_frequency"></block>
       </category>
-      <category name="Radio" colour="#74C0FC" css-container="cat-mb-radio" css-row="cat-mb-radio">
+      <category name="LED" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-led']}" css-row="cat-mb-led">
+        <block type="mb_led_plot"></block>
+        <block type="mb_led_unplot"></block>
+        <block type="mb_led_toggle"></block>
+        <block type="mb_led_point"></block>
+        <block type="mb_led_brightness"></block>
+      </category>
+      <category name="Radio" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-radio']}" css-container="cat-mb-radio" css-row="cat-mb-radio">
         <block type="radio_set_group"></block>
         <block type="radio_send_string"></block>
         <block type="radio_receive_string"></block>
@@ -4188,7 +4244,57 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           </value>
         </block>
       </category>
-      <category name="${language === 'id' ? 'Pin &amp; kabel' : 'Pins'}" colour="#4a90e2" css-container="cat-mb-pins" css-row="cat-mb-pins">
+      <category name="${language === 'id' ? 'Perulangan' : 'Loops'}" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
+        <block type="controls_repeat_ext">
+          <value name="TIMES">
+            <block type="math_number">
+              <field name="NUM">10</field>
+            </block>
+          </value>
+        </block>
+        <block type="controls_whileUntil"></block>
+        <block type="controls_for">
+          <value name="FROM">
+            <block type="math_number"><field name="NUM">1</field></block>
+          </value>
+          <value name="TO">
+            <block type="math_number"><field name="NUM">10</field></block>
+          </value>
+          <value name="BY">
+            <block type="math_number"><field name="NUM">1</field></block>
+          </value>
+        </block>
+      </category>
+      <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
+        <block type="controls_if"></block>
+        <block type="robolab_logic_compare"></block>
+        <block type="logic_operation"></block>
+        <block type="logic_negate"></block>
+        <block type="logic_boolean"></block>
+      </category>
+      <category name="${language === 'id' ? 'Variabel' : 'Variables'}" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
+      </category>
+      <category name="${language === 'id' ? 'Angka' : 'Math'}" colour="#40BF4A" css-container="cat-math" css-row="cat-math">
+        <block type="math_number"></block>
+        <block type="math_arithmetic"></block>
+        <block type="math_single"></block>
+        <block type="math_round"></block>
+      </category>
+      <category name="${language === 'id' ? 'Fungsi' : 'Functions'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-functions']}" custom="PROCEDURE" css-row="cat-mb-functions"></category>
+      <category name="${language === 'id' ? 'Daftar' : 'Arrays'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-arrays']}" css-row="cat-mb-arrays">
+        <block type="lists_create_with"></block>
+        <block type="lists_length"></block>
+        <block type="lists_isEmpty"></block>
+      </category>
+      <category name="${language === 'id' ? 'Gambar' : 'Images'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-images']}" css-row="cat-mb-images">
+        <block type="mb_image_show"><value name="IMAGE"><block type="mb_image_create"></block></value></block>
+        <block type="mb_image_create"></block>
+      </category>
+      <category name="${language === 'id' ? 'Teks' : 'Text'}" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
+        <block type="text"></block>
+        <block type="text_join"></block>
+      </category>
+      <category name="${language === 'id' ? 'Pin &amp; kabel' : 'Pins'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-pins']}" css-container="cat-mb-pins" css-row="cat-mb-pins">
         <block type="pins_digital_write">
           <field name="PIN">P0</field>
           <value name="VALUE">
@@ -4222,47 +4328,15 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         <block type="mb_serial_ready"></block>
         <block type="mb_serial_read"></block>
       </category>
-      <category name="${language === 'id' ? 'Logika' : 'Logic'}" colour="#4C97FF" css-container="cat-logic" css-row="cat-logic">
-        <block type="controls_if"></block>
-        <block type="robolab_logic_compare"></block>
-        <block type="logic_operation"></block>
-        <block type="logic_negate"></block>
-        <block type="logic_boolean"></block>
+      <category name="${language === 'id' ? 'Kontrol' : 'Control'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-control']}" css-row="cat-mb-control">
+        <block type="mb_control_reset"></block>
       </category>
-      <category name="${language === 'id' ? 'Perulangan' : 'Loops'}" colour="#FFAB19" css-container="cat-loop" css-row="cat-loop">
-        <block type="controls_repeat_ext">
-          <value name="TIMES">
-            <block type="math_number">
-              <field name="NUM">10</field>
-            </block>
-          </value>
-        </block>
-        <block type="controls_whileUntil"></block>
-        <block type="controls_for">
-          <value name="FROM">
-            <block type="math_number"><field name="NUM">1</field></block>
-          </value>
-          <value name="TO">
-            <block type="math_number"><field name="NUM">10</field></block>
-          </value>
-          <value name="BY">
-            <block type="math_number"><field name="NUM">1</field></block>
-          </value>
-        </block>
+      ${microbitExtensions.includes('neopixel') ? `<category name="NeoPixel" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-neopixel']}" css-row="cat-mb-neopixel"><block type="mb_ext_neo_init"/><block type="mb_ext_neo_set"/><block type="mb_ext_neo_show"/><block type="mb_ext_neo_clear"/></category>` : ''}
+      ${microbitExtensions.includes('servo') ? `<category name="Servo" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-servo']}" css-row="cat-mb-servo"><block type="pins_servo_write"/><block type="mb_servo_pulse"/><block type="mb_ext_servo_stop"/></category>` : ''}
+      ${microbitExtensions.includes('datalogger') ? `<category name="Data Logger V2" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-datalogger']}" css-row="cat-mb-datalogger"><block type="mb_ext_log_label"/><block type="mb_ext_log_add"/><block type="input_temperature"/><block type="input_light_level"/></category>` : ''}
+      <category name="${language === 'id' ? 'Ekstensi' : 'Extensions'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-extensions']}" css-row="cat-mb-extensions">
+        <button text="${language === 'id' ? 'Cari ekstensi' : 'Find extensions'}" callbackKey="robolabMicrobitExtensions"></button>
       </category>
-      <category name="${language === 'id' ? 'Angka' : 'Math'}" colour="#40BF4A" css-container="cat-math" css-row="cat-math">
-        <block type="math_number"></block>
-        <block type="math_arithmetic"></block>
-        <block type="math_single"></block>
-        <block type="math_round"></block>
-      </category>
-      <category name="${language === 'id' ? 'Teks' : 'Text'}" colour="#4CBFE6" css-container="cat-text" css-row="cat-text">
-        <block type="text"></block>
-        <block type="text_join"></block>
-      </category>
-      <category name="${language === 'id' ? 'Variabel' : 'Variables'}" colour="#FF8C1A" custom="VARIABLE" css-container="cat-variables" css-row="cat-variables">
-      </category>
-
     </xml>`;
     }
     const curSc = activeRobotHwConfig?.sensorCount || 6;
@@ -4807,7 +4881,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       setTimeout(() => updateToolboxUI(), 50);
       setTimeout(() => updateToolboxUI(), 200);
     }
-  }, [installedLibrariesStr, board, codeType, showRobotPlan, robotHardwareConfig?.sensorCount, updateToolboxUI]);
+  }, [installedLibrariesStr, board, codeType, showRobotPlan, robotHardwareConfig?.sensorCount, updateToolboxUI, microbitExtensions]);
 
   useEffect(() => {
     if (!blocklyDivRef.current) return;
@@ -4852,6 +4926,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     });
 
     workspaceRef.current = workspace;
+    workspace.registerButtonCallback('robolabMicrobitExtensions', () => setExtensionsOpen(true));
 
     // Keep Flyout sub-menu at a comfortable kid-friendly scale and refresh card highlight on category click
     try {
@@ -5154,6 +5229,12 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
     workspace.addChangeListener(updateCode);
     workspace.addChangeListener(handleWorkspaceXmlChange);
     workspace.addChangeListener((e: any) => {
+      if (boardRef.current === 'BBC micro:bit' && e.type === Blockly.Events.TOOLBOX_ITEM_SELECT &&
+          (e.newItem === 'Ekstensi' || e.newItem === 'Extensions')) {
+        setExtensionsOpen(true);
+        workspace.getToolbox()?.clearSelection();
+        return;
+      }
       if (e.type === Blockly.Events.TOOLBOX_ITEM_SELECT || e.type === Blockly.Events.CLICK || e.type === Blockly.Events.BLOCK_DRAG) {
         const flyout = (workspace as any)?.getFlyout?.();
         if (flyout && !flyout.isVisible() && blocklyDivRef.current) {
@@ -5701,6 +5782,26 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       return `param_val`;
     }
     
+    if (lang === 'python' && block.type === 'mb_image_create') {
+      const pixels = block.getFieldValue('IMAGE');
+      const image = /^(?:[0-9]{5}:){4}[0-9]{5}$/.test(pixels) ? pixels : '00000:00000:00000:00000:00000';
+      return `Image("${image}")`;
+    }
+    if (lang === 'python' && block.type === 'lists_create_with') {
+      const inputs = block.inputList.filter(input => /^ADD\d+$/.test(input.name));
+      return `[${inputs.map(input => {
+        const value = input.connection?.targetBlock();
+        return value ? getBlockValue(value, lang) : 'None';
+      }).join(', ')}]`;
+    }
+    if (lang === 'python' && (block.type === 'lists_length' || block.type === 'lists_isEmpty')) {
+      const value = block.getInputTargetBlock('VALUE');
+      const list = value ? getBlockValue(value, lang) : '[]';
+      return block.type === 'lists_length' ? `len(${list})` : `(not ${list})`;
+    }
+    if (block.type === 'mb_led_point') {
+      return `bool(display.get_pixel(${block.getFieldValue('X')}, ${block.getFieldValue('Y')}))`;
+    }
     if (block.type === 'mb_serial_ready') return 'bool(uart.any())';
     if (block.type === 'mb_serial_read') return '(uart.read() or b"").decode()';
     if (block.type === 'mb_pin_touched') return `pin${block.getFieldValue('PIN')}.is_touched()`;
@@ -6834,6 +6935,39 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         } else {
           code += `${indent}display.show(Image.${icon.toUpperCase()})\n`;
         }
+      } else if (lang === 'python' && currentBlock.type === 'mb_image_show') {
+        const image = currentBlock.getInputTargetBlock('IMAGE');
+        code += `${indent}${image ? `display.show(${getBlockValue(image, lang)})` : 'display.clear()'}\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_led_toggle') {
+        const point = `${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}`;
+        code += `${indent}display.set_pixel(${point}, 0 if display.get_pixel(${point}) else 9)\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_led_brightness') {
+        code += `${indent}display.set_pixel(${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}, ${currentBlock.getFieldValue('LEVEL')})\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_control_reset') {
+        code += `${indent}reset()\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_servo_stop') {
+        code += `${indent}pin${currentBlock.getFieldValue('PIN')}.write_analog(0)\n`;
+      } else if (lang === 'python' && currentBlock.type.startsWith('mb_ext_neo_')) {
+        const pin = currentBlock.getFieldValue('PIN');
+        const strip = `__robolab_pixels[${pin}]`;
+        if (currentBlock.type === 'mb_ext_neo_init') {
+          code += `${indent}${strip} = neopixel.NeoPixel(pin${pin}, ${currentBlock.getFieldValue('COUNT')})\n`;
+        } else if (currentBlock.type === 'mb_ext_neo_set') {
+          const index = currentBlock.getFieldValue('INDEX');
+          const rgb = ['RED', 'GREEN', 'BLUE'].map(channel => currentBlock!.getFieldValue(channel));
+          code += `${indent}if ${pin} in __robolab_pixels and ${index} < len(${strip}):\n${indent}    ${strip}[${index}] = (${rgb.join(', ')})\n`;
+        } else {
+          const method = currentBlock.type === 'mb_ext_neo_clear' ? 'clear' : 'show';
+          code += `${indent}if ${pin} in __robolab_pixels:\n${indent}    ${strip}.${method}()\n`;
+        }
+      } else if (lang === 'python' && currentBlock.type.startsWith('mb_ext_log_')) {
+        const label = JSON.stringify(currentBlock.getFieldValue('LABEL'));
+        if (currentBlock.type === 'mb_ext_log_label') {
+          code += `${indent}log.set_labels(${label})\n`;
+        } else {
+          const value = currentBlock.getInputTargetBlock('VALUE');
+          code += `${indent}log.add({${label}: ${value ? getBlockValue(value, lang) : '0'}})\n`;
+        }
       } else if (currentBlock.type === 'mb_led_plot' || currentBlock.type === 'mb_led_unplot') {
         if (lang === 'python') {
           code += `${indent}display.set_pixel(${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}, ${currentBlock.type === 'mb_led_plot' ? 9 : 0})\n`;
@@ -6990,6 +7124,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
         
         <div className="flex gap-1.5 items-center">
+          {board === 'BBC micro:bit' && (
+            <button type="button" onClick={() => setExtensionsOpen(true)} className="rounded-lg border border-sky-500/50 px-2 py-1 text-xs font-semibold">
+              + Ekstensi
+            </button>
+          )}
           <button type="button" onClick={openBlockGuide} className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-900">Kamus blok</button>
           {!isSyncWithBlocks && (
             <button
@@ -7067,6 +7206,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         </div>
       </div>
 
+      {board === 'BBC micro:bit' && extensionsOpen && (
+        <MicrobitExtensions installed={microbitExtensions} onToggle={toggleMicrobitExtension} onClose={() => setExtensionsOpen(false)} />
+      )}
       {guideOpen && <section aria-label="Kamus toolbox" className="absolute inset-2 z-30 flex min-h-0 flex-col overflow-hidden rounded-xl bg-white text-slate-800 shadow-lg">
         <div className="shrink-0 border-b border-slate-200 p-4"><header className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Kamus blok · {board}</h2><button onClick={()=>setGuideOpen(false)} className="rounded-lg border px-3 py-1">Tutup</button></header>
         <input autoFocus placeholder="Cari label, fungsi, atau kategori" aria-label="Cari di kamus blok" value={guideFilter} onChange={e=>setGuideFilter(e.target.value)} className="w-full mt-3 border rounded-lg p-2"/></div>
