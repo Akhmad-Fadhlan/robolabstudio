@@ -103,7 +103,7 @@ function createWindow() {
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
-            "img-src 'self' https://blockly-demo.appspot.com https://www.gstatic.com https://lh3.googleusercontent.com https://*.googleusercontent.com data: blob: file:",
+            "img-src 'self' https://blockly-demo.appspot.com https://www.gstatic.com https://lh3.googleusercontent.com https://*.googleusercontent.com https://raw.githubusercontent.com data: blob: file:",
             "connect-src 'self' https://cdn.jsdelivr.net https://api.kilo.ai https://api.kilocode.com https://openrouter.ai https://qcewaspgybtbofjowoxs.supabase.co wss://qcewaspgybtbofjowoxs.supabase.co http://127.0.0.1:54321 blob: data: *",
             "worker-src 'self' blob: data:"
           ].join('; ')
@@ -2935,39 +2935,47 @@ ipcMain.handle('uninstall-arduino-lib', async (event, payload) => {
   }
 });
 
-// IPC Handler: Real Python package uninstallation via pip
-ipcMain.handle('uninstall-python-pkg', async (event, pkgName) => {
+// Use the same Python interpreter as the desktop runner.
+function runPythonPip(args, timeout) {
   return new Promise((resolve) => {
-    const { exec } = require('child_process');
-    safeSend(event, 'python-output', { text: `🗑️ Menghapus package Python '${pkgName}' via pip...`, type: 'info' });
-    exec(`python -m pip uninstall -y ${pkgName}`, { timeout: 60000 }, (error, stdout, stderr) => {
-      if (error) {
-        safeSend(event, 'python-output', { text: `❌ Gagal menghapus '${pkgName}': ${error.message}`, type: 'error' });
-        resolve({ success: false, error: error.message });
-      } else {
-        safeSend(event, 'python-output', { text: `✅ Package Python '${pkgName}' berhasil dihapus!`, type: 'info' });
-        resolve({ success: true });
-      }
+    const { execFile } = require('child_process');
+    execFile('python', ['-m', 'pip', ...args], { timeout, windowsHide: true }, (error, stdout, stderr) => {
+      resolve(error ? { success: false, error: stderr.trim() || error.message } : { success: true, stdout });
     });
   });
+}
+
+ipcMain.handle('list-python-pkgs', async () => {
+  const result = await runPythonPip(['list', '--format=json'], 15000);
+  if (!result.success) return result;
+  try {
+    return { success: true, packages: JSON.parse(result.stdout) };
+  } catch {
+    return { success: false, error: 'Format daftar pip tidak valid.' };
+  }
 });
 
-// IPC Handler: Real Python package installation via pip
-ipcMain.handle('install-python-pkg', async (event, pkgName) => {
-  return new Promise((resolve) => {
-    const { exec } = require('child_process');
-    safeSend(event, 'python-output', { text: `📦 Memulai instalasi package Python '${pkgName}' via pip...`, type: 'info' });
-    exec(`python -m pip install ${pkgName}`, { timeout: 300000 }, (error, stdout, stderr) => {
-      if (error) {
-        safeSend(event, 'python-output', { text: `❌ Gagal menginstal '${pkgName}': ${error.message}`, type: 'error' });
-        resolve({ success: false, error: error.message });
-      } else {
-        safeSend(event, 'python-output', { text: `✅ Package Python '${pkgName}' berhasil diinstal!`, type: 'info' });
-        resolve({ success: true });
-      }
-    });
-  });
-});
+async function changePythonPackage(event, pkgName, install) {
+  if (typeof pkgName !== 'string' || !/^[a-zA-Z0-9](?:[a-zA-Z0-9._-]{0,126}[a-zA-Z0-9])?$/.test(pkgName)) {
+    return { success: false, error: 'Nama paket Python tidak valid.' };
+  }
+  const result = await runPythonPip(install ? ['install', pkgName] : ['uninstall', '-y', pkgName], install ? 300000 : 60000);
+  if (!result.success) {
+    safeSend(event, 'python-output', { text: result.error, type: 'error' });
+    return result;
+  }
+  if (!install) {
+    const remaining = await runPythonPip(['show', pkgName], 15000);
+    return remaining.success ? { success: false, error: 'Paket masih terpasang di Python lokal.' } : { success: true };
+  }
+  const packageInfo = await runPythonPip(['show', pkgName], 15000);
+  return packageInfo.success
+    ? { success: true, version: packageInfo.stdout.match(/^Version: (.+)$/m)?.[1]?.trim() }
+    : { success: false, error: 'Instalasi belum bisa dikonfirmasi oleh pip.' };
+}
+
+ipcMain.handle('install-python-pkg', (event, pkgName) => changePythonPackage(event, pkgName, true));
+ipcMain.handle('uninstall-python-pkg', (event, pkgName) => changePythonPackage(event, pkgName, false));
 
 // IPC Handler: Install individual Board Core
 ipcMain.handle('install-board-core', async (event, { coreName, url }) => {

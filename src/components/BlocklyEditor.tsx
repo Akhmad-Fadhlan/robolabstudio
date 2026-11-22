@@ -45,6 +45,10 @@ const MICROBIT_CATEGORY_COLOURS: Record<string, string> = {
   'cat-mb-neopixel': '#845CB5',
   'cat-mb-servo': '#35639D',
   'cat-mb-datalogger': '#357D67',
+  'cat-mb-i2c': '#316A86',
+  'cat-mb-compass': '#396F58',
+  'cat-mb-speech': '#6D5294',
+  'cat-mb-microphone': '#A34E63',
   'cat-mb-extensions': '#475569',
 };
 
@@ -1576,6 +1580,11 @@ try {
     {"type": "mb_led_point", "message0": "LED x %1 y %2 menyala?", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}], "output": "Boolean"},
     {"type": "mb_led_brightness", "message0": "atur LED x %1 y %2 kecerahan %3", "colour": "#B33C6D", "args0": [{"type": "field_number", "name": "X", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "Y", "value": 2, "min": 0, "max": 4, "precision": 1}, {"type": "field_number", "name": "LEVEL", "value": 9, "min": 0, "max": 9, "precision": 1}], "previousStatement": null, "nextStatement": null},
     {"type": "mb_control_reset", "message0": "mulai ulang micro:bit", "colour": "#5D537B", "previousStatement": null, "nextStatement": null},
+    { type: 'mb_ext_i2c_scan', message0: 'pindai alamat I²C', output: 'Array', colour: '#316A86' },
+    { type: 'mb_ext_compass_calibrate', message0: 'kalibrasi kompas', previousStatement: null, nextStatement: null, colour: '#396F58' },
+    { type: 'mb_ext_compass_strength', message0: 'kuat medan magnet', output: 'Number', colour: '#396F58' },
+    { type: 'mb_ext_speech_say', message0: 'ucapkan %1', args0: [{ type: 'input_value', name: 'TEXT' }], previousStatement: null, nextStatement: null, colour: '#6D5294' },
+    { type: 'mb_ext_mic_level', message0: 'tingkat suara mikrofon V2', output: 'Number', colour: '#A34E63' },
     {"type": "mb_ext_servo_stop", "message0": "hentikan servo pada pin %1", "colour": "#35639D", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}], "previousStatement": null, "nextStatement": null},
     {"type": "mb_ext_neo_init", "message0": "buat NeoPixel pin %1 jumlah %2", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}, {"type": "field_number", "name": "COUNT", "value": 8, "min": 1, "max": 256, "precision": 1}], "previousStatement": null, "nextStatement": null},
     {"type": "mb_ext_neo_set", "message0": "NeoPixel pin %1 piksel %2 merah %3 hijau %4 biru %5", "colour": "#845CB5", "args0": [{"type": "field_dropdown", "name": "PIN", "options": [["P0", "0"], ["P1", "1"], ["P2", "2"]]}, {"type": "field_number", "name": "INDEX", "value": 0, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "RED", "value": 32, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "GREEN", "value": 16, "min": 0, "max": 255, "precision": 1}, {"type": "field_number", "name": "BLUE", "value": 0, "min": 0, "max": 255, "precision": 1}], "previousStatement": null, "nextStatement": null},
@@ -3964,6 +3973,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         if (microbitTypes.some(type => type.startsWith('music_') && type !== 'music_note_frequency')) generatedCode += 'import music\n';
         if (microbitTypes.some(type => type.startsWith('radio_'))) generatedCode += 'import radio\nradio.on()\n';
         if (microbitTypes.some(type => type.startsWith('mb_ext_neo_'))) generatedCode += 'import neopixel\n__robolab_pixels = {}\n';
+        if (microbitTypes.includes('mb_ext_speech_say')) generatedCode += 'import speech\n';
         if (microbitTypes.some(type => type.startsWith('mb_ext_log_'))) generatedCode += 'import log  # micro:bit V2\n';
         generatedCode += '\n';
 
@@ -4334,6 +4344,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       ${microbitExtensions.includes('neopixel') ? `<category name="NeoPixel" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-neopixel']}" css-row="cat-mb-neopixel"><block type="mb_ext_neo_init"/><block type="mb_ext_neo_set"/><block type="mb_ext_neo_show"/><block type="mb_ext_neo_clear"/></category>` : ''}
       ${microbitExtensions.includes('servo') ? `<category name="Servo" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-servo']}" css-row="cat-mb-servo"><block type="pins_servo_write"/><block type="mb_servo_pulse"/><block type="mb_ext_servo_stop"/></category>` : ''}
       ${microbitExtensions.includes('datalogger') ? `<category name="Data Logger V2" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-datalogger']}" css-row="cat-mb-datalogger"><block type="mb_ext_log_label"/><block type="mb_ext_log_add"/><block type="input_temperature"/><block type="input_light_level"/></category>` : ''}
+      ${microbitExtensions.includes('microphone') ? `<category name="Microphone V2" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-microphone']}" css-row="cat-mb-microphone"><block type="mb_ext_mic_level"/></category>` : ''}
+      ${microbitExtensions.includes('speech') ? `<category name="Speech" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-speech']}" css-row="cat-mb-speech"><block type="mb_ext_speech_say"/></category>` : ''}
+      ${microbitExtensions.includes('compass') ? `<category name="Compass" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-compass']}" css-row="cat-mb-compass"><block type="mb_ext_compass_calibrate"/><block type="input_compass_heading"/><block type="mb_ext_compass_strength"/></category>` : ''}
+      ${microbitExtensions.includes('i2c') ? `<category name="I²C Tools" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-i2c']}" css-row="cat-mb-i2c"><block type="mb_ext_i2c_scan"/></category>` : ''}
       <category name="${language === 'id' ? 'Ekstensi' : 'Extensions'}" colour="${MICROBIT_CATEGORY_COLOURS['cat-mb-extensions']}" css-row="cat-mb-extensions">
         <button text="${language === 'id' ? 'Cari ekstensi' : 'Find extensions'}" callbackKey="robolabMicrobitExtensions"></button>
       </category>
@@ -5799,6 +5813,9 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       const list = value ? getBlockValue(value, lang) : '[]';
       return block.type === 'lists_length' ? `len(${list})` : `(not ${list})`;
     }
+    if (lang === 'python' && block.type === 'mb_ext_i2c_scan') return 'i2c.scan()';
+    if (lang === 'python' && block.type === 'mb_ext_compass_strength') return 'compass.get_field_strength()';
+    if (lang === 'python' && block.type === 'mb_ext_mic_level') return 'microphone.sound_level()';
     if (block.type === 'mb_led_point') {
       return `bool(display.get_pixel(${block.getFieldValue('X')}, ${block.getFieldValue('Y')}))`;
     }
@@ -6945,6 +6962,11 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         code += `${indent}display.set_pixel(${currentBlock.getFieldValue('X')}, ${currentBlock.getFieldValue('Y')}, ${currentBlock.getFieldValue('LEVEL')})\n`;
       } else if (lang === 'python' && currentBlock.type === 'mb_control_reset') {
         code += `${indent}reset()\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_compass_calibrate') {
+        code += `${indent}compass.calibrate()\n`;
+      } else if (lang === 'python' && currentBlock.type === 'mb_ext_speech_say') {
+        const value = currentBlock.getInputTargetBlock('TEXT');
+        code += `${indent}speech.say(str(${value ? getBlockValue(value, lang) : '"Hello!"'}))\n`;
       } else if (lang === 'python' && currentBlock.type === 'mb_ext_servo_stop') {
         code += `${indent}pin${currentBlock.getFieldValue('PIN')}.write_analog(0)\n`;
       } else if (lang === 'python' && currentBlock.type.startsWith('mb_ext_neo_')) {

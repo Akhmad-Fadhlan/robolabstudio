@@ -1,3 +1,4 @@
+import { PYTHON_PACKAGE_CATALOG, normalizePythonPackageName } from './data/pythonPackageCatalog';
 import { SERIAL_BAUD_RATES } from './data/serialBaudRates';
 import { BlocklyPreview } from './components/learning/BlocklyPreview';
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from 'react';
@@ -153,11 +154,7 @@ const INITIAL_PACKAGES = {
     { name: 'IRremote', displayName: 'IRremote Infrared Receiver & Transmitter', desc: 'Send and receive infrared remote control signals.', version: '4.3.1', installed: false, cat: 'Sensor', tags: ['irremote', 'ir', 'infrared'] },
     { name: 'WebSockets', displayName: 'WebSockets Server & Client', desc: 'WebSocket Server and Client for Arduino & ESP32.', version: '2.4.1', installed: false, cat: 'IoT', tags: ['websocket', 'websockets'] }
   ],
-  python: [
-    { name: 'robolab-client', desc: 'Python API for connecting and sending commands to RoboLab kits.', version: '1.0.4', installed: true },
-    { name: 'opencv-python', desc: 'Open Source Computer Vision Library for image processing.', version: '4.8.1', installed: true },
-    { name: 'ultralytics', desc: 'YOLOv8 deep learning training and inference library.', version: '8.0.200', installed: false }
-  ],
+  python: PYTHON_PACKAGE_CATALOG,
   boards: [
     { name: 'ESP32 Arduino', desc: 'Espressif ESP32 core for Arduino IDE. Supports all ESP32 variants.', version: '2.0.17', installed: true, url: 'https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json' },
     { name: 'Arduino AVR Boards', desc: 'Official Arduino AVR core (Uno, Mega, Nano, Leonardo, etc).', version: '1.8.6', installed: true, url: 'https://downloads.arduino.cc/packages/package_index.json' },
@@ -4073,6 +4070,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             return p;
           });
         }
+        const catalogNames = new Set(PYTHON_PACKAGE_CATALOG.map(item => item.name));
+        const previousPython = Array.isArray(parsed.python) ? parsed.python : [];
+        parsed.python = [
+          ...PYTHON_PACKAGE_CATALOG,
+          ...previousPython.filter((item: any) => typeof item?.name === 'string' &&
+            /^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$/.test(item.name) &&
+            normalizePythonPackageName(item.name) !== 'robolab-client' &&
+            !catalogNames.has(normalizePythonPackageName(item.name)))
+            .map((item: any) => ({ ...item, installed: false, version: '', category: item.category || 'Lainnya' })),
+        ];
         return parsed;
       }
     } catch (e) {
@@ -4081,6 +4088,30 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     return INITIAL_PACKAGES;
   });
   const [pkgTab, setPkgTab] = useState<'arduino' | 'python' | 'boards'>('arduino');
+  const desktopPython = typeof ((window as any).__electronRequire || (window as any).require) === 'function';
+  const [pipFeedback, setPipFeedback] = useState('');
+  useEffect(() => {
+    if (pkgTab !== 'python' || !desktopPython) return;
+    const req = (window as any).__electronRequire || (window as any).require;
+    let active = true;
+    req('electron').ipcRenderer.invoke('list-python-pkgs').then((result: any) => {
+      if (!active) return;
+      if (!result?.success) {
+        setPipFeedback('Daftar paket Python lokal belum dapat dibaca.');
+        return;
+      }
+      const versions = new Map<string, string>(result.packages.map((item: any) => [normalizePythonPackageName(item.name), item.version]));
+      setPackages((previous: any) => ({
+        ...previous,
+        python: previous.python.map((pkg: any) => {
+          const version = versions.get(normalizePythonPackageName(pkg.name)) ?? '';
+          return { ...pkg, version, installed: Boolean(version) };
+        }),
+      }));
+    }).catch(() => { if (active) setPipFeedback('Daftar paket Python lokal belum dapat dibaca.'); });
+    return () => { active = false; };
+  }, [pkgTab, desktopPython]);
+
   const [installingMap, setInstallingMap] = useState<Record<string, { loading: boolean; progress?: string }>>({});
   const [uninstallingMap, setUninstallingMap] = useState<{ [pkgName: string]: boolean }>({});
 
@@ -4132,10 +4163,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const channel = type === 'arduino' ? 'uninstall-arduino-lib' : 'uninstall-python-pkg';
       const result = await electron.ipcRenderer.invoke(channel, type === 'arduino' ? { libName: name, userId: authUser?.id } : name);
 
+      if (type === 'python' && !result?.success) {
+        setTerminalLogs(previous => [...previous, { text: result?.error || 'Gagal menghapus paket Python.', type: 'error' }]);
+        return;
+      }
       // Clean packages from state and update customLibProjects
       setPackages((prev: any) => ({
         ...prev,
-        [type]: prev[type].map((p: any) => p.name.toLowerCase() === name.toLowerCase() ? { ...p, installed: false, isCustom: false } : p)
+        [type]: prev[type].map((p: any) => p.name.toLowerCase() === name.toLowerCase() ? { ...p, installed: false, isCustom: false, ...(type === 'python' ? { version: '' } : {}) } : p)
           .filter((p: any) => {
             if (type === 'arduino') {
               const isInitial = INITIAL_PACKAGES.arduino.some((init: any) => init.name.toLowerCase() === p.name.toLowerCase());
@@ -5754,7 +5789,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           { text: 'RoboLab Studio Sandboxed Terminal v0.0.1', type: 'success' },
           { text: 'Available simulated commands:', type: 'output' },
           { text: '  python python/main.py   - Runs the AI computer vision script', type: 'output' },
-          { text: '  pip install <package>   - Installs a custom Python library', type: 'output' },
+          { text: '  pip install <package>   - Installs a catalog package in RoboLab Desktop', type: 'output' },
           { text: '  arduino-cli compile     - Verifies and compiles the Arduino code', type: 'output' },
           { text: '  arduino-cli upload      - Uploads compiled sketch to ESP32 board', type: 'output' },
           { text: '  ls / dir                - Lists current project files', type: 'output' },
@@ -5772,26 +5807,18 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           { text: '', type: 'output' },
           { text: `               ${Object.keys(files).length} File(s)`, type: 'output' }
         ]);
-      } else if (cmdLower.startsWith('pip install ')) {
-        const pkg = cmd.substring(12).trim();
-        if (!pkg) {
-          setInteractiveTerminalLogs((prev: any) => [...prev, { text: 'Error: package name missing.', type: 'error' }]);
-          return;
+      } else if (cmdLower.startsWith('pip install ') || cmdLower.startsWith('python -m pip install ')) {
+        const commandPrefix = cmdLower.startsWith('pip ') ? 'pip install ' : 'python -m pip install ';
+        const packageName = normalizePythonPackageName(cmd.slice(commandPrefix.length).trim());
+        const packageEntry = packages.python.find((entry: { name: string }) => normalizePythonPackageName(entry.name) === packageName);
+        if (desktopPython && packageEntry) {
+          void handleInstallPkg('python', packageEntry.name);
+        } else {
+          const message = desktopPython
+            ? 'Pilih paket yang tersedia di tab Library Python.'
+            : 'Jalankan perintah pip di terminal komputer. Terminal RoboLab Web menjalankan simulasi.';
+          setInteractiveTerminalLogs(prev => [...prev, { text: message, type: 'output' }]);
         }
-        setInteractiveTerminalLogs((prev: any) => [
-          ...prev,
-          { text: `Collecting ${pkg}...`, type: 'output' },
-          { text: `  Downloading ${pkg}-2.1.4-py3-none-any.whl (142 kB)...`, type: 'output' },
-          { text: `Installing collected packages: ${pkg}`, type: 'output' },
-          { text: `Successfully installed ${pkg}-2.1.4`, type: 'success' }
-        ]);
-
-        setPackages((prev: any) => ({
-          ...prev,
-          python: prev.python.some((p: any) => p.name === pkg)
-            ? prev.python.map((p: any) => p.name === pkg ? { ...p, installed: true } : p)
-            : [...prev.python, { name: pkg, desc: 'User-installed Python pip package', version: '2.1.4', installed: true }]
-        }));
       } else if (cmdLower.startsWith('python') || cmdLower === 'run') {
         handleRunPython();
       } else if (cmdLower.startsWith('arduino-cli compile') || cmdLower.startsWith('arduino-cli verify')) {
@@ -8132,10 +8159,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     startCodeInterpreter(code);
 
     const req = (window as any).__electronRequire || (window as any).require;
-    const isIoTCode = !req ||
+    const isIoTCode = !req || useSimWorkspace ||
                       code.includes('import machine') || 
                       code.includes('import network') || 
-                      code.includes('import cv2') || 
                       code.includes('robot.') ||
                       code.includes('import dht') ||
                       code.includes('from machine');
@@ -8564,6 +8590,15 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   const handleInstallPkg = async (type: 'arduino' | 'python', name: string) => {
     const req = (window as any).__electronRequire || (window as any).require;
+    if (type === 'python' && !req) {
+      try {
+        await navigator.clipboard.writeText(`python -m pip install ${name}`);
+        setPipFeedback(`Perintah ${name} disalin. Jalankan di terminal komputer.`);
+      } catch {
+        setPipFeedback(`Salin perintah secara manual: python -m pip install ${name}`);
+      }
+      return;
+    }
     setIsTerminalCollapsed(false);
     setTerminalTab('terminal');
     setInstallingMap(prev => ({ ...prev, [name]: { loading: true, progress: 'Mengunduh...' } }));
@@ -8586,13 +8621,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       const channel = type === 'arduino' ? 'install-arduino-lib' : 'install-python-pkg';
       const result = await electron.ipcRenderer.invoke(channel, name);
       if (result && result.success) {
+        if (type === 'python') setPipFeedback(`${name} terpasang${result.version ? ` (v${result.version})` : ''}.`);
         setPackages((prev: any) => ({
           ...prev,
-          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: true } : p)
+          [type]: prev[type].map((p: any) => p.name === name ? { ...p, installed: true, ...(type === 'python' ? { version: result.version || '' } : {}) } : p)
         }));
         setTerminalLogs((prev: any) => [...prev, { text: `✅ Package ${name} berhasil diinstal!`, type: 'success' }]);
       } else {
-        setTerminalLogs((prev: any) => [...prev, { text: `❌ Gagal menginstal package ${name}.`, type: 'error' }]);
+        const message = `Gagal memasang ${name}.`;
+        if (type === 'python') setPipFeedback(`${message} ${result?.error || 'Periksa Python dan pip di komputer.'}`);
+        setTerminalLogs((prev: any) => [...prev, { text: message, type: 'error' }]);
       }
     } catch (err: any) {
       setTerminalLogs((prev: any) => [...prev, { text: `Error: ${err.message || err}`, type: 'error' }]);
@@ -10129,14 +10167,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               {/* Python PIP */}
               {pkgTab === 'python' && (
                 <div className="space-y-2">
+                  <p className="text-xs opacity-80">{desktopPython ? 'Paket dipasang ke Python lokal yang dipakai RoboLab Desktop.' : 'Salin perintah pip untuk memasang paket di Python komputer. Browser RoboLab menjalankan simulator.'}</p>
+                  {pipFeedback && <p role="status" className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{pipFeedback}</p>}
                   {packages.python
-                    .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || p.desc.toLowerCase().includes(pkgSearch.toLowerCase()))
+                    .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.desc || '').toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.category || '').toLowerCase().includes(pkgSearch.toLowerCase()))
                     .map((pkg: any) => (
                       <div key={pkg.name} className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${themeMode === 'light' ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm' : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'}`}>
                         <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>v{pkg.version}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>{pkg.category || 'Python'}{pkg.version ? ` · v${pkg.version}` : ''}</span>
                             {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
                           </div>
                           <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
@@ -10184,7 +10224,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
                                 </>
                               ) : (
-                                'Install'
+                                desktopPython ? 'Pasang' : 'Salin pip'
                               )}
                             </button>
                           )}
@@ -10202,7 +10242,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     .map((pkg: any) => (
                       <div key={pkg.name} className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${themeMode === 'light' ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm' : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'}`}>
                         <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>v{pkg.version}</span>
                             {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
