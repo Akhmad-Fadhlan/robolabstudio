@@ -4597,7 +4597,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       try {
         const { ipcRenderer } = req('electron');
         const handleArduinoLog = (_event: any, log: { text: string, type: 'info' | 'error' | 'success' | 'stdout' }) => {
-          setTerminalLogs(prev => [...prev, { text: log.text, type: log.type === 'stdout' ? 'stdout' : 'info' }]);
+          setTerminalLogs(prev => [...prev, { text: log.text, type: log.type }]);
           const termType = log.type === 'info' ? 'output' : log.type === 'success' ? 'success' : log.type === 'error' ? 'error' : 'output';
           setInteractiveTerminalLogs(prev => [...prev, { text: log.text, type: termType }]);
         };
@@ -5257,7 +5257,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
 
   const [splitRatio, setSplitRatio] = useState(50);
-  const [terminalHeight, setTerminalHeight] = useState(240);
+  const [terminalHeight, setTerminalHeight] = useState(300);
+  const visibleTerminalHeight = terminalTab === 'ai' ? Math.max(terminalHeight, 410) : terminalHeight;
+  const dockHeight = isTerminalCollapsed ? 44 : visibleTerminalHeight;
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [isResizingTerminal, setIsResizingTerminal] = useState(false);
   const [_simulatorWidth, setSimulatorWidth] = useState(340);
@@ -5915,36 +5917,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   // Gamification STEM matching Level 12 in desain.png
   const level = 12;
 
-  // KiloCode & AI Assistant Chat State
-  const [kiloConfig, setKiloConfig] = useState<KiloCodeConfig>(() => {
-    const saved = localStorage.getItem('robolab_kilocode_config');
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved); 
-        if (!parsed.apiKey?.trim()) {
-          parsed.apiKey = DEFAULT_KILOCODE_CONFIG.apiKey;
-        }
-        if (!parsed.endpoint || parsed.endpoint.includes('api.kilocode.com') || parsed.endpoint.includes('api.kilo.ai/v1')) {
-          parsed.endpoint = DEFAULT_KILOCODE_CONFIG.endpoint;
-        }
-        if (!parsed.model || parsed.model === 'kilocode/kilo-auto' || parsed.model === 'kilo-auto') {
-          parsed.model = DEFAULT_KILOCODE_CONFIG.model;
-        }
-        return parsed;
-      } catch (e) {}
-    }
-    return DEFAULT_KILOCODE_CONFIG;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('robolab_kilocode_config', JSON.stringify(kiloConfig));
-  }, [kiloConfig]);
-
+  const [kiloConfig, setKiloConfig] = useState<KiloCodeConfig>(DEFAULT_KILOCODE_CONFIG);
   const [aiInput, setAiInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiChat, setAiChat] = useState<Array<ChatMessage>>([
-    { sender: 'ai', message: 'Halo! Saya **Asisten Robolab AI**. Tanyakan analisis kode, perbaikan error, simulator rangkaian, atau datasheet komponen!' }
-  ]);
+  const [aiChat, setAiChat] = useState<ChatMessage[]>([]);
+  const aiRequestPending = useRef(false);
+
+  useEffect(() => {
+    // Remove credentials persisted by older builds.
+    localStorage.removeItem('robolab_kilocode_config');
+  }, []);
 
   // AI Camera mode state
   const [_activeAiMode, _setActiveAiMode] = useState<'gesture' | 'object' | 'face' | 'line' | 'none'>('object');
@@ -8069,6 +8051,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       // Stop serial monitor to free up the COM port before uploading
       try {
         await electron.ipcRenderer.invoke('stop-serial-monitor');
+        handleSetIsSerialConnected(false);
       } catch (serialErr) {
         console.warn('Could not stop serial monitor (might not be registered yet):', serialErr);
       }
@@ -8422,7 +8405,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }
       if (isResizingTerminal) {
         const height = window.innerHeight - e.clientY;
-        setTerminalHeight(Math.max(100, Math.min(600, height)));
+        setTerminalHeight(Math.max(240, Math.min(600, height)));
       }
       if (isResizingSimulator) {
         const container = document.getElementById('workspace-split-container');
@@ -8453,9 +8436,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   useEffect(() => {
     window.dispatchEvent(new Event('resize'));
-  }, [terminalHeight, isTerminalCollapsed]);
+  }, [visibleTerminalHeight, isTerminalCollapsed]);
 
-  const handleSendChat = async (customPrompt?: string) => {
+  const handleSendChat = async (customPrompt?: string, includeProject = false) => {
     // ── Trial Gate: block AI if trial expired ──
     if (trialStatus.isExpired) {
       setPaywallFeature('AI');
@@ -8463,16 +8446,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       return;
     }
     const text = (customPrompt || aiInput).trim();
-    if (!text || isAiLoading) return;
+    if (!text || aiRequestPending.current) return;
 
+    aiRequestPending.current = true;
     const userMsg: ChatMessage = { sender: 'user', message: text };
     setAiChat(prev => [...prev, userMsg]);
     if (!customPrompt) setAiInput('');
     setIsAiLoading(true);
-
-    const safetyTimer = setTimeout(() => {
-      setIsAiLoading(false);
-    }, 60000);
 
     try {
       const context = {
@@ -8484,12 +8464,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         terminalLogs: terminalLogs || []
       };
 
-      const res = await processAiMessage(text, aiChat, kiloConfig, context);
+      const res = await processAiMessage(text, aiChat, kiloConfig, context, includeProject);
       setAiChat(prev => [...prev, { sender: 'ai', message: res.text, isKiloCode: res.isKiloCode }]);
     } catch (err: any) {
-      setAiChat(prev => [...prev, { sender: 'ai', message: `⚠️ Terjadi kesalahan: ${err.message || 'Gagal memproses pesan'}` }]);
+      setAiChat(prev => [...prev, { sender: 'ai', message: err instanceof Error ? err.message : 'Pesan gagal diproses.', isError: true }]);
     } finally {
-      clearTimeout(safetyTimer);
+      aiRequestPending.current = false;
       setIsAiLoading(false);
     }
   };
@@ -9674,7 +9654,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   id="workspace-split-container" 
                   className="flex-1 min-h-0 flex flex-col md:flex-row gap-0 bg-transparent relative z-10 box-border"
                   style={{
-                    paddingBottom: isTerminalCollapsed ? '38px' : `${isMobile ? Math.min(terminalHeight, 180) + 6 : terminalHeight + 6}px`,
+                    paddingBottom: `min(${dockHeight + 6}px, 66dvh)`,
                     transition: isResizingTerminal ? 'none' : 'padding-bottom 0.15s ease-out'
                   }}
                 >
@@ -9967,7 +9947,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     <TerminalPanel
                       isTerminalCollapsed={isTerminalCollapsed}
                       setIsTerminalCollapsed={setIsTerminalCollapsed}
-                      terminalHeight={isMobile ? Math.min(terminalHeight, 180) : terminalHeight}
+                      terminalHeight={visibleTerminalHeight}
                       setIsResizingTerminal={setIsResizingTerminal}
                       terminalTab={terminalTab}
                       setTerminalTab={setTerminalTab}
@@ -9996,7 +9976,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       onApplyCodeToEditor={handleApplyCodeToEditor}
                       onClearChat={handleClearChat}
                       activeFileName={activeFile}
-                      activeComponents={simulatorActiveComponents}
                       isAiLoading={isAiLoading}
                     />
                   </div>

@@ -676,9 +676,11 @@ export async function sendWebSerialData(data: string): Promise<boolean> {
   if (!activeMonitorPort || !activeMonitorPort.writable) return false;
   try {
     const writer = activeMonitorPort.writable.getWriter();
-    const encoder = new TextEncoder();
-    await writer.write(encoder.encode(data));
-    writer.releaseLock();
+    try {
+      await writer.write(new TextEncoder().encode(data));
+    } finally {
+      writer.releaseLock();
+    }
     return true;
   } catch (err) {
     console.warn('[WebSerial Monitor] Write error:', err);

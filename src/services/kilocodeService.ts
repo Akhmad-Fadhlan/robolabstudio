@@ -1,9 +1,14 @@
 import { DATASHEET_DATABASE } from '../data/datasheetDb';
 import type { ComponentDatasheet } from '../data/datasheetDb';
 
+export const ASSISTANT_PROVIDERS = {
+  kilo: { label: 'Kilo Gateway', url: 'https://ai-gateway.kilo.ai/api/v1/chat/completions', model: 'kilo-auto/free' },
+  openrouter: { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', model: 'openrouter/free' },
+} as const;
+
 export interface KiloCodeConfig {
   apiKey: string;
-  endpoint: string;
+  provider: keyof typeof ASSISTANT_PROVIDERS;
   model: string;
 }
 
@@ -19,258 +24,106 @@ export interface KiloCodeContext {
 export interface ChatMessage {
   sender: 'user' | 'ai';
   message: string;
-  timestamp?: string;
   isKiloCode?: boolean;
+  isError?: boolean;
 }
 
 export const DEFAULT_KILOCODE_CONFIG: KiloCodeConfig = {
-  apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbnYiOiJwcm9kdWN0aW9uIiwia2lsb1VzZXJJZCI6IjA1ZTdiMGMzLTNjOGEtNDA5YS1hNDg0LWRlNWMxNzRhMzc3ZiIsImFwaVRva2VuUGVwcGVyIjpudWxsLCJ2ZXJzaW9uIjozLCJpYXQiOjE3ODY0Mjc2MTksImV4cCI6MTk0NDEwNzYxOX0.ApfgibBiiznufEFofH8AFwgl5ldiy4lXqzdt1SqTB9M',
-  endpoint: 'https://api.kilo.ai/api/gateway',
-  model: 'kilo-auto/free'
+  apiKey: '',
+  provider: 'kilo',
+  model: ASSISTANT_PROVIDERS.kilo.model,
 };
 
-/**
- * Main AI Request Handler - Connects to KiloCode API if key is present,
- * or falls back to intelligent local RoboLab AI engine.
- */
+interface ProviderMessage {
+  role: 'system' | 'assistant' | 'user';
+  content: string;
+}
+
+function responseError(status: number): string {
+  if (status === 401 || status === 403) return 'Kunci API ditolak. Periksa kunci dan penyedia di Pengaturan AI.';
+  if (status === 402) return 'Kuota atau saldo akun habis. Periksa akun penyedia AI.';
+  if (status === 404) return 'Model tidak ditemukan. Periksa ID model di Pengaturan AI.';
+  if (status === 429) return 'Batas penggunaan tercapai. Tunggu sebentar lalu coba lagi.';
+  return `Penyedia AI gagal merespons (HTTP ${status}). Coba lagi atau periksa model.`;
+}
+
+async function requestCompletion(config: KiloCodeConfig, messages: ProviderMessage[], maxTokens: number): Promise<string> {
+  const provider = ASSISTANT_PROVIDERS[config.provider];
+  const key = config.apiKey.trim();
+  if (!key) throw new Error('Masukkan kunci API terlebih dahulu.');
+
+  const body = { model: config.model.trim() || provider.model, messages, max_tokens: maxTokens, stream: false };
+  const desktopRequire = (window as any).__electronRequire || (window as any).require;
+  let data;
+  if (desktopRequire) {
+    const result = await desktopRequire('electron').ipcRenderer.invoke('kilo-api-request', { url: provider.url, key, body });
+    if (!result.success) throw new Error(result.status ? responseError(result.status) : 'Koneksi ke penyedia AI gagal atau melewati batas waktu.');
+    data = result.data;
+  } else {
+    let response: Response;
+    try {
+      response = await fetch(config.provider === 'kilo' ? '/api/assistant' : provider.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(40000),
+        redirect: 'error',
+      });
+    } catch {
+      throw new Error('Koneksi ke penyedia AI gagal atau melewati batas waktu.');
+    }
+    if (!response.ok) throw new Error(responseError(response.status));
+    data = await response.json().catch(() => null);
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  const text = typeof content === 'string'
+    ? content.trim()
+    : Array.isArray(content)
+      ? content.map(part => typeof part?.text === 'string' ? part.text : '').join('').trim()
+      : '';
+  if (!text) throw new Error('Penyedia AI mengembalikan jawaban kosong. Coba lagi atau ganti model.');
+  return text;
+}
+
+export async function testAssistantConnection(config: KiloCodeConfig): Promise<void> {
+  await requestCompletion(config, [{ role: 'user', content: 'Reply with OK.' }], 128);
+}
+
 export async function processAiMessage(
   userPrompt: string,
   history: ChatMessage[],
   config: KiloCodeConfig,
-  context: KiloCodeContext
+  context: KiloCodeContext,
+  includeProject = false,
 ): Promise<{ text: string; isKiloCode: boolean }> {
-  const trimmedKey = config.apiKey.trim();
-  
-  if (trimmedKey) {
-    try {
-      const responseText = await sendKiloCodeApiCall(userPrompt, history, config, context);
-      return { text: responseText, isKiloCode: true };
-    } catch (err: any) {
-      console.warn('[KiloCode API] Call failed, using smart fallback engine:', err);
-      const fallbackText = generateOfflineAiResponse(userPrompt, context, `⚠️ *Asisten Robolab AI Error (${err.message || 'Koneksi gagal'}). Menggunakan AI lokal:*`);
-      return { text: fallbackText, isKiloCode: false };
-    }
+  if (!config.apiKey.trim()) {
+    return { text: generateOfflineAiResponse(userPrompt, context), isKiloCode: false };
   }
 
-  // Fallback if no API Key is set
-  const offlineText = generateOfflineAiResponse(userPrompt, context);
-  return { text: offlineText, isKiloCode: false };
-}
-
-/**
- * Helper to robustly extract text content from any OpenAI/Kilo/Anthropic/Local LLM response JSON structure.
- */
-function extractAiContent(data: any): string {
-  if (!data) return '';
-
-  // 1. OpenAI / Kilo AI Gateway choices format
-  if (Array.isArray(data.choices) && data.choices.length > 0) {
-    const choice = data.choices[0];
-    if (choice?.message) {
-      if (typeof choice.message.content === 'string' && choice.message.content.trim()) {
-        return choice.message.content.trim();
-      }
-      if (Array.isArray(choice.message.content)) {
-        const textParts = choice.message.content
-          .map((c: any) => (typeof c === 'string' ? c : c?.text || c?.content || ''))
-          .filter(Boolean);
-        if (textParts.length > 0) return textParts.join('\n').trim();
-      }
-      if (typeof choice.message.reasoning_content === 'string' && choice.message.reasoning_content.trim()) {
-        return choice.message.reasoning_content.trim();
-      }
-    }
-    if (typeof choice?.text === 'string' && choice.text.trim()) {
-      return choice.text.trim();
-    }
-    if (choice?.delta && typeof choice.delta.content === 'string' && choice.delta.content.trim()) {
-      return choice.delta.content.trim();
-    }
-  }
-
-  // 2. Direct message / text / content fields
-  if (typeof data.message === 'string' && data.message.trim()) return data.message.trim();
-  if (typeof data.text === 'string' && data.text.trim()) return data.text.trim();
-  if (typeof data.content === 'string' && data.content.trim()) return data.content.trim();
-  if (Array.isArray(data.content) && data.content.length > 0) {
-    const textParts = data.content
-      .map((c: any) => (typeof c === 'string' ? c : c?.text || c?.content || ''))
-      .filter(Boolean);
-    if (textParts.length > 0) return textParts.join('\n').trim();
-  }
-
-  return '';
-}
-
-/**
- * Sends request to KiloCode / Kilo.ai Gateway / OpenAI compatible API endpoint
- */
-async function sendKiloCodeApiCall(
-  userPrompt: string,
-  history: ChatMessage[],
-  config: KiloCodeConfig,
-  context: KiloCodeContext
-): Promise<string> {
-  let baseUrl = (config.endpoint || 'https://api.kilo.ai/api/gateway').replace(/\/+$/, '');
-  // Auto-migrate legacy endpoint
-  if (baseUrl.includes('api.kilocode.com') || baseUrl.includes('api.kilo.ai/v1')) {
-    baseUrl = 'https://api.kilo.ai/api/gateway';
-  }
-
-  const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
-
-  // Truncate active code context if too long to reserve max completion tokens for AI output
-  let activeCodeContext = context.activeCode || '// Belum ada kode';
-  if (activeCodeContext.length > 3500) {
-    activeCodeContext = activeCodeContext.slice(0, 3500) + '\n// ... [sisa kode dipotong untuk menghemat ruang respons AI] ...';
-  }
-
-  const systemPrompt = `Anda adalah Asisten Robolab AI, pakar IoT, robotika, embedded C++ (Arduino/ESP32), dan MicroPython.
-Anda terhubung secara real-time dengan IDE RoboLab Studio milik pengguna.
-
-KONTEKS WORKSPACE SAAT INI:
-- Papan / Board: ${context.board || 'Arduino Uno'}
-- Berkas Aktif: ${context.activeFileName || 'firmware/main.ino'}
-- Komponen Rangkaian di Simulator: ${context.activeComponents.length > 0 ? context.activeComponents.join(', ') : 'Tidak ada komponen terpasang'}
-- Jumlah Kabel Wiring: ${context.wires?.length || 0} kabel terhubung
-
-KODE BERKAS AKTIF SAAT INI:
-\`\`\`${context.activeFileName.endsWith('.py') ? 'python' : 'cpp'}
-${activeCodeContext}
-\`\`\`
-
-Instruksi Penting:
-1. Berikan jawaban yang ramah, presisi, dan LENGKAP dari awal hingga akhir dalam Bahasa Indonesia.
-2. Jika diminta membuat/memperbaiki kode, berikan SELURUH KODE LENGKAP (termasuk #include, void setup(), void loop(), dan fungsi penunjang). JANGAN PERNAH memotong atau menghentikan penulisan kode di tengah jalan.
-3. Selalu tutup semua blok kode markdown (\`\`\`cpp atau \`\`\`python) dengan benar di akhir penjelasan.`;
-
-  // Format message history (limit to last 6 messages)
-  const formattedHistory = history.slice(-6).map(m => ({
-    role: m.sender === 'user' ? 'user' : 'assistant',
-    content: m.message
-  }));
-
-  // Auto-migrate legacy or paid model names if needed
-  let selectedModel = config.model || 'kilo-auto/free';
-  if (selectedModel === 'kilocode/kilo-auto' || selectedModel === 'kilo-auto') {
-    selectedModel = 'kilo-auto/free';
-  }
-
-  const payload = {
-    model: selectedModel,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...formattedHistory,
-      { role: 'user', content: userPrompt }
-    ],
-    temperature: 0.7,
-    max_tokens: 8192,
-    max_completion_tokens: 8192,
-    stream: false
+  const system: ProviderMessage = {
+    role: 'system',
+    content: 'Kamu adalah Asisten RoboLab untuk siswa yang belajar coding, IoT, dan robotika. Jawab dalam bahasa pengguna, pakai bahasa sederhana, jelaskan langkah singkat dan alasan di baliknya. Jika membantu debugging, mulai dari penyebab dan cara memeriksanya. Saat diminta kode, gunakan Markdown berpagar dengan bahasa yang sesuai board. Tanyakan detail yang masih diperlukan. Jangan mengaku sudah menjalankan program atau menguji perangkat.',
   };
-
-  const key = config.apiKey.trim();
-
-  // Try Electron IPC handler first if running in Electron (bypasses browser CORS & CSP)
-  try {
-    const req = (window as any).__electronRequire || (window as any).require;
-    if (req) {
-      const electron = req('electron');
-      if (electron && electron.ipcRenderer) {
-        let ipcRes = await electron.ipcRenderer.invoke('kilo-api-request', { url, key, body: payload });
-        
-        // Auto retry with free model if 402 Payment Required or 429 Rate Limit/Overloaded
-        if (!ipcRes.success && (ipcRes.status === 402 || ipcRes.status === 429) && payload.model !== 'kilo-auto/free') {
-          payload.model = 'kilo-auto/free';
-          ipcRes = await electron.ipcRenderer.invoke('kilo-api-request', { url, key, body: payload });
-        }
-
-        if (ipcRes.success && ipcRes.data) {
-          const content = extractAiContent(ipcRes.data);
-          if (content) return content;
-          if (ipcRes.data.error?.message) {
-            throw new Error(ipcRes.data.error.message);
-          }
-        }
-        
-        if (!ipcRes.success) {
-          throw new Error(ipcRes.error || `Gateway API Error (HTTP ${ipcRes.status || 'unknown'})`);
-        }
-      }
-    }
-  } catch (ipcErr: any) {
-    if (ipcErr.message && !ipcErr.message.includes('__electronRequire') && !ipcErr.message.includes('require')) {
-      console.warn('[KiloCode IPC] IPC call error:', ipcErr.message);
-      throw ipcErr;
-    }
-  }
-
-  // AbortController — timeout 60 detik agar tidak stuck selamanya
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-  try {
-    // Standard Browser Fetch (Clean Headers)
-    let response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-
-    // If 402 Payment Required or 429 Rate Limit, retry automatically with free model
-    if ((response.status === 402 || response.status === 429) && selectedModel !== 'kilo-auto/free') {
-      payload.model = 'kilo-auto/free';
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-    }
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      let msg = `HTTP ${response.status}: ${response.statusText}`;
-      try {
-        const errJson = JSON.parse(errorBody);
-        if (errJson.error?.message) msg = errJson.error.message;
-      } catch (e) {}
-      throw new Error(msg);
-    }
-
-    const data = await response.json();
-    const content = extractAiContent(data);
-    if (content) return content;
-    if (data.error?.message) {
-      throw new Error(data.error.message);
-    }
-
-    throw new Error('Respons AI kosong dari server');
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error('Permintaan timeout (60 detik). Coba lagi atau periksa koneksi internet.');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const messages: ProviderMessage[] = [system, ...history
+    .filter(message => !message.isError && (message.sender === 'user' || message.isKiloCode))
+    .slice(-12)
+    .map(message => ({
+      role: message.sender === 'user' ? 'user' as const : 'assistant' as const,
+      content: message.message.slice(0, 8000),
+    }))];
+  messages.push({
+    role: 'user',
+    content: includeProject
+      ? `${userPrompt}\n\nKonteks proyek saat ini:\nBoard: ${context.board}\nBerkas: ${context.activeFileName.slice(0, 255)}\nKomponen: ${context.activeComponents.join(', ').slice(0, 1000)}\nJumlah kabel: ${context.wires?.length ?? 0}\nKode aktif (maks. 6000 karakter):\n${context.activeCode.slice(0, 6000)}`
+      : userPrompt,
+  });
+  return { text: await requestCompletion(config, messages, 2300), isKiloCode: true };
 }
 
-/**
- * Smart Offline AI Fallback Engine
- * Analyzes code, circuit, and component datasheets locally without needing an API Key.
- */
 export function generateOfflineAiResponse(
   userPrompt: string,
-  context: KiloCodeContext,
-  prefixNotice?: string
+  context: KiloCodeContext
 ): string {
   const promptLower = userPrompt.toLowerCase();
   let response = '';
@@ -278,7 +131,7 @@ export function generateOfflineAiResponse(
   // 1. DATASHEET & COMPONENT INQUIRY
   const matchedDatasheet = findMatchingDatasheet(promptLower);
   if (matchedDatasheet) {
-    return (prefixNotice ? `${prefixNotice}\n\n` : '') + formatDatasheetResponse(matchedDatasheet);
+    return formatDatasheetResponse(matchedDatasheet);
   }
 
   // 2. CODE ANALYSIS & EDIT REQUESTS
@@ -301,7 +154,7 @@ export function generateOfflineAiResponse(
   }
   // DEFAULT HELPFUL RESPONSE
   else {
-    response = `🤖 **Asisten Robolab AI** (Mode Cerdas Lokal)\n\n` +
+    response = `🤖 **Asisten Robolab AI** (Panduan Lokal)\n\n` +
       `Saya dapat membantu Anda dalam beberapa hal:\n` +
       `1. **🔍 Analisis & Edit Kode**: Ketik *"Analisis kode"* untuk mengecek kesalahan atau optimasi program.\n` +
       `2. **🔌 Cek Simulator Rangkaian**: Ketik *"Analisis rangkaian"* untuk memeriksa komponen terpasang (${context.activeComponents.join(', ') || 'Belum ada'}).\n` +
@@ -309,7 +162,7 @@ export function generateOfflineAiResponse(
       `💡 *Tips:* Masukkan **API Key** Anda di Pengaturan Asisten AI (ikon ⚙️ di pojok kanan atas AI Chat) untuk mengaktifkan kemampuan AI penuh!`;
   }
 
-  return prefixNotice ? `${prefixNotice}\n\n${response}` : response;
+  return response;
 }
 
 function findMatchingDatasheet(prompt: string): ComponentDatasheet | null {

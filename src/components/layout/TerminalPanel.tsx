@@ -1,10 +1,13 @@
-import React, { useState, useRef, useEffect, type FormEvent } from 'react';
-import { 
-  Trash2, Cpu, Send, Sparkles, ChevronsDown, Activity, Terminal, 
-  Settings, Check, Copy, FileCode, Zap, BookOpen, X, Radio, Bot,
-  ChevronRight, Wifi, WifiOff
+import React, { useState, useRef, useEffect, type FormEvent, type UIEvent } from 'react';
+import {
+  Activity, BookOpen, Bot, Cable, Check, ChevronDown, ChevronRight, Copy,
+  FileCode, LoaderCircle, Plug, Send, Settings, Sparkles, Terminal, Trash2, X, Zap,
 } from 'lucide-react';
-import type { KiloCodeConfig, ChatMessage } from '../../services/kilocodeService';
+import {
+  ASSISTANT_PROVIDERS, DEFAULT_KILOCODE_CONFIG, testAssistantConnection,
+  type KiloCodeConfig, type ChatMessage,
+} from '../../services/kilocodeService';
+import './TerminalPanel.css';
 import { SERIAL_BAUD_RATES } from '../../data/serialBaudRates';
 import { DATASHEET_DATABASE } from '../../data/datasheetDb';
 import type { ComponentDatasheet } from '../../data/datasheetDb';
@@ -46,14 +49,13 @@ interface TerminalPanelProps {
   aiChat: Array<ChatMessage>;
   aiInput: string;
   setAiInput: (val: string) => void;
-  handleSendChat: (customPrompt?: string) => void;
+  handleSendChat: (customPrompt?: string, includeProject?: boolean) => void;
 
   kiloConfig?: KiloCodeConfig;
   setKiloConfig?: (cfg: KiloCodeConfig) => void;
   onApplyCodeToEditor?: (code: string) => void;
   onClearChat?: () => void;
   activeFileName?: string;
-  activeComponents?: string[];
   isAiLoading?: boolean;
 }
 
@@ -277,707 +279,329 @@ const FormattedMessage: React.FC<{
 };
 
 // ─── Typing Indicator Dots ─────────────────────────────────────────────────
-const TypingDots: React.FC = () => (
-  <div className="flex items-center gap-1 py-1">
-    {[0, 1, 2].map(i => (
-      <div
-        key={i}
-        className="w-2 h-2 rounded-full bg-sky-400"
-        style={{ animation: `bounce 1.2s infinite ${i * 0.2}s` }}
-      />
-    ))}
-    <style>{`@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }`}</style>
-  </div>
-);
+const quickPrompts = [
+  { label: 'Cek kode', prompt: 'Analisis kode aktif saya. Jelaskan perbaikan yang bisa saya coba.', icon: FileCode },
+  { label: 'Cek rangkaian', prompt: 'Analisis rangkaian proyek saya dan sarankan langkah pengecekan.', icon: Plug },
+  { label: 'Contoh program', prompt: 'Buat contoh program sederhana untuk proyek saya dan jelaskan langkahnya.', icon: Zap },
+];
 
-// ─── Main Terminal Panel ──────────────────────────────────────────────────────
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({
-  isTerminalCollapsed,
-  setIsTerminalCollapsed,
-  terminalHeight,
-  setIsResizingTerminal,
-  terminalTab,
-  setTerminalTab,
-  port,
-  board,
-  themeMode,
-  terminalLogs: _terminalLogs = [],
-  setTerminalLogs,
-  serialRawOutput,
-  setSerialRawOutput,
-  interactiveTerminalLogs,
-  serialBaudrate,
-  setSerialBaudrate,
-  isSerialConnected,
-  setIsSerialConnected,
-  terminalInput,
-  setTerminalInput,
-  handleTerminalCommand,
-  aiChat,
-  aiInput,
-  setAiInput,
-  handleSendChat,
-  kiloConfig,
-  setKiloConfig,
-  onApplyCodeToEditor,
-  onClearChat,
-  activeFileName = 'firmware/main.ino',
-  activeComponents = [],
-  isAiLoading = false
+  isTerminalCollapsed, setIsTerminalCollapsed, terminalHeight, setIsResizingTerminal,
+  terminalTab, setTerminalTab, port, board, themeMode,
+  terminalLogs = [], setTerminalLogs, serialRawOutput, setSerialRawOutput,
+  interactiveTerminalLogs, setInteractiveTerminalLogs, serialBaudrate, setSerialBaudrate,
+  isSerialConnected, setIsSerialConnected, terminalInput, setTerminalInput, handleTerminalCommand,
+  aiChat, aiInput, setAiInput, handleSendChat, kiloConfig = DEFAULT_KILOCODE_CONFIG,
+  setKiloConfig, onApplyCodeToEditor, onClearChat, activeFileName, isAiLoading = false,
 }) => {
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showDatasheetModal, setShowDatasheetModal] = useState(false);
-  const [selectedDsKey, setSelectedDsKey] = useState<string>('esp32');
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  const [tempApiKey, setTempApiKey] = useState(kiloConfig?.apiKey || '');
-  const [tempEndpoint, setTempEndpoint] = useState(kiloConfig?.endpoint || 'https://api.kilo.ai/api/gateway');
-  const [tempModel, setTempModel] = useState(kiloConfig?.model || 'kilo-auto/free');
-
   const isLight = themeMode === 'light';
-  const isKiloConnected = Boolean(kiloConfig?.apiKey?.trim());
+  const currentTab = terminalTab === 'problems' ? 'terminal' : terminalTab;
+  const [showDatasheetModal, setShowDatasheetModal] = useState(false);
+  const [selectedDsKey, setSelectedDsKey] = useState('esp32');
   const selectedDatasheet: ComponentDatasheet = DATASHEET_DATABASE[selectedDsKey] || DATASHEET_DATABASE.esp32;
+  const [draft, setDraft] = useState(kiloConfig);
+  const [testResult, setTestResult] = useState<{ success: boolean; text: string }>();
+  const [testing, setTesting] = useState(false);
+  const [includeProject, setIncludeProject] = useState(false);
+  const [serialTxInput, setSerialTxInput] = useState('');
+  const [serialEnding, setSerialEnding] = useState('\r\n');
+  const [serialBusy, setSerialBusy] = useState(false);
+  const [serialError, setSerialError] = useState('');
+  const [showBuildLogs, setShowBuildLogs] = useState(false);
+  const streamRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const followOutput = useRef(true);
+  const desktopRequire = (window as any).__electronRequire || (window as any).require;
+  const hasAiKey = Boolean(kiloConfig.apiKey.trim());
 
-  // Auto-scroll chat container to bottom without affecting window/parent scroll
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [aiChat, isAiLoading]);
+    followOutput.current = true;
+    if (streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight;
+  }, [currentTab, isTerminalCollapsed, showBuildLogs]);
 
-  const handleSaveSettings = () => {
-    if (setKiloConfig) {
-      setKiloConfig({
-        apiKey: tempApiKey.trim(),
-        endpoint: tempEndpoint.trim() || 'https://api.kilo.ai/api/gateway',
-        model: tempModel.trim() || 'kilo-auto/free'
-      });
+  useEffect(() => {
+    if (streamRef.current && followOutput.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
     }
-    setShowSettingsModal(false);
+  }, [aiChat, isAiLoading, serialRawOutput, interactiveTerminalLogs, terminalLogs, currentTab]);
+
+  const openSettings = () => {
+    setDraft(kiloConfig);
+    setTestResult(undefined);
+    dialogRef.current?.showModal();
   };
 
-  const [serialTxInput, setSerialTxInput] = useState('');
+  const updateDraft = (next: KiloCodeConfig) => {
+    setDraft(next);
+    setTestResult(undefined);
+  };
 
-  // ─── Tab button helper ───────────────────────────────────────────────────
-  const tabBtn = (
-    tab: typeof terminalTab,
-    icon: React.ReactNode,
-    label: string,
-    activeColor: string
-  ) => (
-    <button
-      onClick={() => {
-        setTerminalTab(tab);
-        if (tab !== 'serial') {
-          try {
-            const req = (window as any).__electronRequire || (window as any).require;
-            if (req) req('electron').ipcRenderer.invoke('stop-serial-monitor');
-            else stopWebSerialMonitor();
-          } catch(e) {}
-        } else if (port && port !== 'none' && board) {
-          try {
-            const req = (window as any).__electronRequire || (window as any).require;
-            if (req) {
-              req('electron').ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
-              setIsSerialConnected(true);
-            }
-          } catch(e) {}
-        }
-      }}
-      className={`
-        flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer px-3 py-1.5 rounded-lg transition-all duration-200
-        ${terminalTab === tab
-          ? isLight
-            ? `${activeColor} shadow-sm`
-            : `${activeColor} shadow-sm`
-          : isLight
-            ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
-        }
-      `}
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
+  const runConnectionTest = async () => {
+    setTesting(true);
+    setTestResult(undefined);
+    try {
+      await testAssistantConnection(draft);
+      setTestResult({ success: true, text: 'Berhasil. Penyedia AI membalas pesan uji.' });
+    } catch (err) {
+      setTestResult({ success: false, text: err instanceof Error ? err.message : 'Uji koneksi gagal.' });
+    } finally {
+      setTesting(false);
+    }
+  };
 
+  const toggleSerial = async () => {
+    setSerialError('');
+    setSerialBusy(true);
+    try {
+      if (isSerialConnected) {
+        if (desktopRequire) await desktopRequire('electron').ipcRenderer.invoke('stop-serial-monitor');
+        else await stopWebSerialMonitor();
+        setIsSerialConnected(false);
+      } else {
+        if (desktopRequire && (!port || port === 'none')) throw new Error('Pilih port board di toolbar proyek terlebih dahulu.');
+        const result = desktopRequire
+          ? await desktopRequire('electron').ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate)
+          : await startWebSerialMonitor(port, serialBaudrate, chunk => {
+            setSerialRawOutput(prev => (prev + chunk).slice(-50000));
+          }, () => setIsSerialConnected(false));
+        if (!result.success) throw new Error(result.error || 'Port serial tidak bisa dibuka.');
+        setIsSerialConnected(true);
+      }
+    } catch (err) {
+      setSerialError(err instanceof Error ? err.message : 'Koneksi serial gagal.');
+    } finally {
+      setSerialBusy(false);
+    }
+  };
+
+  const sendSerial = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!serialTxInput || !isSerialConnected || serialBusy) return;
+    setSerialError('');
+    setSerialBusy(true);
+    try {
+      const data = serialTxInput + serialEnding;
+      const sent = desktopRequire
+        ? await desktopRequire('electron').ipcRenderer.invoke('write-serial-monitor', data)
+        : await sendWebSerialData(data);
+      if (!sent) throw new Error('Pesan belum terkirim. Periksa koneksi board.');
+      setSerialTxInput('');
+    } catch (err) {
+      setSerialError(err instanceof Error ? err.message : 'Pesan serial gagal dikirim.');
+    } finally {
+      setSerialBusy(false);
+    }
+  };
+
+  const clearPanel = () => {
+    if (currentTab === 'ai') onClearChat?.();
+    else if (currentTab === 'serial') setSerialRawOutput('');
+    else if (showBuildLogs || !interactiveTerminalLogs.length) setTerminalLogs([]);
+    else setInteractiveTerminalLogs?.([]);
+  };
+
+  const trackScroll = (event: UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    followOutput.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
+  const submitChat = (event?: FormEvent) => {
+    event?.preventDefault();
+    if (!isAiLoading && aiInput.trim()) {
+      followOutput.current = true;
+      handleSendChat(undefined, includeProject);
+    }
+  };
+
+  const streamProps = { ref: streamRef, onScroll: trackScroll };
+  const displayedLogs = showBuildLogs || !interactiveTerminalLogs.length ? terminalLogs : interactiveTerminalLogs;
+  const clearLabel = currentTab === 'ai' ? 'Hapus percakapan' : currentTab === 'serial' ? 'Bersihkan data serial' : 'Bersihkan log terminal';
 
   return (
     <>
-      {/* ─── Resize Handle ──────────────────────────────────────────────── */}
       {!isTerminalCollapsed && (
-        <div
-          className={`h-1.5 cursor-row-resize flex items-center justify-center select-none flex-shrink-0 z-20 group transition-colors
-            ${isLight ? 'hover:bg-sky-400/30' : 'hover:bg-sky-500/25'}`}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizingTerminal(true); }}
-        >
-          <div className={`w-10 h-0.5 rounded-full transition-all group-hover:w-16 ${isLight ? 'bg-slate-300 group-hover:bg-sky-400' : 'bg-slate-700 group-hover:bg-sky-500'}`} />
+        <div className="rl-dock-grip" onMouseDown={event => { event.preventDefault(); setIsResizingTerminal(true); }}>
+          <span />
         </div>
       )}
-
-      {/* ─── Main Panel Container ────────────────────────────────────────── */}
-      <div
-        className={`panel-terminal flex flex-shrink-0 overflow-hidden transition-all
-          ${isLight
-            ? 'bg-slate-50 border-t border-slate-200/80'
-            : 'bg-[#0c0e16] border-t border-slate-800/60 shadow-[0_-8px_32px_rgba(0,0,0,0.4)]'
-          }`}
-        style={{ height: isTerminalCollapsed ? '38px' : `${terminalHeight}px` }}
-      >
-        <div className="flex-1 min-w-0 flex flex-col">
-
-          {/* ─── Tab Bar ──────────────────────────────────────────────────── */}
-          <div className={`h-10 flex items-center justify-between px-2 select-none border-b flex-shrink-0
-            ${isLight ? 'bg-white border-slate-200/80' : 'bg-[#10121c] border-slate-800/60'}`}>
-            
-            <div className="flex items-center gap-0.5 px-1">
-              {tabBtn('serial',   <Activity  className="w-3.5 h-3.5" />, 'Serial',   isLight ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20')}
-              {tabBtn('terminal', <Terminal  className="w-3.5 h-3.5" />, 'Terminal', isLight ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-sky-500/15 text-sky-400 border border-sky-500/20')}
-              
-              {/* AI Tab — special gradient style */}
-              <button
-                onClick={() => { setTerminalTab('ai'); try { const req = (window as any).__electronRequire || (window as any).require; if (req) req('electron').ipcRenderer.invoke('stop-serial-monitor'); else stopWebSerialMonitor(); } catch(e) {} }}
-                className={`flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer px-3 py-1.5 rounded-lg transition-all duration-200
-                  ${terminalTab === 'ai'
-                    ? 'bg-gradient-to-r from-sky-500/15 to-blue-500/15 text-sky-400 border border-sky-500/20 shadow-sm'
-                    : isLight
-                      ? 'text-slate-500 hover:text-sky-600 hover:bg-sky-50'
-                      : 'text-slate-500 hover:text-sky-400 hover:bg-sky-500/10'
-                  }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Asisten Robolab AI</span>
+      <section className="rl-dock" data-mode={themeMode} data-accent={currentTab}
+        aria-label="Konsol proyek" style={{ height: isTerminalCollapsed ? 44 : terminalHeight }}>
+        <header className="rl-dock-bar">
+          <nav aria-label="Panel proyek" className="rl-dock-tabs">
+            {([
+              ['serial', 'Serial', Activity],
+              ['terminal', 'Terminal', Terminal],
+              ['ai', 'RoboLab AI', Bot],
+            ] as const).map(([id, label, Icon]) => (
+              <button key={id} type="button" className="rl-tab" aria-pressed={currentTab === id}
+                onClick={() => { setTerminalTab(id); setIsTerminalCollapsed(false); }}>
+                <Icon size={15} aria-hidden /> {label}
+                {id === 'serial' && isSerialConnected && <i className="rl-connection-dot" title="Serial terhubung" />}
               </button>
-            </div>
-
-            <div className="flex items-center gap-1 pr-1">
-              <button
-                onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
-                className={`flex items-center gap-1 text-[10px] font-bold tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer
-                  ${isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'}`}
-              >
-                <ChevronsDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isTerminalCollapsed ? 'rotate-180' : ''}`} />
-              </button>
-              <button
-                onClick={() => {
-                  if (terminalTab === 'ai' && onClearChat) { onClearChat(); }
-                  else { setTerminalLogs([]); setSerialRawOutput(''); }
-                }}
-                className={`flex items-center gap-1 text-[10px] font-bold tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer
-                  ${isLight ? 'text-rose-500 hover:bg-rose-50' : 'text-rose-500 hover:bg-rose-500/10'}`}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            ))}
+          </nav>
+          <div className="rl-dock-actions">
+            <button type="button" className="rl-icon-btn" onClick={clearPanel} title={clearLabel}
+              aria-label={clearLabel} disabled={isTerminalCollapsed || (currentTab === 'ai' && (isAiLoading || !aiChat.length))}>
+              <Trash2 size={16} aria-hidden />
+            </button>
+            <button type="button" className="rl-icon-btn" aria-expanded={!isTerminalCollapsed}
+              aria-label={isTerminalCollapsed ? 'Buka panel' : 'Lipat panel'} onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
+              <ChevronDown size={18} aria-hidden style={{ rotate: isTerminalCollapsed ? '180deg' : undefined }} />
+            </button>
           </div>
+        </header>
 
-          {/* ─── Panel Content ─────────────────────────────────────────────── */}
-          <div className="flex-1 min-h-0 relative overflow-hidden">
-
-            {/* SERIAL MONITOR */}
-            {terminalTab === 'serial' && (
-              <div className="absolute inset-0 flex flex-col gap-2 p-3">
-                <div className={`flex items-center gap-3 p-2.5 rounded-xl border ${isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-[#141620] border-slate-800'}`}>
-                  <select
-                    value={serialBaudrate}
-                    onChange={(e) => setSerialBaudrate(Number(e.target.value))}
-                    className={`appearance-none px-3 py-1.5 text-xs font-semibold rounded-lg outline-none cursor-pointer border transition-all
-                      ${isLight ? 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-400 focus:border-indigo-500' : 'bg-[#0c0e16] border-slate-700 text-slate-200 hover:border-slate-500'}`}
-                  >
-                    {SERIAL_BAUD_RATES.map(baud => <option key={baud} value={baud}>{baud} baud</option>)}
-                  </select>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const req = (window as any).__electronRequire || (window as any).require;
-                        if (req) {
-                          if (port && port !== 'none' && board) {
-                            const electron = req('electron');
-                            if (isSerialConnected) {
-                              electron.ipcRenderer.invoke('stop-serial-monitor');
-                              setIsSerialConnected(false);
-                            } else {
-                              electron.ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
-                              setIsSerialConnected(true);
-                            }
-                          }
-                        } else {
-                          // Web Browser Mode — Web Serial API
-                          if (isSerialConnected) {
-                            await stopWebSerialMonitor();
-                            setIsSerialConnected(false);
-                          } else {
-                            const res = await startWebSerialMonitor(
-                              port,
-                              serialBaudrate,
-                              (chunk) => {
-                                setSerialRawOutput((prev) => {
-                                  const next = prev + chunk;
-                                  return next.length > 50000 ? next.slice(next.length - 50000) : next;
-                                });
-                              },
-                              () => {
-                                setIsSerialConnected(false);
-                              }
-                            );
-                            if (res.success) {
-                              setIsSerialConnected(true);
-                            } else if (res.error) {
-                              setSerialRawOutput((prev) => prev + `\r\n[WebSerial Error] ${res.error}\r\n`);
-                            }
-                          }
-                        }
-                      } catch(e) {}
-                    }}
-                    className={`flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer
-                      ${isSerialConnected ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-                  >
-                    {isSerialConnected ? <><WifiOff className="w-3.5 h-3.5" />Disconnect</> : <><Wifi className="w-3.5 h-3.5" />Connect (WebUSB / Serial)</>}
-                  </button>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!serialTxInput) return;
-                      await sendWebSerialData(serialTxInput + '\r\n');
-                      setSerialTxInput('');
-                    }}
-                    className="flex-1 flex gap-2 ml-2"
-                  >
-                    <input
-                      type="text"
-                      value={serialTxInput}
-                      onChange={(e) => setSerialTxInput(e.target.value)}
-                      placeholder="Kirim pesan ke Serial Port (Enter)..."
-                      className={`flex-1 px-3 py-1 text-xs font-mono rounded-lg border outline-none transition-all ${
-                        isLight
-                          ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500'
-                          : 'bg-[#0c0e16] border-slate-700 text-slate-200 focus:border-indigo-500'
-                      }`}
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
-                    >
-                      <Send className="w-3 h-3" /> Kirim
-                    </button>
-                  </form>
-                </div>
-                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto ${isLight ? 'bg-slate-50 text-emerald-800 border-slate-200' : 'bg-[#070810] text-emerald-400 border-slate-800'}`}>
-                  <pre className="whitespace-pre-wrap">{serialRawOutput || 'Belum ada data Serial...'}</pre>
-                </div>
+        {!isTerminalCollapsed && currentTab === 'serial' && (
+          <div className="rl-dock-content">
+            <div className="rl-toolbar">
+              <div className="rl-tool-heading">
+                <span className="rl-tool-icon"><Cable size={17} aria-hidden /></span>
+                <div><strong>Monitor Serial</strong><small>{board}</small></div>
               </div>
-            )}
-
-            {/* TERMINAL SHELL */}
-            {terminalTab === 'terminal' && (
-              <div className="absolute inset-0 flex flex-col gap-2 p-3">
-                <div className={`flex-1 p-3 rounded-xl border font-mono text-xs overflow-y-auto space-y-1 ${isLight ? 'bg-slate-50 text-slate-800 border-slate-200' : 'bg-[#070810] text-slate-100 border-slate-800'}`}>
-                  {interactiveTerminalLogs.map((log, i) => (
-                    <div key={i} className={`terminal-log flex items-start gap-2 ${log.type === 'input' ? 'text-sky-400 font-bold' : log.type === 'error' ? 'text-rose-400' : log.type === 'success' ? 'text-emerald-400' : 'text-slate-300'}`}>
-                      <span className="text-slate-500">{log.type === 'input' ? '❯' : '·'}</span>
-                      <span className="whitespace-pre-wrap">{log.text}</span>
-                    </div>
-                  ))}
-                </div>
-                <form onSubmit={handleTerminalCommand} className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Ketik perintah shell..."
-                    value={terminalInput}
-                    onChange={(e) => setTerminalInput(e.target.value)}
-                    className={`flex-1 px-3 py-1.5 text-xs font-mono rounded-lg border outline-none transition-all
-                      ${isLight ? 'bg-white border-slate-300 text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20' : 'bg-slate-900 border-slate-700 text-slate-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20'}`}
-                  />
-                  <button type="submit" className="px-4 py-1.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition-all cursor-pointer">
-                    Kirim
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {/* AI PANEL */}
-            {terminalTab === 'ai' && (
-              <div className={`absolute inset-0 flex flex-col overflow-hidden
-                ${isLight ? 'bg-gradient-to-b from-slate-50 to-white' : 'bg-gradient-to-b from-[#0c0e16] to-[#0a0c14]'}`}>
-
-                {/* ── AI Header ─────────────────────────────────────────── */}
-                <div className={`flex-shrink-0 px-4 py-2.5 flex items-center justify-between border-b backdrop-blur-sm
-                  ${isLight ? 'bg-white/90 border-slate-200/80' : 'bg-[#10121e]/90 border-slate-800/60'}`}>
-
-                  <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className="relative flex-shrink-0">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 via-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
-                        <Sparkles className="w-4 h-4 text-white" />
-                      </div>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${isLight ? 'border-white' : 'border-[#10121e]'} ${isKiloConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    </div>
-
-                    {/* Name + status */}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold text-[12.5px] tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                          Asisten Robolab AI
-                        </span>
-                        {isKiloConnected ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/25">
-                            <Radio className="w-2 h-2 animate-pulse" /> Online
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/25">
-                            <Cpu className="w-2 h-2" /> Lokal
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-[10px] leading-tight truncate max-w-[280px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                        <span className={`font-medium ${isLight ? 'text-sky-600' : 'text-sky-400'}`}>{board}</span>
-                        <span className="mx-1 opacity-40">·</span>
-                        <span className="font-mono opacity-70">{activeFileName}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setShowDatasheetModal(true)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer
-                        ${isLight ? 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200' : 'text-slate-300 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/50'}`}
-                      title="Lihat Datasheet Komponen"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-sky-500" />
-                      <span className="hidden md:inline">Datasheet</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTempApiKey(kiloConfig?.apiKey || '');
-                        setTempEndpoint(kiloConfig?.endpoint || 'https://api.kilo.ai/api/gateway');
-                        setTempModel(kiloConfig?.model || 'kilo-auto/free');
-                        setShowSettingsModal(true);
-                      }}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer
-                        ${isLight ? 'text-slate-500 bg-slate-100 hover:bg-slate-200 border border-slate-200' : 'text-slate-400 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/50'}`}
-                      title="Pengaturan Asisten AI"
-                    >
-                      <Settings className="w-4 h-4 text-sky-500" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* ── Quick Chips ────────────────────────────────────────── */}
-                <div className={`flex-shrink-0 px-4 py-2 flex items-center gap-2 overflow-x-auto border-b scrollbar-none
-                  ${isLight ? 'bg-slate-50/80 border-slate-200/60' : 'bg-[#0e1018]/80 border-slate-800/40'}`}>
-                  {[
-                    { emoji: '🔍', label: 'Analisis Kode', prompt: 'Analisis kode aktif saya dan berikan saran optimasi', colorL: 'text-sky-700 bg-sky-50 border-sky-200 hover:bg-sky-100', colorD: 'text-sky-300 bg-sky-500/10 border-sky-500/25 hover:bg-sky-500/20' },
-                    { emoji: '🛠️', label: 'Perbaiki Error', prompt: 'Perbaiki potensi error syntax atau logika pada kode ini', colorL: 'text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100', colorD: 'text-rose-300 bg-rose-500/10 border-rose-500/25 hover:bg-rose-500/20' },
-                    { emoji: '🔌', label: 'Rangkaian', prompt: 'Analisis rangkaian simulator dan rekomendasikan pin wiring', colorL: 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100', colorD: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20' },
-                    { emoji: '📖', label: 'Datasheet', onClick: () => setShowDatasheetModal(true), colorL: 'text-sky-700 bg-sky-50 border-sky-200 hover:bg-sky-100', colorD: 'text-sky-300 bg-sky-500/10 border-sky-500/25 hover:bg-sky-500/20' },
-                  ].map(chip => (
-                    <button
-                      key={chip.label}
-                      onClick={() => chip.onClick ? chip.onClick() : handleSendChat(chip.prompt)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer border
-                        ${isLight ? chip.colorL : chip.colorD}`}
-                    >
-                      <span>{chip.emoji}</span>
-                      <span>{chip.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* ── Chat Scroll Area ───────────────────────────────────── */}
-                <div ref={chatContainerRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 select-text">
-
-                  {/* Welcome state */}
-                  {aiChat.length === 0 && (
-                    <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      <div className={`max-w-[90%] rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm border
-                        ${isLight ? 'bg-white border-slate-200/80 text-slate-700' : 'bg-[#151827] border-slate-700/50 text-slate-200'}`}>
-                        
-                        <div className={`flex items-center gap-2 mb-3 pb-2.5 border-b ${isLight ? 'border-slate-100' : 'border-slate-700/50'}`}>
-                          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center">
-                            <Sparkles className="w-3.5 h-3.5 text-white" />
-                          </div>
-                          <span className={`font-bold text-[11px] uppercase tracking-widest bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent`}>
-                            Asisten Robolab AI
-                          </span>
-                        </div>
-
-                        <p className={`mb-3 text-[12.5px] leading-relaxed ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>
-                          Halo! Saya <strong className={isLight ? 'text-slate-900' : 'text-white'}>Asisten Robolab AI</strong>, siap membantu Anda di RoboLab Studio. 👋
-                        </p>
-
-                        <div className="space-y-2">
-                          {[
-                            { icon: '✦', text: `Menganalisis & mengedit kode`, sub: activeFileName },
-                            { icon: '✦', text: `Mendiagnosis rangkaian simulator`, sub: activeComponents.length > 0 ? activeComponents.join(', ') : 'Belum ada komponen' },
-                            { icon: '✦', text: 'Datasheet teknis & pinout komponen', sub: 'ESP32, Arduino, DHT11, Servo, dll.' },
-                          ].map((item, i) => (
-                            <div key={i} className={`flex items-start gap-2.5 p-2.5 rounded-xl ${isLight ? 'bg-slate-50 border border-slate-100' : 'bg-slate-800/30 border border-slate-700/30'}`}>
-                              <span className={`text-xs font-bold mt-0.5 ${isLight ? 'text-sky-500' : 'text-sky-400'}`}>{item.icon}</span>
-                              <div className="min-w-0">
-                                <p className={`text-[11.5px] font-semibold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>{item.text}</p>
-                                <p className={`text-[10.5px] truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{item.sub}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Chat messages */}
-                  {aiChat.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start min-w-0 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}
-                    >
-                      {/* AI avatar */}
-                      {msg.sender !== 'user' && (
-                        <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center mr-2 mt-1 shadow-sm">
-                          <Bot className="w-3.5 h-3.5 text-white" />
-                        </div>
-                      )}
-
-                      {/* Bubble — min-w-0 + overflow-hidden prevents content escape */}
-                      <div className={`min-w-0 max-w-[82%] overflow-hidden rounded-2xl px-4 py-3 shadow-sm ${
-                        msg.sender === 'user'
-                          ? isLight
-                            ? 'bg-sky-100 border border-sky-200/60 text-sky-950 rounded-tr-sm shadow-lg shadow-sky-500/5'
-                            : 'bg-sky-600/25 border border-sky-500/30 text-sky-100 rounded-tr-sm shadow-lg shadow-sky-900/10'
-                          : isLight
-                            ? 'bg-white border border-slate-200/80 text-slate-700 rounded-tl-sm shadow-slate-200/60'
-                            : 'bg-[#151827] border border-slate-700/50 text-slate-200 rounded-tl-sm'
-                      }`}>
-
-                        {/* AI message header */}
-                        {msg.sender !== 'user' && (
-                          <div className={`flex items-center gap-2 mb-2 pb-1.5 border-b ${isLight ? 'border-slate-100' : 'border-slate-700/40'}`}>
-                            <span className="text-[10px] font-bold uppercase tracking-widest bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
-                              Asisten Robolab AI
-                            </span>
-                            {msg.isKiloCode && (
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${isLight ? 'bg-sky-100 text-sky-600 border border-sky-200' : 'bg-sky-500/15 text-sky-400 border border-sky-500/25'}`}>
-                                AI
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* User text */}
-                        {msg.sender === 'user' ? (
-                          <p className={`text-[12.5px] font-medium leading-relaxed break-words ${isLight ? 'text-sky-950' : 'text-sky-100'}`}>{msg.message}</p>
-                        ) : (
-                          <div className="min-w-0 overflow-hidden">
-                            <FormattedMessage
-                              content={msg.message}
-                              themeMode={themeMode}
-                              onApplyCodeToEditor={onApplyCodeToEditor}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* User avatar */}
-                      {msg.sender === 'user' && (
-                        <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center ml-2 mt-1 shadow-sm">
-                          <span className="text-[10px] font-bold text-white">U</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Loading indicator */}
-                  {isAiLoading && (
-                    <div className="flex items-start justify-start animate-in fade-in duration-300">
-                      <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center mr-2 mt-1 shadow-sm">
-                        <Bot className="w-3.5 h-3.5 text-white" />
-                      </div>
-                      <div className={`rounded-2xl rounded-tl-sm px-4 py-3 border shadow-sm
-                        ${isLight ? 'bg-white border-slate-200/80' : 'bg-[#151827] border-slate-700/50'}`}>
-                        <div className="text-[10px] font-bold uppercase tracking-widest mb-2 bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
-                          Asisten Robolab AI
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <TypingDots />
-                          <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>sedang mengetik...</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Chat Input Bar ─────────────────────────────────────── */}
-                <div className={`flex-shrink-0 p-3 border-t
-                  ${isLight ? 'bg-white/90 border-slate-200/80' : 'bg-[#10121e]/90 border-slate-800/50'}`}>
-                  <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border transition-all duration-200
-                    ${isLight
-                      ? 'bg-slate-50 border-slate-200 focus-within:bg-white focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/20 shadow-sm'
-                      : 'bg-slate-900/80 border-slate-700/50 focus-within:border-sky-500/50 focus-within:ring-2 focus-within:ring-sky-500/15 shadow-lg'
-                    }`}>
-                    <Sparkles className={`w-4 h-4 flex-shrink-0 ${isLight ? 'text-sky-400' : 'text-sky-500'}`} />
-                    <input
-                      type="text"
-                      placeholder={isAiLoading ? 'AI sedang memproses...' : 'Tanyakan sesuatu kepada Asisten Robolab AI...'}
-                      value={aiInput}
-                      onChange={(e) => setAiInput(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.stopPropagation()}
-                      onKeyUp={(e) => e.stopPropagation()}
-                      onKeyPress={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter' && !isAiLoading && aiInput.trim()) {
-                          e.preventDefault();
-                          handleSendChat();
-                        }
-                      }}
-                      className={`flex-1 bg-transparent text-[12px] font-medium focus:outline-none disabled:opacity-40
-                        ${isLight ? 'text-slate-800 placeholder-slate-400' : 'text-slate-100 placeholder-slate-600'}`}
-                    />
-                    {isAiLoading ? (
-                      <button
-                        onClick={() => onClearChat && onClearChat()}
-                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-[10px] font-semibold transition-all cursor-pointer"
-                        title="Batalkan permintaan"
-                      >
-                        <X className="w-3 h-3" />
-                        <span>Stop</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleSendChat()}
-                        disabled={!aiInput.trim()}
-                        className={`flex-shrink-0 p-2 rounded-lg transition-all duration-200
-                          ${aiInput.trim()
-                            ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md hover:shadow-lg hover:shadow-sky-500/30 hover:scale-105 cursor-pointer'
-                            : isLight ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                          }`}
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <p className={`text-center text-[9.5px] mt-1.5 ${isLight ? 'text-slate-400' : 'text-slate-700'}`}>
-                    Tekan <kbd className={`px-1 py-0.5 rounded text-[9px] font-mono border ${isLight ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>Enter</kbd> untuk mengirim
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          ⚙️ SETTINGS MODAL — Premium Design
-      ════════════════════════════════════════════════════════════════════════ */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowSettingsModal(false)} />
-          <div className={`relative w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden
-            ${isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#141620] border-slate-700/60 text-slate-100'}`}>
-
-            {/* Modal gradient header */}
-            <div className="h-1 w-full bg-gradient-to-r from-sky-500 via-cyan-500 to-blue-600" />
-
-            <div className="p-6">
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className={`absolute top-5 right-5 p-1.5 rounded-lg transition-all cursor-pointer
-                  ${isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-500/20 border border-sky-500/25">
-                  <Settings className="w-5 h-5 text-sky-500" />
-                </div>
-                <div>
-                  <h3 className={`font-bold text-[15px] ${isLight ? 'text-slate-900' : 'text-white'}`}>Pengaturan Asisten Robolab AI</h3>
-                  <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Konfigurasi kunci API dan model LLM</p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                {[
-                  { label: 'API Key', sublabel: 'Kosongkan untuk Mode AI Lokal bawaan', placeholder: 'sk-...', value: tempApiKey, onChange: setTempApiKey, type: 'password' },
-                  { label: 'Endpoint URL', sublabel: '', placeholder: 'https://api.kilo.ai/api/gateway', value: tempEndpoint, onChange: setTempEndpoint, type: 'text' },
-                ].map(field => (
-                  <div key={field.label}>
-                    <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>{field.label}</label>
-                    <input
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={field.value}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono outline-none transition-all
-                        ${isLight
-                          ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20'
-                          : 'bg-slate-900/60 border-slate-700/60 text-slate-100 focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/15'
-                        }`}
-                    />
-                    {field.sublabel && <p className={`text-[10.5px] mt-1 ${isLight ? 'text-slate-400' : 'text-slate-400'}`}>{field.sublabel}</p>}
-                  </div>
-                ))}
-
-                <div>
-                  <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>Model Name</label>
-                  <input
-                    type="text"
-                    placeholder="kilo-auto/free"
-                    value={tempModel}
-                    onChange={(e) => setTempModel(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-mono outline-none transition-all
-                      ${isLight
-                        ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20'
-                        : 'bg-slate-900/60 border-slate-700/60 text-slate-100 focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/15'
-                      }`}
-                  />
-                  <div className={`flex gap-2 mt-2 flex-wrap`}>
-                    {['kilo-auto/free', 'kilo-auto/balanced', 'stepfun/step-3.7-flash:free'].map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setTempModel(m)}
-                        className={`text-[10px] px-2 py-1 rounded-lg font-mono font-medium transition-all cursor-pointer
-                          ${tempModel === m
-                            ? isLight ? 'bg-sky-100 text-sky-700 border border-sky-200' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                            : isLight ? 'text-slate-500 hover:text-sky-600 bg-slate-100 border border-slate-200 hover:border-sky-200' : 'text-slate-500 hover:text-slate-300 bg-slate-800/50 border border-slate-700/50'
-                          }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2.5">
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer
-                    ${isLight ? 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200' : 'text-slate-400 bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/50'}`}
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleSaveSettings}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white shadow-lg shadow-sky-600/25 transition-all cursor-pointer hover:scale-105"
-                >
-                  Simpan Pengaturan
+              <div className="rl-dock-actions">
+                <span className="rl-status" data-connected={isSerialConnected} role="status">{isSerialConnected ? 'Terhubung' : 'Siap disambungkan'}</span>
+                <select aria-label="Kecepatan serial" className="rl-control" value={serialBaudrate} disabled={isSerialConnected || serialBusy}
+                  onChange={event => setSerialBaudrate(Number(event.target.value))}>
+                  {SERIAL_BAUD_RATES.map(baud => <option key={baud} value={baud}>{baud} baud</option>)}
+                </select>
+                <button type="button" className={isSerialConnected ? 'rl-control' : 'rl-primary'} disabled={serialBusy} onClick={() => void toggleSerial()}>
+                  {isSerialConnected ? 'Putuskan' : 'Hubungkan'}
                 </button>
               </div>
             </div>
+            <div {...streamProps} className="rl-stream rl-console-stream" aria-label="Data Serial">
+              {serialRawOutput
+                ? <pre>{serialRawOutput}</pre>
+                : <div className="rl-empty"><Activity size={19} aria-hidden /><strong>Menunggu data board</strong>
+                    <span>{isSerialConnected ? 'Cetak data dari program agar muncul di sini.' : 'Hubungkan board untuk melihat data dari program.'}</span></div>}
+            </div>
+            {serialError && <p className="rl-feedback" role="alert">{serialError}</p>}
+            <form className="rl-composer" onSubmit={sendSerial} aria-label="Kirim ke board">
+              <input aria-label="Pesan ke board" placeholder="Pesan ke board…" value={serialTxInput} maxLength={4096} onChange={event => setSerialTxInput(event.target.value)} />
+              <select aria-label="Akhir baris serial" className="rl-control" value={serialEnding} onChange={event => setSerialEnding(event.target.value)}>
+                <option value={'\r\n'}>CR + LF</option><option value={'\n'}>LF</option><option value={'\r'}>CR</option><option value="">Tanpa akhir baris</option>
+              </select>
+              <button type="submit" className="rl-primary" disabled={!isSerialConnected || !serialTxInput || serialBusy} aria-label="Kirim ke board"><Send size={15} aria-hidden /></button>
+            </form>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          📖 DATASHEET BROWSER MODAL
-      ════════════════════════════════════════════════════════════════════════ */}
+        {!isTerminalCollapsed && currentTab === 'terminal' && (
+          <div className="rl-dock-content">
+            <div className="rl-toolbar">
+              <div className="rl-tool-heading">
+                <span className="rl-tool-icon"><Terminal size={17} aria-hidden /></span>
+                <div><strong>Terminal proyek</strong><small>Perintah dan hasil program</small></div>
+              </div>
+              <button type="button" className="rl-control" aria-pressed={showBuildLogs} disabled={!terminalLogs.length && !showBuildLogs} onClick={() => setShowBuildLogs(!showBuildLogs)}>
+                {showBuildLogs ? 'Tampilkan aktivitas' : 'Lihat log build'}
+              </button>
+            </div>
+            <div {...streamProps} className="rl-stream rl-console-stream" role="log" aria-label="Log terminal">
+              {!displayedLogs.length && <div className="rl-empty"><Terminal size={19} aria-hidden /><strong>Belum ada keluaran</strong><span>Jalankan program atau ketik perintah di bawah.</span></div>}
+              {displayedLogs.map((log, index) => (
+                <div key={index} className="rl-log-row" data-kind={log.type}>
+                  <span aria-hidden>{log.type === 'error' ? '!' : log.type === 'success' ? '✓' : log.type === 'input' ? '›' : '·'}</span>
+                  <pre>{log.text}</pre>
+                </div>
+              ))}
+            </div>
+            <form className="rl-composer" onSubmit={event => { setShowBuildLogs(false); handleTerminalCommand(event); }}>
+              <span className="rl-prompt" aria-hidden>›</span>
+              <input value={terminalInput} aria-label="Perintah terminal" placeholder="Ketik perintah terminal…" onChange={event => setTerminalInput(event.target.value)} />
+              <button type="submit" className="rl-primary" disabled={!terminalInput.trim()}>Jalankan</button>
+            </form>
+          </div>
+        )}
+
+        {!isTerminalCollapsed && currentTab === 'ai' && (
+          <div className="rl-dock-content rl-chat">
+            <div className="rl-toolbar">
+              <div className="rl-tool-heading">
+                <span className="rl-tool-icon"><Bot size={19} aria-hidden /></span>
+                <div><strong>Asisten RoboLab</strong><small>{hasAiKey ? ASSISTANT_PROVIDERS[kiloConfig.provider].label : 'Panduan lokal'}</small></div>
+              </div>
+              <div className="rl-dock-actions">
+                <button type="button" className="rl-icon-btn" aria-label="Buka datasheet" title="Datasheet" onClick={() => setShowDatasheetModal(true)}><BookOpen size={17} aria-hidden /></button>
+                <button type="button" className="rl-icon-btn" aria-label="Pengaturan AI" title="Pengaturan AI" onClick={openSettings}><Settings size={17} aria-hidden /></button>
+              </div>
+            </div>
+            <div {...streamProps} className="rl-stream rl-chat-stream" role="log" aria-label="Percakapan dengan RoboLab">
+              {!aiChat.length && <div className="rl-chat-welcome">
+                <strong>Mau bikin apa hari ini?</strong>
+                <p>{hasAiKey ? 'Tanyakan ide proyek, jelaskan error, atau minta bantuan langkah demi langkah.' : 'Panduan lokal bisa membantu cek kode, rangkaian, dan komponen. Aktifkan API di pengaturan untuk percakapan AI.'}</p>
+                <div className="rl-suggestions">{quickPrompts.map(({ label, prompt, icon: Icon }) => (
+                  <button type="button" className="rl-control" key={label} onClick={() => setAiInput(prompt)}><Icon size={14} aria-hidden />{label}</button>
+                ))}</div>
+              </div>}
+              {aiChat.map((msg, index) => (
+                <article key={index} className="rl-message" data-sender={msg.sender} data-error={!!msg.isError}>
+                  <small>{msg.sender === 'user' ? 'Kamu' : msg.isError ? 'Koneksi AI' : msg.isKiloCode ? 'RoboLab AI' : 'Panduan lokal'}</small>
+                  {msg.sender === 'user' || msg.isError ? <p>{msg.message}</p>
+                    : <FormattedMessage content={msg.message} themeMode={themeMode} onApplyCodeToEditor={onApplyCodeToEditor} />}
+                </article>
+              ))}
+              {isAiLoading && <div className="rl-thinking" role="status"><LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden /> RoboLab sedang menyiapkan jawaban…</div>}
+            </div>
+            <form className="rl-composer rl-chat-composer" onSubmit={submitChat} aria-label="Kirim pesan ke RoboLab">
+              <textarea aria-label="Pesan untuk RoboLab" placeholder="Tulis pertanyaanmu…" rows={2} maxLength={4000} value={aiInput}
+                onChange={event => setAiInput(event.target.value)}
+                onKeyDown={event => {
+                  event.stopPropagation();
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) submitChat(event);
+                }} />
+              <button type="submit" className="rl-primary" disabled={isAiLoading || !aiInput.trim()} aria-label="Kirim pesan"><Send size={16} aria-hidden /></button>
+            </form>
+            {hasAiKey && <label className="rl-project-context" title={activeFileName}>
+              <input type="checkbox" checked={includeProject} onChange={event => setIncludeProject(event.target.checked)} />
+              Sertakan kode aktif dan rangkaian
+            </label>}
+          </div>
+        )}
+
+        <dialog ref={dialogRef} className="rl-ai-dialog" aria-labelledby="rl-ai-settings-title" onCancel={event => { if (testing) event.preventDefault(); }}>
+          <form onSubmit={event => {
+            event.preventDefault();
+            const next = { ...draft, apiKey: draft.apiKey.trim(), model: draft.model.trim() || ASSISTANT_PROVIDERS[draft.provider].model };
+            if (next.apiKey !== kiloConfig.apiKey || next.provider !== kiloConfig.provider || next.model !== kiloConfig.model) {
+              onClearChat?.();
+              setIncludeProject(false);
+            }
+            setKiloConfig?.(next);
+            dialogRef.current?.close();
+          }}>
+            <div className="rl-toolbar">
+              <div className="rl-tool-heading">
+                <span className="rl-tool-icon"><Settings size={18} aria-hidden /></span>
+                <h2 id="rl-ai-settings-title">Pengaturan AI</h2>
+              </div>
+              <button type="button" className="rl-icon-btn" aria-label="Tutup pengaturan" disabled={testing} onClick={() => dialogRef.current?.close()}><X size={19} aria-hidden /></button>
+            </div>
+            <p>Gunakan kunci dari Kilo Gateway atau OpenRouter. Kunci hanya berlaku selama halaman terbuka. Pesan dan riwayat chat dikirim ke penyedia yang dipilih.</p>
+            <label>Penyedia
+              <select className="rl-control" value={draft.provider} disabled={testing} onChange={event => {
+                const provider = event.target.value as KiloCodeConfig['provider'];
+                updateDraft({ provider, apiKey: '', model: ASSISTANT_PROVIDERS[provider].model });
+              }}>
+                {Object.entries(ASSISTANT_PROVIDERS).map(([id, provider]) => <option key={id} value={id}>{provider.label}</option>)}
+              </select>
+            </label>
+            <label>Kunci API<input className="rl-control" type="password" autoComplete="off" spellCheck={false} value={draft.apiKey} disabled={testing}
+              onChange={event => updateDraft({ ...draft, apiKey: event.target.value })} /></label>
+            <label>ID model<input className="rl-control" spellCheck={false} placeholder={ASSISTANT_PROVIDERS[draft.provider].model} value={draft.model} disabled={testing}
+              onChange={event => updateDraft({ ...draft, model: event.target.value })} /></label>
+            {testResult && <p className="rl-feedback" data-success={testResult.success} role="status">{testResult.text}</p>}
+            <footer className="rl-dock-actions">
+              <button type="button" className="rl-control" disabled={testing || isAiLoading || !draft.apiKey.trim()} onClick={() => void runConnectionTest()}>
+                {testing ? 'Sedang menguji…' : 'Uji koneksi'}
+              </button>
+              <button type="submit" className="rl-primary" disabled={testing || isAiLoading}>Simpan</button>
+            </footer>
+          </form>
+        </dialog>
+      </section>
+
       {showDatasheetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-black/65 backdrop-blur-md" onClick={() => setShowDatasheetModal(false)} />

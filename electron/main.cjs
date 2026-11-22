@@ -104,7 +104,7 @@ function createWindow() {
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' https://blockly-demo.appspot.com https://www.gstatic.com https://lh3.googleusercontent.com https://*.googleusercontent.com https://raw.githubusercontent.com data: blob: file:",
-            "connect-src 'self' https://cdn.jsdelivr.net https://api.kilo.ai https://api.kilocode.com https://openrouter.ai https://qcewaspgybtbofjowoxs.supabase.co wss://qcewaspgybtbofjowoxs.supabase.co http://127.0.0.1:54321 blob: data: *",
+            "connect-src 'self' https://cdn.jsdelivr.net https://ai-gateway.kilo.ai https://openrouter.ai https://qcewaspgybtbofjowoxs.supabase.co wss://qcewaspgybtbofjowoxs.supabase.co http://127.0.0.1:54321 blob: data: *",
             "worker-src 'self' blob: data:"
           ].join('; ')
         ]
@@ -134,28 +134,25 @@ function createWindow() {
   });
 }
 
-// Kilo AI Gateway IPC Handler (bypasses browser CORS & CSP)
-ipcMain.handle('kilo-api-request', async (event, payload) => {
-  const { url, key, body } = payload;
+// AI providers supported by the editor.
+ipcMain.handle('kilo-api-request', async (_event, { url, key, body }) => {
+  const endpoints = [
+    'https://ai-gateway.kilo.ai/api/v1/chat/completions',
+    'https://openrouter.ai/api/v1/chat/completions',
+  ];
+  if (!endpoints.includes(url)) return { success: false, status: 400 };
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify(body)
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(40000),
+      redirect: 'error',
     });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch (e) { data = { error: { message: text } }; }
-    
-    if (!res.ok) {
-      return { success: false, status: res.status, error: data.error?.message || data.message || text || `HTTP ${res.status}` };
-    }
-    return { success: true, data };
-  } catch (err) {
-    return { success: false, error: err.message };
+    if (!res.ok) return { success: false, status: res.status };
+    return { success: true, data: await res.json() };
+  } catch {
+    return { success: false };
   }
 });
 
@@ -3166,46 +3163,45 @@ ipcMain.handle('start-serial-monitor', async (event, port, board, baudrate = 115
   
   try {
     const { spawn } = require('child_process');
-    // UTF-8 env: fix UnicodeEncodeError on Windows (CP1252 can't encode emoji/non-latin chars)
-    const utf8Env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+    const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+    const isMicroPython = board === 'ESP32 DevKit V1' || board === 'BBC micro:bit';
+    const monitor = isMicroPython
+      ? spawn('python', ['-m', 'mpremote', 'connect', port, 'repl'], { env })
+      : spawn(findArduinoCLI(), ['monitor', '-p', port, '--config', `baudrate=${baudrate}`]);
+    activeSerialProcess = monitor;
 
-    if (board === 'ESP32 DevKit V1' || board === 'BBC micro:bit') {
-      // MicroPython boards via mpremote repl
-      // mpremote usually uses 115200 by default. Just pass the port.
-      activeSerialProcess = spawn('python', ['-m', 'mpremote', 'connect', port, 'repl'], { env: utf8Env });
-      
-      // Give mpremote a moment to connect, then send Ctrl+D to trigger a soft-reset
-      // so the user can see their script run from the beginning.
-      setTimeout(() => {
-        if (activeSerialProcess && activeSerialProcess.stdin) {
-          activeSerialProcess.stdin.write('\x04');
-        }
-      }, 1000);
-    } else {
-      // Arduino Uno via arduino-cli monitor
-      const cliPath = findArduinoCLI();
-      activeSerialProcess = spawn(cliPath, ['monitor', '-p', port, '--config', `baudrate=${baudrate}`]);
-    }
-    
-    activeSerialProcess.stdout.on('data', (d) => {
-      safeSend(event, 'serial-data', d.toString('utf8'));
-    });
-    
-    activeSerialProcess.stderr.on('data', (d) => {
-      safeSend(event, 'serial-data', d.toString('utf8'));
-    });
-    
-    activeSerialProcess.on('close', () => {
-      safeSend(event, 'arduino-log', { text: `Koneksi serial terputus.`, type: 'info' });
-      safeSend(event, 'serial-disconnected');
+    monitor.stdout.on('data', data => safeSend(event, 'serial-data', data.toString('utf8')));
+    monitor.stderr.on('data', data => safeSend(event, 'serial-data', data.toString('utf8')));
+    monitor.stdin.on('error', () => {});
+    monitor.on('close', () => {
+      if (activeSerialProcess !== monitor) return;
       activeSerialProcess = null;
+      safeSend(event, 'arduino-log', { text: 'Koneksi serial terputus.', type: 'info' });
+      safeSend(event, 'serial-disconnected');
     });
-    
+
+    await new Promise((resolve, reject) => {
+      monitor.once('spawn', resolve);
+      monitor.on('error', reject);
+    });
+
+    if (isMicroPython) {
+      setTimeout(() => {
+        if (activeSerialProcess === monitor && monitor.stdin.writable) monitor.stdin.write('\x04');
+      }, 1000);
+    }
+
     return { success: true };
   } catch (err) {
     console.error('Failed to start serial monitor:', err);
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('write-serial-monitor', (_event, data) => {
+  const input = activeSerialProcess?.stdin;
+  if (!input?.writable || typeof data !== 'string' || data.length > 4098) return false;
+  return new Promise(resolve => input.write(data, error => resolve(!error)));
 });
 
 ipcMain.handle('stop-serial-monitor', async () => {

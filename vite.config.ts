@@ -71,6 +71,14 @@ function verifyProductionAssets(): Plugin {
   }
 }
 
+const assistantProxy = {
+  '/api/assistant': {
+    target: 'https://ai-gateway.kilo.ai',
+    changeOrigin: true,
+    rewrite: () => '/api/v1/chat/completions',
+  },
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -87,7 +95,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: assistantProxy,
   },
+  preview: { proxy: assistantProxy },
   build: {
     minify: true,
     sourcemap: false,
