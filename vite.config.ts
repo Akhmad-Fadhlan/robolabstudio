@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { createRequire } from 'module'
@@ -43,10 +45,37 @@ function robolabCompilerPlugin() {
   }
 }
 
+function verifyProductionAssets(): Plugin {
+  return {
+    name: 'robolab-verify-production-assets',
+    apply: 'build',
+    enforce: 'post',
+    writeBundle({ dir }) {
+      if (!dir) return
+
+      const unexpected = readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter(entry => entry.isFile())
+        .filter(entry => {
+          if (/\.(?:map|tsx?|jsx)$/i.test(entry.name) || /^\.env(?:\.|$)/i.test(entry.name)) return true
+          if (!/\.(?:[cm]?js|css)$/i.test(entry.name)) return false
+
+          const content = readFileSync(join(entry.parentPath, entry.name), 'utf8')
+          return /(?:\n\s*\/\/[#@]\s*sourceMappingURL=|\/\*[#@]\s*sourceMappingURL=)[^\n]+\s*$/.test(content)
+        })
+        .map(entry => join(entry.parentPath, entry.name))
+
+      if (unexpected.length) {
+        this.error(`Build contains source files, environment files, or sourcemaps:\n${unexpected.join('\n')}`)
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     robolabCompilerPlugin(),
+    verifyProductionAssets(),
     react(),
     // @ts-ignore
     tailwindcss(),
