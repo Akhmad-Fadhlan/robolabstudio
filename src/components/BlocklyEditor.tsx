@@ -534,6 +534,15 @@ try {
       "tooltip": "Raw python block with inner statements",
       "helpUrl": ""
     },
+    {
+      type: 'imported_source_preview',
+      message0: 'Kode sumber %1',
+      args0: [{ type: 'field_label_serializable', name: 'FILE', text: 'source' }],
+      message1: '%1',
+      args1: [{ type: 'field_label_serializable', name: 'LINE', text: '' }],
+      colour: '#64748B',
+      tooltip: 'Klik ikon komentar untuk membaca cuplikan. Kode lengkap ada di editor.',
+    },
     // 2. Pin blocks
     {
       "type": "arduino_define_pin",
@@ -7304,9 +7313,10 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             </button>
           )}
           <button type="button" onClick={openBlockGuide} className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-900">Kamus blok</button>
-          {!isSyncWithBlocks && (
+          {!isSyncWithBlocks && onSyncToCode && (
             <button
               onClick={() => {
+                if (!window.confirm('Ganti kode di editor dengan hasil dari susunan blok ini?')) return;
                 const arduinoCode = generateCodeForLang('arduino', boardRef.current);
                 const pythonCode = generateCodeForLang('python', boardRef.current);
                 if (onSyncToCode) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, ChevronRight, Link, FileCode2, Unplug } from 'lucide-react';
+import { fileExtension, isCppSourceFile, isPythonSourceFile } from '../utils/sourceFileTypes';
 import { PythonLogo } from './icons/PythonLogo';
 
 // Self-contained Monaco Editor component that uses direct ES module import
@@ -22,8 +23,8 @@ interface CodeEditorProps {
 }
 
 const getLanguage = (filename: string): string => {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  if (['ino', 'cpp', 'c', 'h', 'hpp'].includes(ext || '')) return 'cpp';
+  const ext = fileExtension(filename);
+  if (isCppSourceFile(filename)) return 'cpp';
   if (ext === 'py') return 'python';
   if (ext === 'json') return 'json';
   if (ext === 'md') return 'markdown';
@@ -54,32 +55,27 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const activeFileRef = useRef(activeFile);
   const lastActiveFileRef = useRef(activeFile);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingChangeRef = useRef<{ filename: string; content: string } | null>(null);
+  const updatingEditorRef = useRef(false);
+  const previousSourceRef = useRef(files[activeFile] ?? '');
 
-  // Update refs so callbacks are not stale
   useEffect(() => {
     onFileChangeRef.current = onFileChange;
     onSaveFileRef.current = onSaveFile;
     activeFileRef.current = activeFile;
   }, [onFileChange, onSaveFile, activeFile]);
 
-  // Clean up debounce timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Helper to immediately flush any pending debounced change
   const flushPendingChanges = () => {
-    if (debounceTimeoutRef.current && editorRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-      debounceTimeoutRef.current = null;
-      const value = editorRef.current.getValue();
-      onFileChangeRef.current(activeFileRef.current, value);
-    }
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+    debounceTimeoutRef.current = null;
+    const pending = pendingChangeRef.current;
+    pendingChangeRef.current = null;
+    if (pending) onFileChangeRef.current(pending.filename, pending.content);
   };
+
+  useEffect(() => () => {
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+  }, []);
 
   // Dynamically import monaco-editor to avoid AMD loader issues
   useEffect(() => {
@@ -183,16 +179,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         }
 
         disposable = editorInstance.onDidChangeModelContent(() => {
-          const value = editorInstance.getValue();
-          
-          // Debounce update to parent by 150ms to prevent component re-render lag during typing
-          if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
-          }
-          debounceTimeoutRef.current = setTimeout(() => {
-            debounceTimeoutRef.current = null;
-            onFileChangeRef.current(activeFileRef.current, value);
-          }, 150);
+          if (updatingEditorRef.current) return;
+          pendingChangeRef.current = {
+            filename: activeFileRef.current,
+            content: editorInstance.getValue(),
+          };
+          if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+          debounceTimeoutRef.current = setTimeout(flushPendingChanges, 150);
         });
 
         editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
@@ -278,15 +271,30 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     editor.updateOptions({ readOnly: isSyncWithBlocks });
 
     // Programmatic updates: switch file OR content changed from Blockly/external
-    const newContent = files[activeFile] || '';
+    const newContent = files[activeFile] ?? '';
+    const previousSource = previousSourceRef.current;
+    previousSourceRef.current = newContent;
     const currentValue = editor.getValue();
-    if (fileSwitched) {
-      editor.setValue(newContent);
-      editor.setScrollTop(0);
-    } else if (currentValue !== newContent) {
-      const state = editor.saveViewState();
-      editor.setValue(newContent);
-      if (state) editor.restoreViewState(state);
+    if (fileSwitched || currentValue !== newContent) {
+      const pending = pendingChangeRef.current;
+      if (pending && pending.filename !== activeFile) {
+        flushPendingChanges();
+      } else if (pending && !fileSwitched) {
+        if (newContent === previousSource) return;
+        // Opening a replacement for the same filename supersedes buffered editor input.
+        clearTimeout(debounceTimeoutRef.current ?? undefined);
+        debounceTimeoutRef.current = null;
+        pendingChangeRef.current = null;
+      }
+      const viewState = fileSwitched ? null : editor.saveViewState();
+      updatingEditorRef.current = true;
+      try {
+        editor.setValue(newContent);
+      } finally {
+        updatingEditorRef.current = false;
+      }
+      if (fileSwitched) editor.setScrollTop(0);
+      else if (viewState) editor.restoreViewState(viewState);
     }
   }, [activeFile, files, isSyncWithBlocks, isEditorReady]);
 
@@ -317,11 +325,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-center">
-                  {filename.endsWith('.ino') ? (
+                  {fileExtension(filename) === 'ino' ? (
                     <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-emerald-500/50'}`} />
-                  ) : (filename.endsWith('.c') || filename.endsWith('.h') || filename.endsWith('.cpp') || filename.endsWith('.hpp')) ? (
+                  ) : isCppSourceFile(filename) ? (
                     <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'bg-sky-400/50'}`} />
-                  ) : filename.endsWith('.py') ? (
+                  ) : isPythonSourceFile(filename) ? (
                     <PythonLogo className="w-3.5 h-3.5" />
                   ) : (
                     <FileCode2 className="w-3.5 h-3.5 opacity-70" />
@@ -337,7 +345,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         <div className="flex items-center gap-2 px-1 flex-shrink-0">
           
           {/* Sync Status / Toggle Control */}
-          {(activeFile.endsWith('.ino') || activeFile.endsWith('.py')) && (
+          {(fileExtension(activeFile) === 'ino' || isPythonSourceFile(activeFile)) && (
             <div className={`flex items-center rounded-full p-0.5 border ${themeMode === 'light' ? 'bg-slate-100/80 border-slate-200/80' : 'bg-slate-900/60 border-slate-800'}`}>
               {isSyncWithBlocks ? (
                 <>

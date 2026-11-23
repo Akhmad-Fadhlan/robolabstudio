@@ -1,3 +1,4 @@
+import { isPythonSourceFile } from '../../utils/sourceFileTypes';
 import robolabMark from '../../assets/robolab-logo-only.png';
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -167,7 +168,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm ${
                 isDark ? 'hover:bg-white/10 text-slate-200' : 'bg-amber-100/70 hover:bg-amber-200/80 text-amber-900 border border-amber-200/90'
               }`}
-              title="Buka File (Ctrl+O)"
+              title="Buka file kode atau HEX (Ctrl+O)"
             >
               <FolderOpen className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
               <span >{tb('open')}</span>
@@ -196,7 +197,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 title="Upload MicroPython ke BBC micro:bit">
                 <Upload className="h-4 w-4" /> Upload
               </button>
-            ) : activeFile.endsWith('.py') ? (
+            ) : isPythonSourceFile(activeFile) ? (
               <button
                 onClick={handleRunPython}
                 className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-md ${

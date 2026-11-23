@@ -230,8 +230,9 @@ ipcMain.handle('open-file', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'RoboLab Block & Code Files', extensions: ['hex', 'ino', 'py', 'json', 'md', 'txt'] },
-      { name: 'Block HEX Files (*.hex)', extensions: ['hex'] }
+      { name: 'RoboLab / Source Code', extensions: ['ino', 'py', 'h', 'hpp', 'c', 'cpp', 'cc', 'cxx', 'c++', 'hex', 'json', 'md', 'txt'] },
+      { name: 'Block HEX', extensions: ['hex'] },
+      { name: 'All Files', extensions: ['*'] }
     ]
   });
   if (result.canceled || result.filePaths.length === 0) return null;

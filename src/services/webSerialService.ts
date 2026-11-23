@@ -1,3 +1,4 @@
+import { openableFileExtensions } from '../utils/sourceFileTypes';
 import { getMicrobitModules } from './microbitModules';
 import { canFlashMicrobitViaUsb, flashMicrobitViaUsb } from './microbitWebUsb';
 import { MicrobitReplUnavailableError, writeMicrobitProgram } from './microbitUpload';
@@ -1789,7 +1790,7 @@ export async function openFileInBrowser(): Promise<{ name: string; content: stri
           {
             description: 'RoboLab Block HEX & Code Files (.hex, .ino, .py, .cpp, .c, .h)',
             accept: {
-              'text/plain': ['.hex', '.ino', '.py', '.cpp', '.c', '.h', '.hpp', '.json', '.md'],
+              'text/plain': openableFileExtensions.filter(ext => ext !== 'c++').map(ext => '.' + ext),
             },
           },
         ],
@@ -1803,18 +1804,22 @@ export async function openFileInBrowser(): Promise<{ name: string; content: stri
   }
 
   // Fallback <input type="file">
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.hex,.ino,.py,.cpp,.c,.h,.hpp,.json,.md,.txt';
+    input.accept = openableFileExtensions.map(ext => '.' + ext).join(',');
+    input.oncancel = () => resolve(null);
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
         resolve(null);
         return;
       }
-      const content = await file.text();
-      resolve({ name: file.name, content });
+      try {
+        resolve({ name: file.name, content: await file.text() });
+      } catch (error) {
+        reject(error);
+      }
     };
     input.click();
   });
