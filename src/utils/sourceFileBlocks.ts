@@ -2,6 +2,11 @@ import { arduinoToBlocklyXml } from './arduinoToBlocks';
 import { escapeXml, pythonToBlocklyXml } from './pythonToBlocks';
 import { fileExtension, isCppSourceFile, isPythonSourceFile } from './sourceFileTypes';
 
+export function hasNativeOnlyArduinoCode(source: string): boolean {
+  const code = source.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ' ');
+  return /\b(?:analogReadResolution|analogSetPinAttenuation|analogSetAttenuation|analogReadMilliVolts)\s*\(|\breturn\s+[^;]/.test(code);
+}
+
 function sourceReference(filename: string, code: string, x: number): string {
   const preview = code.slice(0, 12000).replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '\uFFFD');
   const comment = code.length > 12000 ? preview + '\n\n[Lihat kode lengkap di editor.]' : preview;
@@ -37,8 +42,9 @@ export function sourceFileToBlockly(filename: string, code: string): string {
   }
 
   const hasMappedStatements = xml.includes('<statement') || /type="(?!arduino_(?:setup|loop)\b)/.test(xml);
+  const hasNativeOnlyCode = isCppSourceFile(filename) && hasNativeOnlyArduinoCode(source);
   const includesSourcePreview = source.trim().length > 0 && (
-    !hasMappedStatements || isHeader || (isCppSourceFile(filename) && extension !== 'ino' && !hasArduinoEntry)
+    !hasMappedStatements || hasNativeOnlyCode || isHeader || (isCppSourceFile(filename) && extension !== 'ino' && !hasArduinoEntry)
   );
   if (!includesSourcePreview && xml) return xml;
   const hasProgramView = hasMappedStatements ? xml : '';

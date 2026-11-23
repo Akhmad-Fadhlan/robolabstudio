@@ -90,7 +90,19 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
   let lastResp: Response | null = null;
   for (const url of candidates) {
     try {
-      const resp = await fetch(url, init);
+      let request = init;
+      if (remoteOrigin && apiPath === '/api/compile' && url === apiPath) {
+        const headers = new Headers(init?.headers);
+        try {
+          const { supabase } = await import('./supabaseClient');
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.access_token) headers.set('Authorization', `Bearer ${data.session.access_token}`);
+        } catch {
+          // The hosted compiler provides the login error if a session cannot be read.
+        }
+        request = { ...init, headers };
+      }
+      const resp = await fetch(url, request);
       const ct = resp.headers.get('content-type') || '';
       if (ct.includes('application/json')) {
         // Never re-send POST /api/compile or /api/upload-local to fallback aliases if server responded with JSON
@@ -1473,6 +1485,8 @@ export async function executeWebHardwareAction(params: {
   port: string;
   action: 'verify' | 'upload' | 'flash-firmware';
   fileExt: string;
+  sketchPath?: string;
+  requireNative?: boolean;
   files: Record<string, string>;
   forceMicrobitHex?: boolean;
   onLog: HardwareLogCallback;
@@ -1586,7 +1600,7 @@ export async function executeWebHardwareAction(params: {
     onProgress?.(40);
     await sleep(300);
     const pyEntry = Object.entries(files).find(([k]) => k.endsWith('.py'));
-    const pyCode = pyEntry ? pyEntry[1] : Object.values(files)[0] || '';
+    const pyCode = files['main.py'] ?? pyEntry?.[1] ?? Object.values(files)[0] ?? '';
     if (!pyCode.trim()) {
       onLog({ text: '❌ Berkas Python kosong.', type: 'error' });
       return { success: false, error: 'Empty Python file' };
@@ -1602,7 +1616,7 @@ export async function executeWebHardwareAction(params: {
   // 3. Handle Direct MicroPython Upload over Web Serial Raw REPL
   if (isPython && action === 'upload') {
     const pyEntry = Object.entries(files).find(([k]) => k.endsWith('.py'));
-    const pyCode = pyEntry ? pyEntry[1] : Object.values(files)[0] || '';
+    const pyCode = files['main.py'] ?? pyEntry?.[1] ?? Object.values(files)[0] ?? '';
 
     if (targetWebPort) {
       onProgress?.(35);
@@ -1645,7 +1659,9 @@ export async function executeWebHardwareAction(params: {
 
   // 5. Handle C++ / .ino Verify & Upload via Cloud Compiler API + Web Serial Flashing
   onLog({
-    text: `☁️ [Cloud Compiler] Mengirim kode C++/Arduino (${board}) ke layanan kompilasi...`,
+    text: board.toLowerCase().includes('esp32')
+      ? 'Mengompilasi sketch ESP32. Jika server baru aktif, proses pertama bisa memerlukan sekitar dua menit.'
+      : `Mengirim sketch ${board} ke layanan kompilasi…`,
     type: 'info',
   });
   onProgress?.(25);
@@ -1658,6 +1674,8 @@ export async function executeWebHardwareAction(params: {
         board,
         action,
         fileExt,
+        sketchPath: params.sketchPath,
+        requireNative: params.requireNative,
         files,
       }),
     });

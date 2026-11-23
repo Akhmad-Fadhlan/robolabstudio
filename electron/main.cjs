@@ -1257,7 +1257,7 @@ try {
 } catch (_) { lastCompiledHashes = {}; }
 
 ipcMain.handle('arduino-upload', async (event, payload = {}) => {
-  const { code = '', board = '', port = '', action = 'upload', fileExt = 'ino', files = {}, userId = null } = (payload || {});
+  const { code = '', board = '', port = '', action = 'upload', fileExt = 'ino', files = {}, userId = null, sketchPath = '' } = (payload || {});
 
   try {
     // Release COM port from Serial Monitor if active
@@ -1268,7 +1268,7 @@ ipcMain.handle('arduino-upload', async (event, payload = {}) => {
       await new Promise(r => setTimeout(r, 600));
     }
 
-    safeSend(event, 'arduino-log', { text: `Starting ${action} process for ${board}...`, type: 'info' });
+    safeSend(event, 'arduino-log', { text: `Mulai ${action}: ${sketchPath || 'sketch'} • ${board}`, type: 'info' });
 
     if (board === 'BBC micro:bit') {
       const tempDir = path.join(os.tmpdir(), 'RoboLabSketch');
@@ -3154,7 +3154,7 @@ ipcMain.handle('get-serial-ports', async () => {
 
 let activeSerialProcess = null;
 
-ipcMain.handle('start-serial-monitor', async (event, port, board, baudrate = 115200) => {
+ipcMain.handle('start-serial-monitor', async (event, port, board, baudrate = 115200, isMicroPython = board === 'BBC micro:bit') => {
   if (activeSerialProcess) {
     activeSerialProcess.kill();
     activeSerialProcess = null;
@@ -3165,7 +3165,6 @@ ipcMain.handle('start-serial-monitor', async (event, port, board, baudrate = 115
   try {
     const { spawn } = require('child_process');
     const env = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
-    const isMicroPython = board === 'ESP32 DevKit V1' || board === 'BBC micro:bit';
     const monitor = isMicroPython
       ? spawn('python', ['-m', 'mpremote', 'connect', port, 'repl'], { env })
       : spawn(findArduinoCLI(), ['monitor', '-p', port, '--config', `baudrate=${baudrate}`]);

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: robolab-esp32-compiler
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/esp32-compiler/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: ESP32_COMPILER_TOKEN
+        generateValue: true

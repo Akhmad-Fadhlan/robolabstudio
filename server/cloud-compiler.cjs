@@ -6,6 +6,7 @@
 //    real-time C++ sketch transpilation & binary image patching (XOR + SHA256 / CRC32)
 // ============================================================================
 
+const { selectArduinoSketch, needsNativeEspCompiler, nativeEspCompilerRequired } = require('./arduino-sketch.cjs');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -488,7 +489,7 @@ function patchEsp8266FirmwareBinary(rawBin, scriptText) {
   return buf;
 }
 
-async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, fqbn = '' }) {
+async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, fqbn = '', sketchPath, requireNative = false }) {
   const logs = [];
   const bLower = board.toLowerCase();
   const isEsp32 = fqbn.includes('esp32') || bLower.includes('esp32');
@@ -504,26 +505,24 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
     bLower.includes('nano') ||
     bLower.includes('mega');
 
-  let finalCode = '';
-  const extraFiles = [];
-  for (const [fname, fcontent] of Object.entries(files)) {
-    if (fname.endsWith('.ino') && typeof fcontent === 'string') {
-      if (fcontent.includes('setup(') || !finalCode) {
-        finalCode = fcontent;
-      }
-    } else if (typeof fcontent === 'string' && /\.(h|hpp|c|cpp)$/i.test(fname)) {
-      extraFiles.push({ name: path.basename(fname), content: fcontent });
-    }
+  const sketch = selectArduinoSketch(files, sketchPath);
+  if (!sketch?.[1]?.trim()) {
+    const error = 'Pilih sketch .ino yang berisi kode sebelum Verify atau Upload.';
+    return { success: false, error, logs: [{ text: error, type: 'error' }] };
   }
-  if (!finalCode) {
-    const firstVal = Object.values(files)[0];
-    finalCode = typeof firstVal === 'string' ? firstVal : 'void setup() {}\nvoid loop() {}';
+  const [filename, finalCode] = sketch;
+  const extraFiles = Object.entries(files)
+    .filter(([name, content]) => typeof content === 'string' && /\.(h|hpp|c|cpp)$/i.test(name))
+    .map(([name, content]) => ({ name: path.basename(name), content }));
+
+  if ((isEsp32 || isEsp8266) && (requireNative || needsNativeEspCompiler(finalCode, extraFiles))) {
+    return nativeEspCompilerRequired(filename);
   }
 
   // 1. Validate C++ syntax
   const syntaxCheck = validateCppSketchSyntax(finalCode);
   if (!syntaxCheck.valid) {
-    logs.push({ text: `RoboLabSketch.ino: ${syntaxCheck.error}`, type: 'error' });
+    logs.push({ text: `${filename}: ${syntaxCheck.error}`, type: 'error' });
     return {
       success: false,
       error: 'Kompilasi gagal (Syntax Error).',
@@ -593,7 +592,7 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
   if (isEsp32 || isEsp8266) {
     const binDir = findCloudBinariesDir();
     logs.push({
-      text: `☁️ [Vercel Cloud Compiler] Mengompilasi sketsa C++ untuk ${board} (${isEsp8266 ? 'xtensa-lx106-elf' : 'xtensa-esp32-elf'})...`,
+      text: `Runtime kompatibilitas RoboLab untuk ${board}: ${filename}.`,
       type: 'info',
     });
 
@@ -614,7 +613,7 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
           text: `Sketch uses ${patchedFw.length} bytes (29%) of program storage space. Maximum is 3145728 bytes.`,
           type: 'stdout',
         });
-        logs.push({ text: '✓ Kompilasi Cloud ESP32 berhasil! Siap di-flash via Web Serial.', type: 'success' });
+        logs.push({ text: 'Firmware runtime kompatibilitas ESP32 siap di-flash.', type: 'success' });
 
         return {
           success: true,
@@ -636,7 +635,7 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
           text: `Sketch uses ${patchedFw.length} bytes (27%) of program storage space. Maximum is 1044464 bytes.`,
           type: 'stdout',
         });
-        logs.push({ text: '✓ Kompilasi Cloud ESP8266 berhasil! Siap di-flash via Web Serial.', type: 'success' });
+        logs.push({ text: 'Firmware runtime kompatibilitas ESP8266 siap di-flash.', type: 'success' });
 
         return {
           success: true,

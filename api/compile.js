@@ -2,6 +2,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { compileWithCloudEngine } = require('../server/cloud-compiler.cjs');
+const { shouldUseHostedEsp32, compileHostedEsp32 } = require('../server/hosted-esp32.cjs');
 
 function readRequestBody(req) {
   if (req.body && typeof req.body === 'object') {
@@ -50,10 +51,15 @@ export default async function handler(req, res) {
 
   try {
     const body = await readRequestBody(req);
-    const result = await compileWithCloudEngine({
+    const input = {
       board: body.board || 'ESP32 DevKit V1',
       files: body.files || {},
-    });
+      sketchPath: body.sketchPath,
+      requireNative: body.requireNative === true,
+    };
+    const result = shouldUseHostedEsp32(input)
+      ? await compileHostedEsp32(input, req.headers?.authorization, body.action)
+      : await compileWithCloudEngine(input);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(result));

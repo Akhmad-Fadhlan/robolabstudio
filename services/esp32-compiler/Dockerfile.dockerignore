@@ -1,0 +1,7 @@
+**
+!services
+!services/esp32-compiler
+!services/esp32-compiler/Dockerfile
+!services/esp32-compiler/service.cjs
+!server
+!server/arduino-sketch.cjs

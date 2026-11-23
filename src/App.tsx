@@ -72,7 +72,7 @@ import {
 import './App.css';
 import { arduinoToBlocklyXml, arduinoToPython } from './utils/arduinoToBlocks';
 import { pythonToBlocklyXml } from './utils/pythonToBlocks';
-import { sourceFileToBlockly } from './utils/sourceFileBlocks';
+import { hasNativeOnlyArduinoCode, sourceFileToBlockly } from './utils/sourceFileBlocks';
 import { fileExtension, isBlockSourceFile, isCppSourceFile, isPythonSourceFile, openableFileExtensions } from './utils/sourceFileTypes';
 import { convertArduinoCodeToBlocklyXmlWithGemini } from './services/geminiLibraryService';
 import { findKnownLibrary } from './data/knownLibrarySignatures';
@@ -3809,6 +3809,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       localStorage.setItem('robolab_workspaceXmls', JSON.stringify(workspaceXmls));
     }
   }, [workspaceXmls]);
+  const canSyncActiveSource = (fileExtension(activeFile) === 'ino' || isPythonSourceFile(activeFile))
+    && !isMicrobitModulePath(activeFile)
+    && !workspaceXmls[activeFile]?.includes('type="imported_source_preview"')
+    && (fileExtension(activeFile) !== 'ino' || !hasNativeOnlyArduinoCode(files[activeFile] ?? ''));
   const [learningLessonLoadedCount, setLearningLessonLoadedCount] = useState(0);
 
   // ==========================================================================
@@ -7807,19 +7811,27 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       return;
     }
 
-    let activeCode = files[activeFile] || '';
     const microbitModules = board === 'BBC micro:bit' ? getMicrobitModules(files) : {};
-    if (board === 'BBC micro:bit') {
-      activeCode = files['python/main.py'] ?? files['main.py'] ??
-        Object.entries(files).find(([name]) => name.endsWith('.py') && !isMicrobitModulePath(name))?.[1] ?? '';
-    } else if (!activeFile.toLowerCase().endsWith('.ino')) {
-      // If user is currently editing a .h, .cpp, or .c file, find the primary .ino sketch file
-      const mainInoKey = Object.keys(files).find(f => f.toLowerCase().endsWith('.ino'));
-      if (mainInoKey && files[mainInoKey]) {
-        activeCode = files[mainInoKey];
-      }
+    const isPython = board === 'BBC micro:bit' || isPythonSourceFile(activeFile);
+    const sketchPath = fileExtension(activeFile) === 'ino' ? activeFile
+      : ['firmware/main.ino', 'main.ino'].find(name => Object.hasOwn(files, name))
+        ?? Object.keys(files).find(name => fileExtension(name) === 'ino');
+    const pythonPath = isPythonSourceFile(activeFile) && !isMicrobitModulePath(activeFile) ? activeFile
+      : ['python/main.py', 'main.py'].find(name => Object.hasOwn(files, name))
+        ?? Object.keys(files).find(name => isPythonSourceFile(name) && !isMicrobitModulePath(name));
+    const sourcePath = isPython ? pythonPath : sketchPath;
+    let activeCode = sourcePath ? files[sourcePath] ?? '' : '';
+    const fileExt = isPython ? 'py' : 'ino';
+    const requireNative = !isPython && sketchPath !== undefined && syncStatuses[sketchPath] !== true;
+    const baudMatch = !isPython && activeCode.match(/\bSerial\s*\.\s*begin\s*\(\s*(\d+)\s*[,)]/);
+    const uploadBaudrate = baudMatch ? Number(baudMatch[1]) : board === 'BBC micro:bit' ? 115200 : serialBaudrate;
+    if (action !== 'flash-firmware' && !activeCode.trim()) {
+      const message = isPython ? 'Buka program Python sebelum Verify atau Upload.' : 'Buka sketch .ino sebelum Verify atau Upload.';
+      setIsTerminalCollapsed(false);
+      setTerminalTab('terminal');
+      setInteractiveTerminalLogs(previous => [...previous, { text: message, type: 'error' }]);
+      return;
     }
-    const fileExt = board === 'BBC micro:bit' ? 'py' : activeFile.split('.').pop() || 'ino';
 
     const urlEncodeHelperCode = `#include <Arduino.h>\nstatic inline String urlEncode(String str) {
   String encodedString = "";
@@ -7891,6 +7903,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       setInteractiveTerminalLogs([]);
       if (action === 'upload') {
         setSerialRawOutput('');
+        setSerialBaudrate(uploadBaudrate);
       }
       setBuildProgress(5);
       setBuildStatusText(
@@ -7912,9 +7925,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           board,
           port,
           fileExt,
-          files: board === 'BBC micro:bit'
-            ? { ...files, 'main.py': activeCode }
-            : preparedFiles,
+          sketchPath,
+          requireNative,
+          files: isPython ? { ...files, 'main.py': activeCode } : preparedFiles,
           forceMicrobitHex: useDesktopMicrobitHex,
           onLog: (log) => {
             setTerminalLogs(prev => [...prev, log]);
@@ -7957,13 +7970,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               const targetPortAddr = webRes.selectedPort || port;
               const started = await startWebSerialMonitor(
                 targetPortAddr,
-                board === 'BBC micro:bit' ? 115200 : serialBaudrate,
+                uploadBaudrate,
                 (chunk: string) => setSerialRawOutput(prev => (prev + chunk).slice(-50000)),
                 () => setIsSerialConnected(false)
               );
               if (started.success) {
                 setIsSerialConnected(true);
                 setConnectedPort(started.address || targetPortAddr);
+                setTerminalTab('serial');
+              } else {
+                const message = started.error || 'Gagal membuka Serial Monitor.';
+                setInteractiveTerminalLogs(previous => [...previous, { text: message, type: 'error' }]);
               }
             }, 800);
           }
@@ -7989,7 +8006,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
 
     isHardwareActionRef.current = true;
+    setIsTerminalCollapsed(false);
     setTerminalTab('terminal');
+    if (action === 'upload') {
+      setSerialRawOutput('');
+      setSerialBaudrate(uploadBaudrate);
+    }
     setTerminalLogs([]);
     setInteractiveTerminalLogs([]);
     setBuildProgress(10);
@@ -8005,12 +8027,13 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         console.warn('Could not stop serial monitor (might not be registered yet):', serialErr);
       }
 
-      const targetBoardArg = (board === 'ESP32 DevKit V1' || (board || '').toLowerCase().includes('esp32')) 
+      const targetBoardArg = !isPython && board.toLowerCase().includes('esp32')
         ? 'esp32:esp32:esp32:PartitionScheme=huge_app,UploadSpeed=921600' 
         : board;
 
       const result = await electron.ipcRenderer.invoke('arduino-upload', {
         code: activeCode,
+        sketchPath: sourcePath,
         board: targetBoardArg,
         port,
         action,
@@ -8027,13 +8050,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           const statusMsg = '📡 Program berhasil diunggah dan sedang berjalan di board! Buka tab "Serial Monitor" jika ingin melihat output Serial.';
           setTerminalLogs(prev => [...prev, { text: statusMsg, type: 'info' }]);
           setInteractiveTerminalLogs(prev => [...prev, { text: statusMsg, type: 'output' }]);
-          setTimeout(() => {
+          setTimeout(async () => {
             try {
-              const electron = req('electron');
-              electron.ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate);
+              const result = await electron.ipcRenderer.invoke('start-serial-monitor', port, board, uploadBaudrate, isPython);
+              if (!result.success) throw new Error(result.error || 'Gagal membuka Serial Monitor.');
               setIsSerialConnected(true);
               setConnectedPort(port);
-            } catch(e) {}
+              setTerminalTab('serial');
+            } catch (err) {
+              setInteractiveTerminalLogs(previous => [...previous, { text: err instanceof Error ? err.message : 'Gagal membuka Serial Monitor.', type: 'error' }]);
+            }
           }, 800);
         }
       } else {
@@ -9678,7 +9704,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 headers: p.headers,
                                 isCustom: p.isCustom
                               }))}
-                              isSyncWithBlocks={(fileExtension(activeFile) === 'ino' || isPythonSourceFile(activeFile)) && syncStatuses[activeFile] === true}
+                              isSyncWithBlocks={canSyncActiveSource && syncStatuses[activeFile] === true}
                               workspaceXml={workspaceXmls[activeFile] ?? (
                                 ['firmware/main.ino', 'python/main.py'].includes(activeFile)
                                   ? workspaceXmls['firmware/main.ino'] || workspaceXmls['python/main.py'] || null
@@ -9699,7 +9725,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               }}
                               onCodeChange={(newCode, otherCode) => {
                                 if (isMicrobitModulePath(activeFile) || (board === 'BBC micro:bit' && !isPythonSourceFile(activeFile))) return;
-                                if ((fileExtension(activeFile) !== 'ino' && !isPythonSourceFile(activeFile)) || syncStatuses[activeFile] === false) {
+                                if (!canSyncActiveSource || syncStatuses[activeFile] === false) {
                                   return;
                                 }
                                 const currentCode = files[activeFile] || '';
@@ -9733,7 +9759,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   } : {})
                                 }));
                               }}
-                              onSyncToCode={(fileExtension(activeFile) === 'ino' || isPythonSourceFile(activeFile)) && !isMicrobitModulePath(activeFile) ? (arduinoCode, pythonCode) => {
+                              onSyncToCode={canSyncActiveSource ? (arduinoCode, pythonCode) => {
                                 if (board === 'BBC micro:bit') {
                                   const path = isPythonSourceFile(activeFile) ? activeFile : 'python/main.py';
                                   setFiles(prev => ({ ...prev, [path]: pythonCode }));
@@ -9809,8 +9835,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               files={files}
                               activeFile={activeFile}
                               onSaveFile={handleSaveFile}
-                              isSyncWithBlocks={(fileExtension(activeFile) === 'ino' || isPythonSourceFile(activeFile)) && syncStatuses[activeFile] === true}
+                              isSyncWithBlocks={canSyncActiveSource && syncStatuses[activeFile] === true}
                               onSyncToggle={(sync) => {
+                                if (sync && !canSyncActiveSource) {
+                                  setIsTerminalCollapsed(false);
+                                  setTerminalTab('terminal');
+                                  setInteractiveTerminalLogs(previous => [...previous, {
+                                    text: 'Sketch ini memuat kode yang hanya tersedia di editor. Gunakan Verify atau Upload untuk menjalankan kode lengkap.',
+                                    type: 'output',
+                                  }]);
+                                  return;
+                                }
                                 const pyFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'python/main.py' : activeFile.replace(/\.(ino|hex)$/i, '.py');
                                 const inoFile = (activeFile === 'firmware/main.ino' || activeFile === 'python/main.py') ? 'firmware/main.ino' : activeFile.replace(/\.py$/i, '.ino');
                                 if (sync) {

@@ -13,16 +13,21 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, execSync } = require('child_process');
+const { selectArduinoSketch } = require('./arduino-sketch.cjs');
 
 const PORT = Number(process.env.PORT) || 3001;
 
 // Locate bundled arduino-cli.exe (works from root or from robolab-web subfolder)
 function getArduinoCliPath() {
+  if (process.platform !== 'win32') return 'arduino-cli';
   const candidates = [
     path.join(__dirname, '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
     path.join(__dirname, '..', '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
     path.join(process.cwd(), 'resources', 'bin', 'win32', 'arduino-cli.exe'),
     path.join(process.env.LOCALAPPDATA || '', 'Arduino15', 'arduino-cli.exe'),
+    ...[process.env.ProgramFiles, path.join(process.env.LOCALAPPDATA || '', 'Programs')]
+      .filter(Boolean)
+      .map(dir => path.join(dir, 'Arduino IDE', 'resources', 'app', 'lib', 'backend', 'resources', 'arduino-cli.exe')),
     'C:\\Program Files\\Arduino CLI\\arduino-cli.exe',
   ];
   for (const c of candidates) {
@@ -346,7 +351,7 @@ function hasLocalArduinoCli() {
 }
 
 async function _executeCompileRequest(body) {
-  const { board = 'ESP32 DevKit V1', files = {} } = body || {};
+  const { board = 'ESP32 DevKit V1', files = {}, sketchPath, requireNative } = body || {};
   const logs = [];
   const fqbn = resolveFqbn(board);
   const bLower = board.toLowerCase();
@@ -356,10 +361,16 @@ async function _executeCompileRequest(body) {
   // If running on Vercel Serverless or no local arduino-cli binary is installed, use Serverless Cloud Compiler
   if (!hasLocalArduinoCli()) {
     const { compileWithCloudEngine } = require('./cloud-compiler.cjs');
-    return compileWithCloudEngine({ board, files, fqbn });
+    return compileWithCloudEngine({ board, files, fqbn, sketchPath, requireNative });
   }
 
-  logs.push({ text: `☁️ [RoboLab Cloud Compiler] Target Board: ${board} (${fqbn})`, type: 'info' });
+  const sketch = selectArduinoSketch(files, sketchPath);
+  if (!sketch?.[1]?.trim()) {
+    const error = 'Pilih sketch .ino yang berisi kode sebelum Verify atau Upload.';
+    return { success: false, error, logs: [{ text: error, type: 'error' }] };
+  }
+  const [filename, source] = sketch;
+  logs.push({ text: `Arduino CLI • ${filename} • ${board} (${fqbn})`, type: 'info' });
 
   // Match Electron's exact sketch directory (RoboLabSketch / RoboLabSketch.ino) so build.options.json cache stays valid!
   const tempDir = path.join(os.tmpdir(), 'RoboLabSketch');
@@ -375,18 +386,7 @@ async function _executeCompileRequest(body) {
     }
   } catch {}
 
-  let finalCode = '';
-  for (const [fname, fcontent] of Object.entries(files)) {
-    if (fname.endsWith('.ino') && typeof fcontent === 'string') {
-      if (fcontent.includes('setup(') || !finalCode) {
-        finalCode = fcontent;
-      }
-    }
-  }
-  if (!finalCode) {
-    const firstVal = Object.values(files)[0];
-    finalCode = typeof firstVal === 'string' ? firstVal : 'void setup() {}\nvoid loop() {}';
-  }
+  let finalCode = source;
 
   // ESP32 compatibility transforms
   if (isEsp32) {

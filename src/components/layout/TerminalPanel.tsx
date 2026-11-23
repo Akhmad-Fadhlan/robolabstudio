@@ -1,3 +1,4 @@
+import { isPythonSourceFile } from '../../utils/sourceFileTypes';
 import React, { useState, useRef, useEffect, type FormEvent, type UIEvent } from 'react';
 import {
   Activity, BookOpen, Bot, Cable, Check, ChevronDown, ChevronRight, Copy,
@@ -360,7 +361,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       } else {
         if (desktopRequire && (!port || port === 'none')) throw new Error('Pilih port board di toolbar proyek terlebih dahulu.');
         const result = desktopRequire
-          ? await desktopRequire('electron').ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate)
+          ? await desktopRequire('electron').ipcRenderer.invoke('start-serial-monitor', port, board, serialBaudrate, board === 'BBC micro:bit' || isPythonSourceFile(activeFileName ?? ''))
           : await startWebSerialMonitor(port, serialBaudrate, chunk => {
             setSerialRawOutput(prev => (prev + chunk).slice(-50000));
           }, () => setIsSerialConnected(false));
