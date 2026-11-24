@@ -462,12 +462,16 @@ function patchEsp8266FirmwareBinary(rawBin, scriptText) {
   // Ensure DOUT flash mode (0x03) at byte 2 of eboot header and app header (4096+2)
   if (buf[0] === 0xe9) buf[2] = 0x03;
 
+  // Recompute eboot CRC32 over entire binary (with CRC fields temporarily zeroed)
   const crcSizeOffset = 4096 + 16;
   const crcValOffset = 4096 + 20;
   buf.writeUInt32LE(0, crcSizeOffset);
   buf.writeUInt32LE(0, crcValOffset);
+  const crc = crc8266(buf);
+  buf.writeUInt32LE(buf.length, crcSizeOffset);
+  buf.writeUInt32LE(crc, crcValOffset);
 
-  // Recompute app XOR checksum across segments at offset 4096
+  // Recompute app XOR checksum across segments at offset 4096 (MUST be done after CRC values are written!)
   const segCount = buf[4097];
   let pos = 4096 + 8;
   let chk = 0xef;
@@ -480,11 +484,6 @@ function patchEsp8266FirmwareBinary(rawBin, scriptText) {
     pos += segLen;
   }
   buf[buf.length - 1] = chk;
-
-  // Recompute eboot CRC32 over entire binary
-  const crc = crc8266(buf);
-  buf.writeUInt32LE(buf.length, crcSizeOffset);
-  buf.writeUInt32LE(crc, crcValOffset);
 
   return buf;
 }
