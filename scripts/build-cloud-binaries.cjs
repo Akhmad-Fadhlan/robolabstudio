@@ -395,12 +395,14 @@ static void executeBlock(String* lines, int startIdx, int endIdx) {
         Serial.print(WiFi.RSSI());
         Serial.println(" dBm");
 
-        IPAddress blynkIP;
-        if (!WiFi.hostByName(host.c_str(), blynkIP)) {
-          blynkIP = IPAddress(128, 199, 144, 129);
+        Serial.println("Connecting to Blynk Cloud...");
+        Blynk.config(auth.c_str(), host.c_str(), port);
+        if (!Blynk.connect(7000)) {
+          Serial.println("Mencoba jalur kluster langsung (sgp1.blynk.cloud)...");
+          Blynk.config(auth.c_str(), "sgp1.blynk.cloud", port);
+          Blynk.connect(7000);
         }
-        Blynk.config(auth.c_str(), blynkIP, port);
-        if (Blynk.connect(7000)) {
+        if (Blynk.connected()) {
           Serial.println("✓ [BLYNK] Connected to Blynk Cloud! Status: ONLINE 🎉");
           g_blynkActive = true;
         } else {

@@ -38,16 +38,16 @@ function isRemoteWebOrigin(): boolean {
   return h !== 'localhost' && h !== '127.0.0.1' && !h.startsWith('192.168.');
 }
 
-async function checkLocalBridgeAvailable(): Promise<boolean> {
+export async function checkLocalBridgeAvailable(forceRefresh: boolean = false): Promise<boolean> {
   const now = Date.now();
-  if (now - _localBridgeCache.checkedAt < 8000) {
+  if (!forceRefresh && now - _localBridgeCache.checkedAt < 5000) {
     return _localBridgeCache.available;
   }
   const urls = [`${COMPILE_SERVER_URL}/api/health`, 'http://127.0.0.1:3001/api/health'];
   for (const url of urls) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 500);
+      const timer = setTimeout(() => ctrl.abort(), 1500);
       const resp = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (resp.ok) {

@@ -128,6 +128,7 @@ import {
   openFileInBrowser,
   openFolderInBrowser,
   downloadFileInBrowser,
+  checkLocalBridgeAvailable,
 } from './services/webSerialService';
 
 // const DEFAULT_FILES = {};
@@ -3436,7 +3437,32 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showCompilerBridgeModal, setShowCompilerBridgeModal] = useState(false);
+  const [isLocalBridgeOnline, setIsLocalBridgeOnline] = useState(false);
+  const [isCheckingBridge, setIsCheckingBridge] = useState(false);
   const [appVersion, setAppVersion] = useState('0.8.0');
+
+  const checkBridgeStatus = useCallback(async (force = false) => {
+    setIsCheckingBridge(true);
+    try {
+      const ok = await checkLocalBridgeAvailable(force);
+      setIsLocalBridgeOnline(ok);
+      return ok;
+    } catch {
+      setIsLocalBridgeOnline(false);
+      return false;
+    } finally {
+      setIsCheckingBridge(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkBridgeStatus();
+    const timer = setInterval(() => {
+      checkBridgeStatus();
+    }, 7000);
+    return () => clearInterval(timer);
+  }, [checkBridgeStatus]);
 
   // ── Trial System ──────────────────────────────────────────────────────────
   const [trialStatus, setTrialStatus] = useState<TrialStatus>({
@@ -11165,6 +11191,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           <span>Bound: {currentTab === 'simulator' ? `${simBoard} (Sim)` : board}</span>
           <span>Port: {port || 'Web Serial'}</span>
           <span>Baudrate: {serialBaudrate}</span>
+          <button
+            type="button"
+            onClick={() => setShowCompilerBridgeModal(true)}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition font-sans ${
+              isLocalBridgeOnline
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20'
+            }`}
+            title={isLocalBridgeOnline ? 'RoboLab Compiler Bridge Aktif (Port 3001)' : 'Pasang RoboLab Compiler Bridge (Ringan ~27MB)'}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isLocalBridgeOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+            <span>{isLocalBridgeOnline ? '⚡ Compiler Lokal: Aktif' : '⚡ Pasang Compiler Lokal'}</span>
+          </button>
         </div>
         <div className="flex items-center gap-3">
           <span>Ln 15, Col 25</span>
@@ -12092,6 +12131,108 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
               <span className="text-[10px] text-slate-500">Engine: Electron + React · &copy; 2026 RoboLab Studio</span>
               <button onClick={() => setShowAboutModal(false)} className="text-[10px] font-bold text-white px-4 py-1.5 rounded-xl transition cursor-pointer shadow-md" style={{ background: 'var(--accent-gradient)' }}>
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ROBOLAB COMPILER BRIDGE MODAL */}
+      {showCompilerBridgeModal && (
+        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
+          <div className="glass-panel rounded-2xl p-6 w-[520px] max-w-[92vw] flex flex-col gap-4 shadow-2xl relative overflow-hidden"
+          style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
+            {/* Header */}
+            <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚡</span>
+                <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>RoboLab Compiler Bridge</h3>
+              </div>
+              <button onClick={() => setShowCompilerBridgeModal(false)} className={`transition cursor-pointer p-1 rounded-lg ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Status Card */}
+            <div className={`p-4 rounded-xl border flex items-center justify-between ${
+              isLocalBridgeOnline
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+            }`}>
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full ${isLocalBridgeOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                <div>
+                  <h4 className="font-bold text-sm">
+                    {isLocalBridgeOnline ? 'Bridge Aktif (Port 3001)' : 'Bridge Belum Aktif'}
+                  </h4>
+                  <p className="text-xs opacity-80">
+                    {isLocalBridgeOnline
+                      ? 'RoboLab Web terhubung dengan compiler native lokal. Blynk & semua sketch C++ berjalan 100% lancar.'
+                      : 'Nyalakan bridge lokal untuk kompilasi native instan tanpa limit server.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isCheckingBridge}
+                onClick={() => checkBridgeStatus(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 transition cursor-pointer shrink-0"
+              >
+                {isCheckingBridge ? 'Memeriksa…' : 'Cek Ulang'}
+              </button>
+            </div>
+
+            {/* Download & Installation Guide */}
+            <div className={`rounded-xl p-4 border text-xs flex flex-col gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'}`}>
+              <div className="font-bold text-sm flex items-center gap-1.5">
+                <span>📦</span> Unduh Installer Compiler Bridge (Hanya ~27 MB)
+              </div>
+              <p className="text-xs leading-relaxed opacity-90">
+                Compiler Bridge adalah aplikasi ringan yang berjalan di komputer Anda. Memberikan kemampuan kompilasi native <strong>Blynk IoT, ESP8266, ESP32, dan Arduino</strong> ke RoboLab Web browser, persis seperti di aplikasi desktop.
+              </p>
+
+              <div className="flex gap-2 pt-1">
+                <a
+                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
+                  download="RoboLab-Compiler-Bridge-Setup.exe"
+                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/20 transition cursor-pointer"
+                >
+                  <span>⬇️ Unduh Installer (.exe)</span>
+                </a>
+                <a
+                  href="/downloads/RoboLab-Compiler-Bridge-Setup.zip"
+                  download="RoboLab-Compiler-Bridge-Setup.zip"
+                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs transition cursor-pointer"
+                >
+                  <span>📁 ZIP Portable</span>
+                </a>
+              </div>
+
+              {/* Steps */}
+              <div className="pt-2 border-t border-slate-700/20 space-y-1.5 text-[11px]">
+                <div className="font-semibold text-slate-400">Langkah Pemasangan 1-Menit:</div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-400">1.</span>
+                  <span>Klik tombol unduh di atas (installer otomatis <strong>RoboLab-Compiler-Bridge-Setup.exe</strong>).</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-400">2.</span>
+                  <span>Jalankan installer. Otomatis membuat shortcut di Desktop dan menyalakan bridge.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-400">3.</span>
+                  <span>Indikator di RoboLab Web otomatis hijau dan Anda siap mengompilasi proyek IoT Blynk!</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCompilerBridgeModal(false)}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer"
+              >
                 Tutup
               </button>
             </div>

@@ -25,3 +25,8 @@ dist-ssr
 *.sw?
 
 robolab-web/
+public/downloads/
+tools/robolab-compiler-bridge/bin/
+tools/robolab-compiler-bridge/arduino-data/
+tools/robolab-compiler-bridge/drivers/
+
