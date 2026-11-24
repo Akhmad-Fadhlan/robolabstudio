@@ -6273,8 +6273,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
             code += `${indent}  _blynkIP = IPAddress(128, 199, 144, 129);\n`;
             code += `${indent}}\n`;
             code += `${indent}Blynk.config(BLYNK_AUTH_TOKEN, _blynkIP, 80);\n`;
-            code += `${indent}if (Blynk.connect(7000)) {\n`;
-            code += `${indent}  Serial.println("Connected to Blynk!");\n`;
+            code += `${indent}if (Blynk.connect(10000)) {\n`;
+            code += `${indent}  Serial.println("✓ Connected to Blynk! Status: ONLINE 🎉");\n`;
             code += `${indent}} else {\n`;
             code += `${indent}  Serial.println("Blynk connection pending (retrying in loop)...");\n`;
             code += `${indent}}\n`;
@@ -6366,8 +6366,8 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}  _blynkIP = IPAddress(128, 199, 144, 129);\n`;
           code += `${indent}}\n`;
           code += `${indent}Blynk.config(${auth}, _blynkIP, 80);\n`;
-          code += `${indent}if (Blynk.connect(7000)) {\n`;
-          code += `${indent}  Serial.println("Connected to Blynk!");\n`;
+          code += `${indent}if (Blynk.connect(10000)) {\n`;
+          code += `${indent}  Serial.println("✓ Connected to Blynk! Status: ONLINE 🎉");\n`;
           code += `${indent}} else {\n`;
           code += `${indent}  Serial.println("Blynk connection pending (retrying in loop)...");\n`;
           code += `${indent}}\n`;
@@ -6376,13 +6376,24 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
         }
       } else if (currentBlock.type === 'blynk_run') {
         if (lang === 'arduino') {
+          code += `${indent}static bool _blynkWasConnected = false;\n`;
           code += `${indent}if (Blynk.connected()) {\n`;
+          code += `${indent}  if (!_blynkWasConnected) {\n`;
+          code += `${indent}    _blynkWasConnected = true;\n`;
+          code += `${indent}    Serial.println("✓ Connected to Blynk! Status: ONLINE 🎉");\n`;
+          code += `${indent}  }\n`;
           code += `${indent}  Blynk.run();\n`;
-          code += `${indent}} else if (WiFi.status() == WL_CONNECTED) {\n`;
-          code += `${indent}  static unsigned long _lastBlynkRetry = 0;\n`;
-          code += `${indent}  if (millis() - _lastBlynkRetry > 5000) {\n`;
-          code += `${indent}    _lastBlynkRetry = millis();\n`;
-          code += `${indent}    Blynk.connect(2000);\n`;
+          code += `${indent}} else {\n`;
+          code += `${indent}  if (_blynkWasConnected) {\n`;
+          code += `${indent}    _blynkWasConnected = false;\n`;
+          code += `${indent}    Serial.println("⚠️ Blynk terputus, mencoba menyambung kembali...");\n`;
+          code += `${indent}  }\n`;
+          code += `${indent}  if (WiFi.status() == WL_CONNECTED) {\n`;
+          code += `${indent}    static unsigned long _lastBlynkRetry = 0;\n`;
+          code += `${indent}    if (millis() - _lastBlynkRetry > 4000) {\n`;
+          code += `${indent}      _lastBlynkRetry = millis();\n`;
+          code += `${indent}      Blynk.connect(3000);\n`;
+          code += `${indent}    }\n`;
           code += `${indent}  }\n`;
           code += `${indent}}\n`;
         } else {
