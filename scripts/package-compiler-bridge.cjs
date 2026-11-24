@@ -29,6 +29,22 @@ if (fs.existsSync(cliSrc)) {
   fs.copyFileSync(cliSrc, path.join(binDir, 'arduino-cli.exe'));
 }
 
+// Compile RoboLabBridge.exe (System Tray companion app)
+const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+const traySrc = path.join(rootDir, 'scripts', 'RoboLabBridgeTray.cs');
+const trayExe = path.join(bridgeDir, 'RoboLabBridge.exe');
+if (fs.existsSync(cscPath) && fs.existsSync(traySrc)) {
+  console.log('      * Compiling RoboLabBridge.exe (System Tray Companion)...');
+  try {
+    execSync(
+      `"${cscPath}" /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:"${trayExe}" "${traySrc}"`,
+      { stdio: 'inherit' }
+    );
+  } catch (err) {
+    console.error('Failed to compile RoboLabBridge.exe:', err.message);
+  }
+}
+
 // Copy essential libraries (Blynk, Adafruit, DHT, WiFi, etc.)
 console.log('[2/4] Copying essential Arduino libraries (Blynk, Adafruit, DHT, Servo)...');
 const libSrc = path.join(rootDir, 'resources', 'arduino-data', 'libraries');
@@ -87,7 +103,6 @@ try {
 }
 
 // Compile standalone .exe installer using csc.exe
-const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
 const exeOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Setup.exe');
 const installerCs = path.join(rootDir, 'scripts', 'Installer.cs');
 if (fs.existsSync(cscPath) && fs.existsSync(installerCs) && fs.existsSync(zipOutput)) {

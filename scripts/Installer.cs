@@ -196,6 +196,12 @@ namespace RoboLabBridgeInstaller
 
                             // 5. Create Desktop & Start Menu Shortcut
                             appendLog("[5/5] Membuat pintasan di Desktop & Start Menu...");
+                            string exeTarget = Path.Combine(targetDir, "RoboLabBridge.exe");
+                            if (!File.Exists(exeTarget))
+                            {
+                                exeTarget = Path.Combine(targetDir, "start-bridge.bat");
+                            }
+
                             try
                             {
                                 Type shellType = Type.GetTypeFromProgID("WScript.Shell");
@@ -205,7 +211,7 @@ namespace RoboLabBridgeInstaller
                                     string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                                     string linkPath = Path.Combine(desktop, "RoboLab Compiler Bridge.lnk");
                                     dynamic shortcut = shell.CreateShortcut(linkPath);
-                                    shortcut.TargetPath = Path.Combine(targetDir, "start-bridge.bat");
+                                    shortcut.TargetPath = exeTarget;
                                     shortcut.WorkingDirectory = targetDir;
                                     shortcut.Description = "RoboLab Studio - Local Compiler Bridge";
                                     shortcut.Save();
@@ -213,7 +219,7 @@ namespace RoboLabBridgeInstaller
                                     string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
                                     string progLink = Path.Combine(programs, "RoboLab Compiler Bridge.lnk");
                                     dynamic shortcut2 = shell.CreateShortcut(progLink);
-                                    shortcut2.TargetPath = Path.Combine(targetDir, "start-bridge.bat");
+                                    shortcut2.TargetPath = exeTarget;
                                     shortcut2.WorkingDirectory = targetDir;
                                     shortcut2.Description = "RoboLab Studio - Local Compiler Bridge";
                                     shortcut2.Save();
@@ -225,15 +231,14 @@ namespace RoboLabBridgeInstaller
                                 appendLog("      [!] Gagal membuat shortcut: " + ex.Message);
                             }
 
-                            // 6. Launch start-bridge.bat
+                            // 6. Launch RoboLabBridge.exe (Background Tray)
                             appendLog("--------------------------------------------------");
                             appendLog("Menjalankan RoboLab Compiler Bridge...");
-                            string startBat = Path.Combine(targetDir, "start-bridge.bat");
-                            if (File.Exists(startBat))
+                            if (File.Exists(exeTarget))
                             {
                                 var psi = new ProcessStartInfo()
                                 {
-                                    FileName = startBat,
+                                    FileName = exeTarget,
                                     WorkingDirectory = targetDir,
                                     UseShellExecute = true
                                 };
@@ -242,8 +247,10 @@ namespace RoboLabBridgeInstaller
 
                             appendLog("==================================================");
                             appendLog("  PEMASANGAN SELESAI!");
-                            appendLog("  Bridge aktif di http://localhost:3001");
-                            appendLog("  RoboLab Web siap mengompilasi secara native!");
+                            appendLog("  Status: AKTIF di http://localhost:3001");
+                            appendLog("  Ikon aktif di System Tray (pojok kanan bawah jam).");
+                            appendLog("  Menutup jendela ini TIDAK akan mematikan server.");
+                            appendLog("  RoboLab Web siap digunakan kapan saja!");
                             appendLog("==================================================");
 
                             if (form.InvokeRequired)

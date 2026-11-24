@@ -57,12 +57,15 @@ if "!CP2102_EXISTS!"=="1" (
 )
 
 echo [5/5] Membuat pintasan (shortcut) di Desktop dan Start Menu...
+set "EXE_TARGET=%TARGET_DIR%\RoboLabBridge.exe"
+if not exist "!EXE_TARGET!" set "EXE_TARGET=%TARGET_DIR%\start-bridge.bat"
+
 set "VBS_SCRIPT=%TEMP%\create_robolab_shortcut.vbs"
 (
     echo Set oWS = WScript.CreateObject^("WScript.Shell"^)
     echo sLinkFile = oWS.SpecialFolders^("Desktop"^) ^& "\RoboLab Compiler Bridge.lnk"
     echo Set oLink = oWS.CreateShortcut^(sLinkFile^)
-    echo oLink.TargetPath = "%TARGET_DIR%\start-bridge.bat"
+    echo oLink.TargetPath = "!EXE_TARGET!"
     echo oLink.WorkingDirectory = "%TARGET_DIR%"
     echo oLink.Description = "RoboLab Studio - Local Compiler Bridge"
     echo oLink.WindowStyle = 1
@@ -71,7 +74,7 @@ set "VBS_SCRIPT=%TEMP%\create_robolab_shortcut.vbs"
     echo sPrograms = oWS.SpecialFolders^("Programs"^)
     echo sLinkFile2 = sPrograms ^& "\RoboLab Compiler Bridge.lnk"
     echo Set oLink2 = oWS.CreateShortcut^(sLinkFile2^)
-    echo oLink2.TargetPath = "%TARGET_DIR%\start-bridge.bat"
+    echo oLink2.TargetPath = "!EXE_TARGET!"
     echo oLink2.WorkingDirectory = "%TARGET_DIR%"
     echo oLink2.Description = "RoboLab Studio - Local Compiler Bridge"
     echo oLink2.Save
@@ -84,11 +87,11 @@ echo =====================================================================
 echo  PEMASANGAN BERHASIL! [SUKSES]
 echo.
 echo  Pintasan "RoboLab Compiler Bridge" telah dibuat di Desktop Anda.
-echo  Cukup klik ganda pintasan tersebut kapan saja ingin mengompilasi
-echo  proyek Arduino/ESP8266/ESP32 langsung dari browser RoboLab Web!
+echo  Bridge berjalan di latar belakang (ikon di System Tray dekat jam).
+echo  Menutup jendela ini TIDAK akan mematikan server compiler!
 echo =====================================================================
 echo.
 set /p "LAUNCH=Jalankan RoboLab Compiler Bridge sekarang? (Y/N): "
 if /i "!LAUNCH!"=="Y" (
-    start "" "%TARGET_DIR%\start-bridge.bat"
+    start "" "!EXE_TARGET!"
 )
