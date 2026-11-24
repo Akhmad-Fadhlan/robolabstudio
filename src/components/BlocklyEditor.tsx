@@ -6395,7 +6395,7 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
           code += `${indent}    if (millis() - _lastBlynkRetry > 4000) {\n`;
           code += `${indent}      _lastBlynkRetry = millis();\n`;
           code += `${indent}      if (!Blynk.connect(3000)) {\n`;
-          code += `${indent}        Blynk.config(${auth}, "sgp1.blynk.cloud", 80);\n`;
+          code += `${indent}        Blynk.config(BLYNK_AUTH_TOKEN, "sgp1.blynk.cloud", 80);\n`;
           code += `${indent}      }\n`;
           code += `${indent}    }\n`;
           code += `${indent}  }\n`;

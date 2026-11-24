@@ -62,6 +62,8 @@ interface TopMenuBarProps {
   language: LangCode;
   onLanguageChange: (lang: LangCode) => void;
   onRequestWebPort?: () => void;
+  isLocalBridgeOnline?: boolean;
+  onOpenCompilerBridge?: () => void;
 }
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({
@@ -101,6 +103,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
   language,
   onLanguageChange,
   onRequestWebPort,
+  isLocalBridgeOnline = false,
+  onOpenCompilerBridge,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -231,6 +235,41 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`} />
                   <span className={`hidden xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
                 </button>
+
+                {!isLocalBridgeOnline ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = '/downloads/RoboLab-Compiler-Bridge-Setup.exe';
+                      link.download = 'RoboLab-Compiler-Bridge-Setup.exe';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      onOpenCompilerBridge?.();
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm border ${
+                      isDark
+                        ? 'bg-amber-500/20 hover:bg-amber-500/35 text-amber-300 border-amber-500/40'
+                        : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
+                    }`}
+                    title="Pasang RoboLab Compiler Bridge (.exe) untuk kompilasi lokal instan (Blynk IoT & ESP) + Driver CH340/CP2102 otomatis"
+                  >
+                    <span className="text-amber-400 font-extrabold text-xs">⚡</span>
+                    <span className="hidden sm:inline font-bold">Install Bridge (.exe)</span>
+                    <span className="sm:hidden font-bold">Bridge</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onOpenCompilerBridge}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition cursor-pointer flex-shrink-0"
+                    title="RoboLab Compiler Bridge Aktif di Port 3001 (Kompilasi C++ & Blynk 100% Native Lokal)"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="hidden sm:inline">Bridge Aktif</span>
+                  </button>
+                )}
               </>
             )}
 

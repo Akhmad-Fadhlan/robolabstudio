@@ -43,7 +43,7 @@ export async function checkLocalBridgeAvailable(forceRefresh: boolean = false): 
   if (!forceRefresh && now - _localBridgeCache.checkedAt < 5000) {
     return _localBridgeCache.available;
   }
-  const urls = [`${COMPILE_SERVER_URL}/api/health`, 'http://127.0.0.1:3001/api/health'];
+  const urls = ['http://127.0.0.1:3001/api/health', 'http://localhost:3001/api/health', `${COMPILE_SERVER_URL}/api/health`];
   for (const url of urls) {
     try {
       const ctrl = new AbortController();
@@ -81,7 +81,7 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
       ? [`${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`]
       : [apiPath, `${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`];
   } else if (remoteOrigin && hasLocalBridge) {
-    candidates = [`${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`, apiPath];
+    candidates = [`http://127.0.0.1:3001${apiPath}`, `http://localhost:3001${apiPath}`, `${COMPILE_SERVER_URL}${apiPath}`, apiPath];
   } else {
     candidates = [apiPath, `${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`];
   }

@@ -3438,9 +3438,23 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showCompilerBridgeModal, setShowCompilerBridgeModal] = useState(false);
+  const [showUploadBridgePrompt, setShowUploadBridgePrompt] = useState(false);
+  const [dontShowBridgePromptAgain, setDontShowBridgePromptAgain] = useState(false);
   const [isLocalBridgeOnline, setIsLocalBridgeOnline] = useState(false);
   const [isCheckingBridge, setIsCheckingBridge] = useState(false);
   const [appVersion, setAppVersion] = useState('0.8.0');
+
+  const handleDownloadCompilerBridge = (openModal: boolean = true) => {
+    const link = document.createElement('a');
+    link.href = '/downloads/RoboLab-Compiler-Bridge-Setup.exe';
+    link.download = 'RoboLab-Compiler-Bridge-Setup.exe';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    if (openModal) {
+      setShowCompilerBridgeModal(true);
+    }
+  };
 
   const checkBridgeStatus = useCallback(async (force = false) => {
     setIsCheckingBridge(true);
@@ -3458,11 +3472,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
   useEffect(() => {
     checkBridgeStatus();
+    const interval = (showCompilerBridgeModal || showUploadBridgePrompt) ? 2000 : 7000;
     const timer = setInterval(() => {
       checkBridgeStatus();
-    }, 7000);
+    }, interval);
     return () => clearInterval(timer);
-  }, [checkBridgeStatus]);
+  }, [checkBridgeStatus, showCompilerBridgeModal, showUploadBridgePrompt]);
 
   // ── Trial System ──────────────────────────────────────────────────────────
   const [trialStatus, setTrialStatus] = useState<TrialStatus>({
@@ -7905,7 +7920,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   };
 
-  const handleArduinoHardwareAction = async (action: 'verify' | 'upload' | 'flash-firmware') => {
+  const handleArduinoHardwareAction = async (action: 'verify' | 'upload' | 'flash-firmware', bypassBridgePrompt: boolean = false) => {
     if (isHardwareActionRef.current) {
       return;
     }
@@ -7918,6 +7933,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
     const microbitModules = board === 'BBC micro:bit' ? getMicrobitModules(files) : {};
     const isPython = board === 'BBC micro:bit' || isPythonSourceFile(activeFile);
+    const req = (window as any).__electronRequire || (window as any).require;
+    const isArduinoOrEsp = !isPython && board !== 'BBC micro:bit';
+
+    if (action === 'upload' && !req && !isLocalBridgeOnline && isArduinoOrEsp && !bypassBridgePrompt) {
+      let skipPrompt = false;
+      try {
+        skipPrompt = localStorage.getItem('robolab_skip_bridge_upload_prompt') === 'true';
+      } catch {}
+      if (!skipPrompt) {
+        setShowUploadBridgePrompt(true);
+        return;
+      }
+    }
     const sketchPath = fileExtension(activeFile) === 'ino' ? activeFile
       : ['firmware/main.ino', 'main.ino'].find(name => Object.hasOwn(files, name))
         ?? Object.keys(files).find(name => fileExtension(name) === 'ino');
@@ -7995,8 +8023,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         activeCode = urlEncodeHelperCode + activeCode;
       }
     }
-
-    const req = (window as any).__electronRequire || (window as any).require;
 
     // Legacy desktop uflash only accepts one script. Export the complete filesystem for projects with modules.
     const useDesktopMicrobitHex = Boolean(req) && action !== 'verify' && Object.keys(microbitModules).length > 0;
@@ -8097,6 +8123,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               ? 'Upload Failed'
               : 'Flash Firmware Failed'
           );
+          if (!isLocalBridgeOnline && !req) {
+            setTerminalLogs(prev => [
+              ...prev,
+              {
+                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Unduh RoboLab-Compiler-Bridge-Setup.exe (~27MB) via tombol "⚡ Install Bridge (.exe)" di toolbar atas.',
+                type: 'info'
+              }
+            ]);
+            setInteractiveTerminalLogs(prev => [
+              ...prev,
+              {
+                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Unduh RoboLab-Compiler-Bridge-Setup.exe (~27MB) via tombol "⚡ Install Bridge (.exe)" di toolbar atas.',
+                type: 'output'
+              }
+            ]);
+          }
         }
       } catch (err: any) {
         console.error(err);
@@ -9095,6 +9137,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         onSignOut={onSignOut}
         language={language}
         onLanguageChange={handleLanguageChange}
+        isLocalBridgeOnline={isLocalBridgeOnline}
+        onOpenCompilerBridge={() => setShowCompilerBridgeModal(true)}
       />
 
       {pxtWorkspace && <MicrobitPxtWorkspace key={pxtWorkspace.scope} scope={pxtWorkspace.scope}
@@ -12002,6 +12046,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           { id: 'save', title: 'Simpan Berkas', category: 'File', icon: <Save className="w-4 h-4 text-blue-400" />, shortcut: 'Ctrl+S', action: handleSaveFile },
           { id: 'verify', title: 'Kompilasi Firmware (Verify)', category: 'Hardware', icon: <Check className="w-4 h-4 text-emerald-400" />, action: () => handleArduinoHardwareAction('verify') },
           { id: 'upload', title: 'Unggah ke Board (Upload)', category: 'Hardware', icon: <Upload className="w-4 h-4 text-purple-400" />, action: () => handleArduinoHardwareAction('upload') },
+          { id: 'install_bridge', title: 'Pasang RoboLab Compiler Bridge (.exe) (~27MB)', category: 'Hardware', icon: <Cpu className="w-4 h-4 text-amber-400" />, action: () => handleDownloadCompilerBridge(true) },
           { id: 'board_mgr', title: 'Buka Board Manager', category: 'Tools', icon: <Cpu className="w-4 h-4 text-purple-400" />, action: () => setShowBoardManagerModal(true) },
           { id: 'lib_mgr', title: 'Buka Library Manager', category: 'Tools', icon: <Sliders className="w-4 h-4 text-cyan-400" />, action: () => setShowLibraryManagerModal(true) },
           { id: 'settings', title: 'Buka Pengaturan Sistem', category: 'Settings', icon: <Sliders className="w-4 h-4 text-slate-400" />, action: () => setShowSettingsModal(true) },
@@ -12235,6 +12280,95 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ROBOLAB COMPILER BRIDGE UPLOAD PROMPT MODAL */}
+      {showUploadBridgePrompt && (
+        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/35 backdrop-blur-md' : 'bg-black/70 backdrop-blur-sm'}`}>
+          <div className="glass-panel rounded-2xl p-6 w-[500px] max-w-[92vw] flex flex-col gap-4 shadow-2xl relative overflow-hidden"
+          style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
+            {/* Header */}
+            <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🚀</span>
+                <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                  Siap Unggah ke Board?
+                </h3>
+              </div>
+              <button 
+                onClick={() => setShowUploadBridgePrompt(false)} 
+                className={`transition cursor-pointer p-1 rounded-lg ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex flex-col gap-3">
+              <p className={`text-xs leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
+                Untuk mengompilasi dan mengunggah sketch C++ (terutama <strong>Blynk IoT, ESP8266, dan ESP32</strong>) langsung dari browser dengan performa native, pasang <strong>RoboLab Compiler Bridge (.exe)</strong>.
+              </p>
+
+              <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${themeMode === 'light' ? 'bg-blue-50/70 border-blue-200/80 text-blue-950' : 'bg-blue-500/10 border-blue-500/20 text-blue-200'}`}>
+                <div className="font-bold flex items-center gap-1.5 text-blue-400">
+                  <span>⚡</span> Keunggulan Compiler Bridge:
+                </div>
+                <div className="space-y-1 text-[11px] opacity-90 pl-1">
+                  <div>✓ <strong>Ringan &amp; Instan:</strong> Hanya ~27 MB, kompilasi 100% lokal tanpa antrean server.</div>
+                  <div>✓ <strong>Driver Otomatis:</strong> Mengecek dan memasang driver USB CH340 &amp; CP2102 jika belum ada.</div>
+                  <div>✓ <strong>System Tray:</strong> Berjalan di background saat dibutuhkan, minim memori.</div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dontShowBridgePromptAgain) {
+                      try { localStorage.setItem('robolab_skip_bridge_upload_prompt', 'true'); } catch {}
+                    }
+                    setShowUploadBridgePrompt(false);
+                    handleDownloadCompilerBridge(true);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition cursor-pointer"
+                >
+                  <span>⚡ Unduh &amp; Pasang Bridge (.exe)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dontShowBridgePromptAgain) {
+                      try { localStorage.setItem('robolab_skip_bridge_upload_prompt', 'true'); } catch {}
+                    }
+                    setShowUploadBridgePrompt(false);
+                    handleArduinoHardwareAction('upload', true);
+                  }}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer border ${
+                    themeMode === 'light'
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  <span>🌐 Lanjut Upload Cloud</span>
+                </button>
+              </div>
+
+              {/* Checkbox Don't Ask Again */}
+              <label className="flex items-center gap-2 pt-1 text-[11px] cursor-pointer opacity-70 hover:opacity-100 select-none">
+                <input
+                  type="checkbox"
+                  checked={dontShowBridgePromptAgain}
+                  onChange={(e) => setDontShowBridgePromptAgain(e.target.checked)}
+                  className="rounded border-slate-600 text-blue-500 focus:ring-0 cursor-pointer"
+                />
+                <span className={themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}>
+                  Jangan tampilkan saran ini lagi saat upload
+                </span>
+              </label>
             </div>
           </div>
         </div>
