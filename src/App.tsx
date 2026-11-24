@@ -7822,7 +7822,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     const sourcePath = isPython ? pythonPath : sketchPath;
     let activeCode = sourcePath ? files[sourcePath] ?? '' : '';
     const fileExt = isPython ? 'py' : 'ino';
-    const requireNative = !isPython && sketchPath !== undefined && syncStatuses[sketchPath] !== true;
+    const requireNative = !isPython && sketchPath !== undefined && (syncStatuses[sketchPath] !== true && hasNativeOnlyArduinoCode(activeCode));
     const baudMatch = !isPython && activeCode.match(/\bSerial\s*\.\s*begin\s*\(\s*(\d+)\s*[,)]/);
     const uploadBaudrate = baudMatch ? Number(baudMatch[1]) : board === 'BBC micro:bit' ? 115200 : serialBaudrate;
     if (action !== 'flash-firmware' && !activeCode.trim()) {

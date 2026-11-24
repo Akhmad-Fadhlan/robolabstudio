@@ -6,7 +6,7 @@
 //    real-time C++ sketch transpilation & binary image patching (XOR + SHA256 / CRC32)
 // ============================================================================
 
-const { selectArduinoSketch, needsNativeEspCompiler, nativeEspCompilerRequired } = require('./arduino-sketch.cjs');
+const { selectArduinoSketch } = require('./arduino-sketch.cjs');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -514,10 +514,6 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
   const extraFiles = Object.entries(files)
     .filter(([name, content]) => typeof content === 'string' && /\.(h|hpp|c|cpp)$/i.test(name))
     .map(([name, content]) => ({ name: path.basename(name), content }));
-
-  if ((isEsp32 || isEsp8266) && (requireNative || needsNativeEspCompiler(finalCode, extraFiles))) {
-    return nativeEspCompilerRequired(filename);
-  }
 
   // 1. Validate C++ syntax
   const syntaxCheck = validateCppSketchSyntax(finalCode);

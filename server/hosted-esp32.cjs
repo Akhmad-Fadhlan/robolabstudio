@@ -36,21 +36,34 @@ async function compileHostedEsp32(input, authorization, action) {
   const aux = Object.entries(input.files).filter(([name, content]) =>
     /\.(?:h|hpp|c|cpp|cc|cxx)$/i.test(name) && typeof content === 'string'
   );
-  if (!input.requireNative && !needsNativeEspCompiler(sketch[1], aux)) {
-    const { compileWithCloudEngine } = require('./cloud-compiler.cjs');
-    // Blockly projects can still use the compatibility runtime on unconfigured deployments.
-    if (!process.env.ESP32_COMPILER_URL) return compileWithCloudEngine(input);
-  }
+
+  const { compileWithCloudEngine } = require('./cloud-compiler.cjs');
 
   const serviceUrl = process.env.ESP32_COMPILER_URL;
   const serviceToken = process.env.ESP32_COMPILER_TOKEN;
   const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   const supabaseUrl = process.env.SUPABASE_URL || 'https://qcewaspgybtbofjowoxs.supabase.co';
+
+  // If hosted compiler service is not configured on this deployment, always use cloud compatibility engine
   if (!serviceUrl || !serviceToken || !supabaseKey) {
-    return failure('Compiler Arduino ESP32 untuk web belum diaktifkan pada server RoboLab.', 'HOSTED_COMPILER_UNCONFIGURED');
+    return compileWithCloudEngine(input);
   }
+
+  // If sketch does not strictly need native Arduino CLI compilation, use fast cloud engine
+  if (!input.requireNative && !needsNativeEspCompiler(sketch[1], aux)) {
+    return compileWithCloudEngine(input);
+  }
+
+  // If user is not logged in, fall back to cloud compatibility engine instead of blocking
   if (!/^Bearer [^\s]+$/.test(authorization || '')) {
-    return failure('Masuk ke akun RoboLab untuk kompilasi ESP32 di web.', 'LOGIN_REQUIRED');
+    const result = await compileWithCloudEngine(input);
+    if (result && Array.isArray(result.logs)) {
+      result.logs.unshift({
+        text: 'Menggunakan runtime kompatibilitas RoboLab. Masuk ke akun RoboLab untuk kompilasi Arduino CLI cloud penuh.',
+        type: 'info',
+      });
+    }
+    return result;
   }
 
   const data = JSON.stringify({ sketchPath: sketch[0], files: Object.fromEntries([sketch, ...aux]) });
@@ -70,7 +83,14 @@ async function compileHostedEsp32(input, authorization, action) {
     if (typeof user.id !== 'string' || !user.id) return failure('Sesi RoboLab tidak valid.', 'LOGIN_REQUIRED');
 
     if (!await waitForCompiler(endpoint)) {
-      return failure('Compiler ESP32 belum siap. Tunggu sebentar lalu ulangi Verify atau Upload.', 'COMPILER_UNAVAILABLE');
+      const result = await compileWithCloudEngine(input);
+      if (result && Array.isArray(result.logs)) {
+        result.logs.unshift({
+          text: 'Compiler cloud native sedang tidak merespons, beralih ke runtime kompatibilitas RoboLab.',
+          type: 'info',
+        });
+      }
+      return result;
     }
 
     const response = await fetch(endpoint, {
@@ -98,7 +118,14 @@ async function compileHostedEsp32(input, authorization, action) {
     if (action === 'verify') return { success: true, cloudCompiled: true, logs: json.logs };
     return json;
   } catch {
-    return failure('Koneksi ke layanan kompilasi ESP32 terputus atau melewati batas waktu.', 'COMPILER_UNAVAILABLE');
+    const result = await compileWithCloudEngine(input);
+    if (result && Array.isArray(result.logs)) {
+      result.logs.unshift({
+        text: 'Layanan compiler cloud tidak dapat dihubungi, menggunakan runtime kompatibilitas RoboLab.',
+        type: 'info',
+      });
+    }
+    return result;
   }
 }
 
