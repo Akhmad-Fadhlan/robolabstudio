@@ -3296,6 +3296,85 @@ def loop():
 
 if __name__ == '__main__':
     loop()`
+  },
+  {
+    name: "ESP32 Blynk IoT Smart Control",
+    board: "ESP32 DevKit V1",
+    description: "Kontrol LED Builtin (Pin 2) dan Relay Output ESP32 secara realtime via WiFi menggunakan Blynk IoT Cloud (Virtual Pin V0 - V3).",
+    iconColor: "emerald",
+    components: ['led'],
+    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="blynk_config" x="40" y="40"><value name="TEMPLATE_ID"><shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow></value><value name="TEMPLATE_NAME"><shadow type="text"><field name="TEXT">ESP32 Smart LED</field></shadow></value><value name="AUTH_TOKEN"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value></block><block type="blynk_on_write" x="40" y="160"><field name="VPIN">V0</field><statement name="STACK"><block type="controls_if"><mutation else="1"></mutation><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="blynk_virtual_write"><field name="VPIN">V1</field><value name="VALUE"><block type="text"><field name="TEXT">Status: ON</field></block></value></block></next></block></statement><statement name="ELSE"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="blynk_virtual_write"><field name="VPIN">V1</field><value name="VALUE"><block type="text"><field name="TEXT">Status: OFF</field></block></value></block></next></block></statement></block></statement></block><block type="blynk_on_write" x="40" y="480"><field name="VPIN">V2</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="740"><field name="VPIN">V3</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></statement></block></next></block></statement></block><block type="arduino_setup" x="40" y="1000"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field><next><block type="blynk_begin"><value name="AUTH"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value><value name="SSID"><shadow type="text"><field name="TEXT">NamaWiFiAnda</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">PasswordWiFi</field></shadow></value></block></next></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="1220"><statement name="STACK"><block type="blynk_run"></block></statement></block></xml>',
+    ino: `// RoboLab Studio - Generated Arduino Code
+// Blocks in workspace: blynk_config, blynk_on_write, arduino_setup, arduino_loop, blynk_run
+#define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
+#define BLYNK_TEMPLATE_NAME "ESP32 Smart LED"
+#define BLYNK_AUTH_TOKEN "p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT"
+
+#define BLYNK_PRINT Serial
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// Blynk Callback Functions
+BLYNK_WRITE(V0) {
+  int param_val = param.asInt();
+  if (param_val == 1) {
+    digitalWrite(2, HIGH);
+    Blynk.virtualWrite(V1, "Status: ON");
+  } else {
+    digitalWrite(2, LOW);
+    Blynk.virtualWrite(V1, "Status: OFF");
+  }
+}
+
+BLYNK_WRITE(V2) {
+  int param_val = param.asInt();
+  if (param_val == 1) {
+    digitalWrite(4, HIGH);
+  }
+  if (param_val == 0) {
+    digitalWrite(4, LOW);
+  }
+}
+
+BLYNK_WRITE(V3) {
+  int param_val = param.asInt();
+  if (param_val == 1) {
+    digitalWrite(5, HIGH);
+  }
+  if (param_val == 0) {
+    digitalWrite(5, LOW);
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  // Configure I/O pins
+  pinMode(2, OUTPUT);
+  pinMode(4, OUTPUT);
+  pinMode(5, OUTPUT);
+
+  digitalWrite(2, LOW);
+  digitalWrite(4, LOW);
+  digitalWrite(5, LOW);
+  // Gunakan port 80 resmi Blynk IoT Cloud (blynk.cloud)
+  Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 80);
+}
+
+void loop() {
+  Blynk.run();
+}`,
+    py: `# Proyek: ESP32 Blynk IoT Smart Control
+import time
+import robolab as robot
+
+def loop():
+    robot.blynk_begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "RoboLab-WiFi", "12345678")
+    while True:
+        robot.blynk_run()
+        time.sleep(0.1)
+
+if __name__ == '__main__':
+    loop()`
   }
 ];
 

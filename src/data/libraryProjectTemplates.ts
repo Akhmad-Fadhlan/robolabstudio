@@ -1259,7 +1259,7 @@ void loop() {
         <next>
           <block type="blynk_begin">
             <value name="AUTH">
-              <shadow type="text"><field name="TEXT">BLYNK_AUTH_TOKEN</field></shadow>
+              <shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow>
             </value>
             <value name="SSID">
               <shadow type="text"><field name="TEXT">RoboLab-WiFi</field></shadow>
