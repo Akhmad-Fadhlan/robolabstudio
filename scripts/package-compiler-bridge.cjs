@@ -69,33 +69,40 @@ console.log('[3/4] Creating zip package in public/downloads/RoboLab-Compiler-Bri
 const zipOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Setup.zip');
 try {
   if (fs.existsSync(zipOutput)) fs.unlinkSync(zipOutput);
-  // Use tar.exe which is 100x faster than PowerShell Compress-Archive
   execSync(
     `tar.exe -a -c -f "${zipOutput}" -C "${bridgeDir}" .`,
     { stdio: 'inherit' }
   );
   const stats = fs.statSync(zipOutput);
   console.log(`      * Created: ${zipOutput} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+} catch (err) {
+  console.error('Failed to create zip package with tar, falling back to powershell:', err.message);
+  if (fs.existsSync(zipOutput)) fs.unlinkSync(zipOutput);
+  execSync(
+    `powershell -Command "Compress-Archive -Path '${bridgeDir}\\*' -DestinationPath '${zipOutput}' -CompressionLevel Optimal -Force"`,
+    { stdio: 'inherit' }
+  );
+  const stats = fs.statSync(zipOutput);
+  console.log(`      * Created: ${zipOutput} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+}
 
-  // Compile standalone .exe installer using csc.exe
-  const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
-  const exeOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Setup.exe');
-  const installerCs = path.join(rootDir, 'scripts', 'Installer.cs');
-  if (fs.existsSync(cscPath) && fs.existsSync(installerCs)) {
-    console.log('      * Compiling RoboLab-Compiler-Bridge-Setup.exe with embedded payload...');
+// Compile standalone .exe installer using csc.exe
+const cscPath = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
+const exeOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Setup.exe');
+const installerCs = path.join(rootDir, 'scripts', 'Installer.cs');
+if (fs.existsSync(cscPath) && fs.existsSync(installerCs) && fs.existsSync(zipOutput)) {
+  console.log('      * Compiling RoboLab-Compiler-Bridge-Setup.exe with embedded payload...');
+  try {
+    if (fs.existsSync(exeOutput)) fs.unlinkSync(exeOutput);
     execSync(
       `"${cscPath}" /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:Microsoft.CSharp.dll /resource:"${zipOutput}",payload.zip /out:"${exeOutput}" "${installerCs}"`,
       { stdio: 'inherit' }
     );
     const exeStats = fs.statSync(exeOutput);
     console.log(`      * Created: ${exeOutput} (${(exeStats.size / 1024 / 1024).toFixed(2)} MB)`);
+  } catch (err) {
+    console.error('Failed to compile installer executable:', err.message);
   }
-} catch (err) {
-  console.error('Failed to create zip package with tar, falling back to powershell:', err.message);
-  execSync(
-    `powershell -Command "Compress-Archive -Path '${bridgeDir}\\*' -DestinationPath '${zipOutput}' -CompressionLevel Optimal"`,
-    { stdio: 'inherit' }
-  );
 }
 
 console.log('[4/4] Done! Compiler Bridge package is ready.');
