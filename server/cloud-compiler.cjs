@@ -147,8 +147,16 @@ function transpileInoToRuntimeScript(rawCode) {
   const setupInstructions = [];
   const loopInstructions = [];
 
-  // 1. Parse global variable declarations and constants
-  const lines = code.split(/\r?\n/);
+  // 1. Parse global variable declarations and constants (strictly at global scope outside function bodies)
+  let strippedGlobals = '';
+  let bDepth = 0;
+  for (let idx = 0; idx < code.length; idx++) {
+    const ch = code[idx];
+    if (ch === '{') bDepth++;
+    else if (ch === '}') bDepth = Math.max(0, bDepth - 1);
+    else if (bDepth === 0) strippedGlobals += ch;
+  }
+  const lines = strippedGlobals.split(/\r?\n/);
   for (const rawLine of lines) {
     const line = rawLine.trim();
     // const int led = 2; or int ledPin = 2; or #define LED_PIN 2
@@ -202,6 +210,9 @@ function transpileInoToRuntimeScript(rawCode) {
       /\b(?:ukur_jarak|readUltrasonic|readDistance|baca_jarak)\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g,
       (_, t, ec) => `ultrasonic(${resolveToken(t)},${resolveToken(ec)})`
     );
+    e = e.replace(/\bparam\.asInt\s*\(\s*\)/g, 'BLYNK_PARAM');
+    e = e.replace(/\bparam\.asFloat\s*\(\s*\)/g, 'BLYNK_PARAM');
+    e = e.replace(/\bparam\.asStr\s*\(\s*\)/g, 'BLYNK_PARAM');
     // Replace HIGH -> 1 and LOW -> 0 only outside quoted string literals
     if (!(e.startsWith('"') && e.endsWith('"'))) {
       e = e.replace(/\bHIGH\b/g, '1').replace(/\bLOW\b/g, '0');
@@ -344,6 +355,11 @@ function transpileInoToRuntimeScript(rawCode) {
           outArr.push(`PRINT:${normalizeExpr(m[1])}`);
         } else if ((m = stmt.match(/^WiFi\.begin\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/))) {
           outArr.push(`WIFI:${resolveToken(m[1])}:${resolveToken(m[2])}`);
+        } else if ((m = stmt.match(/Blynk\.virtualWrite\s*\(\s*V?(\d+)\s*,\s*([^)]+)\s*\)/i))) {
+          outArr.push(`VWRITE:${m[1]}:${normalizeExpr(m[2])}`);
+        } else if (stmt.match(/^Blynk\.(?:run|config|begin|connect)\b/i) || stmt.match(/^WiFi\.mode\b/i)) {
+          // Handled natively by runtime
+          continue;
         } else if (
           callDepth < 4 &&
           (m = stmt.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)$/)) &&
@@ -363,6 +379,40 @@ function transpileInoToRuntimeScript(rawCode) {
     }
   };
 
+  // Extract BLYNK_WRITE(Vx) callbacks
+  const blynkInstructions = [];
+  const blynkRegex = /\bBLYNK_WRITE\s*\(\s*V?(\d+)\s*\)\s*\{/g;
+  let bMatch;
+  while ((bMatch = blynkRegex.exec(code)) !== null) {
+    const vPin = Number(bMatch[1]);
+    const startIdx = bMatch.index + bMatch[0].length;
+    let depth = 1;
+    let p = startIdx;
+    while (p < code.length && depth > 0) {
+      const ch = code[p];
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
+        p++;
+        while (p < code.length && code[p] !== quote) {
+          if (code[p] === '\\') p++;
+          p++;
+        }
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) break;
+      }
+      p++;
+    }
+    const blynkBody = code.slice(startIdx, p);
+    const pinInstructions = [];
+    parseStatementBlock(blynkBody, pinInstructions);
+    if (pinInstructions.length > 0) {
+      blynkInstructions.push(`===BLYNK:V${vPin}===`, ...pinInstructions, '===ENDBLYNK===');
+    }
+  }
+
   const setupBody = extractFunctionBody(code, 'setup');
   const loopBody = extractFunctionBody(code, 'loop');
 
@@ -373,11 +423,37 @@ function transpileInoToRuntimeScript(rawCode) {
     setupInstructions.unshift('SERIAL:115200');
   }
 
+  // Detect Blynk credentials
+  const authMatch =
+    code.match(/#define\s+BLYNK_AUTH_TOKEN\s+["']([^"']+)["']/) ||
+    code.match(/Blynk\.config\s*\(\s*["']([^"']+)["']/i) ||
+    code.match(/Blynk\.begin\s*\(\s*["']([^"']+)["']/i) ||
+    code.match(/Blynk\.config\s*\(\s*([a-zA-Z0-9_]+)/i);
+  let auth = authMatch ? authMatch[1].trim() : '';
+  if (auth === 'BLYNK_AUTH_TOKEN') {
+    const def = code.match(/#define\s+BLYNK_AUTH_TOKEN\s+["']([^"']+)["']/);
+    if (def) auth = def[1].trim();
+  }
+
+  const wifiMatch =
+    code.match(/WiFi\.begin\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/i) ||
+    code.match(/Blynk\.begin\s*\([^,]+,\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']/i);
+  const ssid = wifiMatch ? wifiMatch[1].trim() : '';
+  const pass = wifiMatch ? wifiMatch[2].trim() : '';
+
+  if (auth && auth !== '""' && auth !== '"YourAuthToken"' && auth !== 'YourAuthToken') {
+    // Inject BLYNK_BEGIN to connect to Hotspot and Blynk Cloud directly
+    setupInstructions.unshift(`BLYNK_BEGIN:${auth}:${ssid}:${pass}:blynk.cloud:80`);
+    const wifiIdx = setupInstructions.findIndex((inst) => inst.startsWith('WIFI:'));
+    if (wifiIdx !== -1) setupInstructions.splice(wifiIdx, 1);
+  }
+
   const scriptLines = [
     SLOT_MAGIC,
     ...setupInstructions,
     '===LOOP===',
     ...loopInstructions,
+    ...blynkInstructions,
     '===END===',
   ];
   return scriptLines.join('\n') + '\n';

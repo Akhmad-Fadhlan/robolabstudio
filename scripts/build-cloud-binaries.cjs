@@ -2,6 +2,7 @@
 // Builds the precompiled ESP32 & ESP8266 Universal Hardware Runtime binaries
 // for Vercel Serverless Cloud Compilation (/api/compile) when arduino-cli is
 // not running locally.
+// Includes full Blynk IoT Cloud, WiFi, GPIO, PWM, Servo, and Bytecode Interpreter.
 // ============================================================================
 
 const fs = require('fs');
@@ -11,11 +12,20 @@ const zlib = require('zlib');
 const { getArduinoCliPath, handleCompileRequest } = require('../server/compile-server.cjs');
 
 const UNIVERSAL_RUNTIME_SKETCH = `
+#define BLYNK_TEMPLATE_ID "TMPL_ROBOLAB"
+#define BLYNK_TEMPLATE_NAME "RoboLab"
+#define BLYNK_AUTH_TOKEN "ROBOLAB_AUTH_TOKEN_DEFAULT"
+
 #include <Arduino.h>
+#define BLYNK_PRINT Serial
+
 #if defined(ESP32)
   #include <WiFi.h>
+  #include <WiFiClient.h>
+  #include <BlynkSimpleEsp32.h>
 #elif defined(ESP8266)
   #include <ESP8266WiFi.h>
+  #include <BlynkSimpleEsp8266.h>
 #endif
 
 // 4096-byte program slot in flash (.rodata) patched by Cloud Compiler (/api/compile)
@@ -40,6 +50,19 @@ struct VarEntry {
 static VarEntry g_vars[24];
 static int g_varCount = 0;
 static int g_servoPins[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+static bool g_blynkActive = false;
+static float g_blynkCurrentParam = 0.0f;
+static String g_blynkCurrentParamStr = "";
+
+// Support virtual pin write blocks V0..V15 (each up to 24 statements)
+static String g_blynkWriteLines[16][24];
+static int g_blynkWriteCounts[16] = {0};
+
+static String g_setupLines[96];
+static int g_setupCount = 0;
+static String g_loopLines[160];
+static int g_loopCount = 0;
 
 static int resolvePinNum(String p) {
   p.trim();
@@ -104,6 +127,9 @@ static String evalStringExpr(String expr) {
   if (expr == "WiFi.gatewayIP()") {
     return WiFi.gatewayIP().toString();
   }
+  if (expr == "param_val" || expr == "param.asStr()" || expr == "BLYNK_PARAM") {
+    return g_blynkCurrentParamStr.length() > 0 ? g_blynkCurrentParamStr : String(g_blynkCurrentParam);
+  }
   for (int i = 0; i < g_varCount; i++) {
     if (g_vars[i].name == expr) {
       return g_vars[i].isStr ? g_vars[i].strVal : String(g_vars[i].numVal);
@@ -119,6 +145,11 @@ static float evalNumericExpr(String expr) {
   if (expr == "HIGH" || expr == "true" || expr == "True") return 1.0f;
   if (expr == "LOW" || expr == "false" || expr == "False") return 0.0f;
   if (expr == "millis()") return (float)millis();
+  if (expr == "WiFi.RSSI()") return (float)WiFi.RSSI();
+  if (expr == "Blynk.connected()") return (g_blynkActive && Blynk.connected()) ? 1.0f : 0.0f;
+  if (expr == "param_val" || expr == "param.asInt()" || expr == "param.asFloat()" || expr == "BLYNK_PARAM") {
+    return g_blynkCurrentParam;
+  }
 
   if (expr.startsWith("digitalRead(") && expr.endsWith(")")) {
     int p = resolvePinNum(expr.substring(12, expr.length() - 1));
@@ -199,11 +230,6 @@ static void setVar(String name, String rawExpr) {
   }
 }
 
-static String g_setupLines[96];
-static int g_setupCount = 0;
-static String g_loopLines[160];
-static int g_loopCount = 0;
-
 static void executeBlock(String* lines, int startIdx, int endIdx) {
   int i = startIdx;
   while (i < endIdx) {
@@ -238,7 +264,6 @@ static void executeBlock(String* lines, int startIdx, int endIdx) {
     }
 
     if (line.startsWith("FOR:")) {
-      // FOR:var:start:end:step
       String rest = line.substring(4);
       int c1 = rest.indexOf(':');
       int c2 = rest.indexOf(':', c1 + 1);
@@ -323,7 +348,7 @@ static void executeBlock(String* lines, int startIdx, int endIdx) {
       WiFi.mode(WIFI_STA);
       WiFi.begin(ssid.c_str(), pass.c_str());
       int tries = 0;
-      while (WiFi.status() != WL_CONNECTED && tries < 24) {
+      while (WiFi.status() != WL_CONNECTED && tries < 30) {
         delay(500);
         Serial.print(".");
         tries++;
@@ -333,8 +358,78 @@ static void executeBlock(String* lines, int startIdx, int endIdx) {
         Serial.print("WiFi Connected! IP: ");
         Serial.println(WiFi.localIP());
       }
+    } else if (line.startsWith("BLYNK_BEGIN:")) {
+      String rest = line.substring(12);
+      int c1 = rest.indexOf(':');
+      int c2 = rest.indexOf(':', c1 + 1);
+      int c3 = rest.indexOf(':', c2 + 1);
+      int c4 = rest.indexOf(':', c3 + 1);
+      String auth = c1 > 0 ? rest.substring(0, c1) : rest;
+      String ssid = c2 > c1 ? rest.substring(c1 + 1, c2) : "";
+      String pass = c3 > c2 ? rest.substring(c2 + 1, c3) : "";
+      String host = c4 > c3 ? rest.substring(c3 + 1, c4) : "blynk.cloud";
+      int port = c4 > 0 ? rest.substring(c4 + 1).toInt() : 80;
+      if (port <= 0) port = 80;
+      if (host.length() == 0) host = "blynk.cloud";
+
+      Serial.println();
+      Serial.print("[RoboLab] Connecting to WiFi Hotspot '");
+      Serial.print(ssid);
+      Serial.println("'...");
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(ssid.c_str(), pass.c_str());
+      int retries = 0;
+      while ((WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) && retries < 40) {
+        delay(500);
+        Serial.print(".");
+        retries++;
+      }
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println();
+        Serial.println("✓ [WIFI] Connected to Hotspot!");
+        Serial.print("   IP ESP: ");
+        Serial.println(WiFi.localIP());
+        Serial.print("   Gateway: ");
+        Serial.println(WiFi.gatewayIP());
+        Serial.print("   Signal (RSSI): ");
+        Serial.print(WiFi.RSSI());
+        Serial.println(" dBm");
+
+        IPAddress blynkIP;
+        if (!WiFi.hostByName(host.c_str(), blynkIP)) {
+          blynkIP = IPAddress(128, 199, 144, 129);
+        }
+        Blynk.config(auth.c_str(), blynkIP, port);
+        if (Blynk.connect(7000)) {
+          Serial.println("✓ [BLYNK] Connected to Blynk Cloud! Status: ONLINE 🎉");
+          g_blynkActive = true;
+        } else {
+          Serial.println("⚠️ [BLYNK] Initial connect pending, retrying in background...");
+          g_blynkActive = true;
+        }
+      } else {
+        Serial.println();
+        Serial.println("❌ [WIFI] Failed to connect. Check SSID & Password!");
+      }
+    } else if (line.startsWith("VWRITE:")) {
+      String rest = line.substring(7);
+      int sep = rest.indexOf(':');
+      int vpin = rest.substring(0, sep).toInt();
+      float val = evalNumericExpr(rest.substring(sep + 1));
+      if (g_blynkActive) {
+        Blynk.virtualWrite(vpin, val);
+      }
     }
     i++;
+  }
+}
+
+BLYNK_WRITE_DEFAULT() {
+  int pin = request.pin;
+  if (pin >= 0 && pin < 16 && g_blynkWriteCounts[pin] > 0) {
+    g_blynkCurrentParam = param.asFloat();
+    g_blynkCurrentParamStr = param.asStr();
+    executeBlock(g_blynkWriteLines[pin], 0, g_blynkWriteCounts[pin]);
   }
 }
 
@@ -350,6 +445,7 @@ void setup() {
   }
 
   bool inLoop = false;
+  int currentBlynkPin = -1;
   int pos = 0;
   while (pos < (int)raw.length()) {
     int nextNl = raw.indexOf('\\n', pos);
@@ -361,11 +457,28 @@ void setup() {
     if (line.length() == 0 || line == "ROBOLAB_PROG_V1_SLOT") continue;
     if (line == "===LOOP===") {
       inLoop = true;
+      currentBlynkPin = -1;
+      continue;
+    }
+    if (line.startsWith("===BLYNK:V")) {
+      int pEnd = line.indexOf("===", 10);
+      int vPinNum = (pEnd > 10 ? line.substring(10, pEnd) : line.substring(10)).toInt();
+      if (vPinNum >= 0 && vPinNum < 16) {
+        currentBlynkPin = vPinNum;
+      }
+      continue;
+    }
+    if (line == "===ENDBLYNK===") {
+      currentBlynkPin = -1;
       continue;
     }
     if (line == "===END===") break;
 
-    if (!inLoop) {
+    if (currentBlynkPin >= 0) {
+      if (g_blynkWriteCounts[currentBlynkPin] < 24) {
+        g_blynkWriteLines[currentBlynkPin][g_blynkWriteCounts[currentBlynkPin]++] = line;
+      }
+    } else if (!inLoop) {
       if (g_setupCount < 96) g_setupLines[g_setupCount++] = line;
     } else {
       if (g_loopCount < 160) g_loopLines[g_loopCount++] = line;
@@ -376,10 +489,13 @@ void setup() {
 }
 
 void loop() {
+  if (g_blynkActive) {
+    Blynk.run();
+  }
   if (g_loopCount > 0) {
     executeBlock(g_loopLines, 0, g_loopCount);
   } else {
-    delay(50);
+    delay(20);
   }
 }
 `;
@@ -388,49 +504,58 @@ async function main() {
   const outDir = path.join(__dirname, '..', 'server', 'cloud-binaries');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
-  console.log('1. Compiling Universal Hardware Runtime for ESP32...');
-  const esp32Res = await handleCompileRequest({
-    board: 'ESP32 DevKit V1',
-    files: { 'main.ino': UNIVERSAL_RUNTIME_SKETCH },
-  });
-  if (!esp32Res.success) {
-    console.error('ESP32 Compile failed:', esp32Res.logs);
-    process.exit(1);
-  }
+  const targetBoard = process.argv[2] || 'all';
 
-  for (const part of esp32Res.partitions) {
-    const raw = Buffer.from(part.dataBase64, 'base64');
-    if (part.name === 'firmware.bin') {
-      const magicIdx = raw.indexOf(Buffer.from('ROBOLAB_PROG_V1_SLOT'));
-      console.log('ESP32 firmware.bin size:', raw.length, 'ROBOLAB_PROG_V1_SLOT offset:', magicIdx);
-      if (magicIdx === -1) throw new Error('Magic slot not found in ESP32 firmware.bin');
+  if (targetBoard === 'all' || targetBoard === 'esp8266') {
+    console.log('Building Universal Hardware Runtime for ESP8266...');
+    const esp8266Res = await handleCompileRequest({
+      board: 'NodeMCU / ESP8266',
+      files: { 'main.ino': UNIVERSAL_RUNTIME_SKETCH },
+    });
+    if (!esp8266Res.success) {
+      console.error('ESP8266 Compile failed:', esp8266Res.logs);
+      process.exit(1);
     }
-    const gz = zlib.gzipSync(raw, { level: 9 });
-    fs.writeFileSync(path.join(outDir, `esp32_${part.name}.gz`), gz);
-    console.log(`Saved esp32_${part.name}.gz (${gz.length} bytes)`);
+
+    for (const part of esp8266Res.partitions) {
+      const raw = Buffer.from(part.dataBase64, 'base64');
+      const magicIdx = raw.indexOf(Buffer.from('ROBOLAB_PROG_V1_SLOT'));
+      console.log('ESP8266 firmware.bin size:', raw.length, 'ROBOLAB_PROG_V1_SLOT offset:', magicIdx);
+      if (magicIdx === -1) throw new Error('Magic slot not found in ESP8266 firmware.bin');
+      const gz = zlib.gzipSync(raw, { level: 9 });
+      fs.writeFileSync(path.join(outDir, `esp8266_${part.name}.gz`), gz);
+      console.log(`✓ Saved esp8266_${part.name}.gz (${gz.length} bytes)`);
+    }
   }
 
-  console.log('2. Compiling Universal Hardware Runtime for ESP8266...');
-  const esp8266Res = await handleCompileRequest({
-    board: 'NodeMCU / ESP8266',
-    files: { 'main.ino': UNIVERSAL_RUNTIME_SKETCH },
-  });
-  if (!esp8266Res.success) {
-    console.error('ESP8266 Compile failed:', esp8266Res.logs);
-    process.exit(1);
+  if (targetBoard === 'all' || targetBoard === 'esp32') {
+    console.log('Building Universal Hardware Runtime for ESP32...');
+    try {
+      const esp32Res = await handleCompileRequest({
+        board: 'ESP32 DevKit V1',
+        files: { 'main.ino': UNIVERSAL_RUNTIME_SKETCH },
+      });
+      if (esp32Res.success && Array.isArray(esp32Res.partitions)) {
+        for (const part of esp32Res.partitions) {
+          const raw = Buffer.from(part.dataBase64, 'base64');
+          if (part.name === 'firmware.bin') {
+            const magicIdx = raw.indexOf(Buffer.from('ROBOLAB_PROG_V1_SLOT'));
+            console.log('ESP32 firmware.bin size:', raw.length, 'ROBOLAB_PROG_V1_SLOT offset:', magicIdx);
+            if (magicIdx === -1) throw new Error('Magic slot not found in ESP32 firmware.bin');
+          }
+          const gz = zlib.gzipSync(raw, { level: 9 });
+          fs.writeFileSync(path.join(outDir, `esp32_${part.name}.gz`), gz);
+          console.log(`✓ Saved esp32_${part.name}.gz (${gz.length} bytes)`);
+        }
+      } else {
+        console.warn('ESP32 build skipped or failed, existing binary preserved.');
+      }
+    } catch (err) {
+      console.warn('ESP32 build skipped, keeping existing binary:', err?.message || err);
+    }
   }
 
-  for (const part of esp8266Res.partitions) {
-    const raw = Buffer.from(part.dataBase64, 'base64');
-    const magicIdx = raw.indexOf(Buffer.from('ROBOLAB_PROG_V1_SLOT'));
-    console.log('ESP8266 firmware.bin size:', raw.length, 'ROBOLAB_PROG_V1_SLOT offset:', magicIdx);
-    if (magicIdx === -1) throw new Error('Magic slot not found in ESP8266 firmware.bin');
-    const gz = zlib.gzipSync(raw, { level: 9 });
-    fs.writeFileSync(path.join(outDir, `esp8266_${part.name}.gz`), gz);
-    console.log(`Saved esp8266_${part.name}.gz (${gz.length} bytes)`);
-  }
-
-  console.log('ALL CLOUD BINARIES BUILT SUCCESSFULLY!');
+  console.log('ALL CLOUD BINARIES READY!');
 }
 
 main().catch((err) => {
