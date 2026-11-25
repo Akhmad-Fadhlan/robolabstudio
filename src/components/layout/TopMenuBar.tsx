@@ -222,7 +222,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   title="Verify / Compile Firmware"
                 >
                   <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                  <span className="hidden xl:inline">{tb('verify')}</span>
+                  <span className="hidden 2xl:inline">{tb('verify')}</span>
                 </button>
 
                 <button
@@ -233,7 +233,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   title="Upload to Hardware"
                 >
                   <Upload className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`} />
-                  <span className={`hidden xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
+                  <span className={`hidden 2xl:inline font-bold ${isDark ? 'text-purple-200' : '!text-white text-white-force'}`}>{tb('upload')}</span>
                 </button>
 
                 {!isLocalBridgeOnline ? (
@@ -256,7 +256,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                     title="Pasang RoboLab Compiler Bridge (.exe) untuk kompilasi lokal instan (Blynk IoT & ESP) + Driver CH340/CP2102 otomatis"
                   >
                     <span className="text-amber-400 font-extrabold text-xs">⚡</span>
-                    <span className="hidden sm:inline font-bold">Install Bridge (.exe)</span>
+                    <span className="hidden 2xl:inline font-bold">Install Bridge (.exe)</span>
+                    <span className="hidden sm:inline 2xl:hidden font-bold">Bridge</span>
                     <span className="sm:hidden font-bold">Bridge</span>
                   </button>
                 ) : (
@@ -446,11 +447,11 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           <div className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-1 border flex-shrink-0 shadow-sm ${
             isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
-            <span className="text-[10px] font-bold uppercase tracking-wide text-purple-400 hidden xl:inline">{tb('boardLabel')}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-purple-400 hidden 2xl:inline">{tb('boardLabel')}</span>
             <select 
               value={board} 
               onChange={(e) => setBoard(e.target.value)}
-              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[80px] sm:max-w-[100px] md:max-w-[120px] lg:max-w-[135px] xl:max-w-[150px] truncate"
+              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[75px] sm:max-w-[95px] md:max-w-[110px] lg:max-w-[125px] 2xl:max-w-[150px] truncate"
             >
               <option value="ESP32 DevKit V1" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>ESP32 DevKit V1</option>
               <option value="NodeMCU / ESP8266" className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>NodeMCU / ESP8266</option>
@@ -468,7 +469,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
           <div className={`flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-1 border flex-shrink-0 shadow-sm ${
             isDark ? 'bg-white/5 border-white/10' : 'bg-[var(--theme-pill-bg,#e0f2fe)] hover:opacity-90 border-[var(--theme-pill-border,#bae6fd)] text-[var(--theme-pill-text,#075985)]'
           }`}>
-            <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden xl:inline">{tb('portLabel')}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-400 hidden 2xl:inline">{tb('portLabel')}</span>
             <select 
               value={port} 
               onChange={(e) => {
@@ -478,7 +479,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   setPort(e.target.value);
                 }
               }}
-              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[70px] sm:max-w-[90px] md:max-w-[110px] lg:max-w-[130px] xl:max-w-[145px] truncate"
+              className="bg-transparent text-xs font-semibold outline-none cursor-pointer max-w-[65px] sm:max-w-[80px] md:max-w-[95px] lg:max-w-[110px] 2xl:max-w-[145px] truncate"
             >
               {availablePorts.map((p) => (
                 <option key={p.address} value={p.address} className={isDark ? 'bg-[#0e0f16]' : 'bg-white'}>
@@ -518,14 +519,14 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
               isDark ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-200 text-emerald-700'
             }`} title={`Connected to ${connectedPort}`}>
               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse flex-shrink-0" />
-              <span className="text-[11px] uppercase tracking-wide hidden lg:inline">{tb('connected')}</span>
+              <span className="text-[11px] uppercase tracking-wide hidden 2xl:inline">{tb('connected')}</span>
             </div>
           ) : (
             <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border flex-shrink-0 shadow-sm font-extrabold ${
               isDark ? 'bg-rose-500/15 border-rose-500/30 text-rose-400' : 'bg-rose-100 border-rose-200 text-rose-700'
             }`} title="Disconnected">
               <span className="w-2 h-2 bg-rose-500 rounded-full flex-shrink-0" />
-              <span className="text-[11px] uppercase tracking-wide hidden lg:inline">{tb('disconnected')}</span>
+              <span className="text-[11px] uppercase tracking-wide hidden 2xl:inline">{tb('disconnected')}</span>
             </div>
           )}
 
@@ -622,7 +623,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                   <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-600 via-indigo-600 to-purple-600 border border-cyan-300/40 flex items-center justify-center flex-shrink-0 shadow-md shadow-cyan-500/20 font-bold text-white text-[11px] select-none tracking-tight">
                     {initial}
                   </div>
-                  <span className="text-[10px] text-slate-300 font-medium hidden xl:inline max-w-[110px] truncate">
+                  <span className="text-[10px] text-slate-300 font-medium hidden 2xl:inline max-w-[110px] truncate">
                     {displayName}
                   </span>
                 </div>

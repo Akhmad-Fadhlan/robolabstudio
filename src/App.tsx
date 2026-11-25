@@ -3195,74 +3195,87 @@ if __name__ == '__main__':
     loop()`
   },
   {
-    name: "ESP8266 Blynk IoT Relay Control",
+    name: "ESP8266 Blynk IoT Kontrol Motor DC (Robot Car)",
     board: "ESP8266 NodeMCU",
-    description: "Kontrol Relay / Pin Output secara realtime menggunakan Blynk IoT Cloud (Virtual Pin V0 - V3).",
-    iconColor: "green",
-    components: ['led'],
-    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="blynk_config" x="40" y="40"><value name="TEMPLATE_ID"><shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow></value><value name="TEMPLATE_NAME"><shadow type="text"><field name="TEXT">ESP8266 Relay</field></shadow></value><value name="AUTH_TOKEN"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value></block><block type="blynk_on_write" x="40" y="160"><field name="VPIN">V0</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="480"><field name="VPIN">V1</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="800"><field name="VPIN">V2</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="1120"><field name="VPIN">V3</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="arduino_setup" x="40" y="1440"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field><next><block type="blynk_begin"><value name="AUTH"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value><value name="SSID"><shadow type="text"><field name="TEXT">NamaWiFiAnda</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">PasswordWiFi</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="1620"><statement name="STACK"><block type="blynk_run"></block></statement></block></xml>',
-    ino: `// RoboLab Studio - Generated Arduino Code
-// Blocks in workspace: blynk_on_write, arduino_setup, arduino_loop, blynk_on_write, blynk_on_write, blynk_on_write, controls_if, pin_digital_write, blynk_run, controls_if, controls_if, controls_if, robolab_logic_compare, pin_digital_write, controls_if, pin_digital_write, pin_digital_write, controls_if, robolab_logic_compare, robolab_logic_compare, pin_digital_write, controls_if, robolab_logic_compare, pin_digital_write, controls_if, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_begin, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_param_as_int, math_number, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, robolab_logic_compare, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, text, text, text, blynk_config, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, blynk_param_as_int, math_number, pin_digital_write, pin_digital_write, text, text, text, pin_digital_write, pin_digital_write, pin_digital_write
+    description: "Kontrol arah gerak robot mobil (V0: Maju, V1: Mundur, V2: Belok Kanan, V3: Belok Kiri) via WiFi menggunakan aplikasi Blynk IoT Cloud & driver motor L298N/L293D.",
+    iconColor: "emerald",
+    components: ['motorDC', 'led'],
+    xml: '<xml xmlns="https://developers.google.com/blockly/xml"><block type="blynk_config" x="40" y="40"><value name="TEMPLATE_ID"><shadow type="text"><field name="TEXT">TMPL69YI5UWvB</field></shadow></value><value name="TEMPLATE_NAME"><shadow type="text"><field name="TEXT">ESP8266 Motor Robot</field></shadow></value><value name="AUTH_TOKEN"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value></block><block type="blynk_on_write" x="40" y="160"><field name="VPIN">V0</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="480"><field name="VPIN">V1</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="800"><field name="VPIN">V2</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="blynk_on_write" x="40" y="1120"><field name="VPIN">V3</field><statement name="STACK"><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">2</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">0</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">HIGH</field><next><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">HIGH</field></block></next></block></next></block></statement><next><block type="controls_if"><value name="IF0"><block type="robolab_logic_compare"><field name="OP">EQ</field><value name="A"><block type="blynk_param_as_int"></block></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></value><statement name="DO0"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field></block></next></block></statement></block></next></block></statement></block><block type="arduino_setup" x="40" y="1440"><statement name="STACK"><block type="pin_digital_write"><field name="PIN">4</field><field name="STATE">LOW</field><next><block type="pin_digital_write"><field name="PIN">5</field><field name="STATE">LOW</field><next><block type="blynk_begin"><value name="AUTH"><shadow type="text"><field name="TEXT">p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT</field></shadow></value><value name="SSID"><shadow type="text"><field name="TEXT">NamaWiFiAnda</field></shadow></value><value name="PASS"><shadow type="text"><field name="TEXT">PasswordWiFi</field></shadow></value></block></next></block></next></block></statement></block><block type="arduino_loop" x="40" y="1620"><statement name="STACK"><block type="blynk_run"></block></statement></block></xml>',
+    ino: `// RoboLab Studio - ESP8266 Blynk IoT Kontrol Motor DC (Robot Car)
+// Pin Driver Motor (L298N / L293D):
+// - Pin 4 (D2) : Enable A (Motor Kiri)
+// - Pin 5 (D1) : Enable B (Motor Kanan)
+// - Pin 0 (D3) : IN1 (Arah Motor Kiri)
+// - Pin 2 (D4) : IN2 (Arah Motor Kanan)
+//
+// Kontrol Virtual Pin Blynk:
+// - V0 : Maju (Forward)
+// - V1 : Mundur (Backward)
+// - V2 : Belok Kanan (Turn Right)
+// - V3 : Belok Kiri (Turn Left)
 #define BLYNK_TEMPLATE_ID "TMPL69YI5UWvB"
-#define BLYNK_TEMPLATE_NAME "ESP8266 Relay"
+#define BLYNK_TEMPLATE_NAME "ESP8266 Motor Robot"
 #define BLYNK_AUTH_TOKEN "p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT"
 
 #define BLYNK_PRINT Serial
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 
-// Blynk Callback Functions
+// V0: MAJU (Forward)
 BLYNK_WRITE(V0) {
   int param_val = param.asInt();
-  if ((param.asInt() == 0)) {
+  if (param_val == 0) { // Tombol ditekan -> Maju
     digitalWrite(2, HIGH);
     digitalWrite(0, HIGH);
     digitalWrite(4, HIGH);
     digitalWrite(5, HIGH);
   }
-  if ((param.asInt() == 1)) {
+  if (param_val == 1) { // Tombol dilepas -> Berhenti
     digitalWrite(4, LOW);
     digitalWrite(5, LOW);
   }
 }
 
+// V1: MUNDUR (Backward)
 BLYNK_WRITE(V1) {
   int param_val = param.asInt();
-  if ((param.asInt() == 0)) {
+  if (param_val == 0) { // Tombol ditekan -> Mundur
     digitalWrite(2, LOW);
     digitalWrite(0, LOW);
     digitalWrite(5, HIGH);
     digitalWrite(4, HIGH);
   }
-  if ((param.asInt() == 1)) {
+  if (param_val == 1) { // Tombol dilepas -> Berhenti
     digitalWrite(4, LOW);
     digitalWrite(5, LOW);
   }
 }
 
+// V2: BELOK KANAN (Turn Right)
 BLYNK_WRITE(V2) {
   int param_val = param.asInt();
-  if ((param.asInt() == 0)) {
+  if (param_val == 0) { // Tombol ditekan -> Belok Kanan
     digitalWrite(2, HIGH);
     digitalWrite(0, LOW);
     digitalWrite(5, HIGH);
     digitalWrite(4, HIGH);
   }
-  if ((param.asInt() == 1)) {
+  if (param_val == 1) { // Tombol dilepas -> Berhenti
     digitalWrite(4, LOW);
     digitalWrite(5, LOW);
   }
 }
 
+// V3: BELOK KIRI (Turn Left)
 BLYNK_WRITE(V3) {
   int param_val = param.asInt();
-  if ((param.asInt() == 0)) {
+  if (param_val == 0) { // Tombol ditekan -> Belok Kiri
     digitalWrite(2, LOW);
     digitalWrite(0, HIGH);
     digitalWrite(5, HIGH);
     digitalWrite(4, HIGH);
   }
-  if ((param.asInt() == 1)) {
+  if (param_val == 1) { // Tombol dilepas -> Berhenti
     digitalWrite(4, LOW);
     digitalWrite(5, LOW);
   }
@@ -3270,30 +3283,63 @@ BLYNK_WRITE(V3) {
 
 void setup() {
   Serial.begin(115200);
-  // Configure I/O pins
-  pinMode(4, OUTPUT);
-  pinMode(2, OUTPUT);
-  pinMode(5, OUTPUT);
-  pinMode(0, OUTPUT);
+  // Inisialisasi pin kontrol motor sebagai OUTPUT
+  pinMode(4, OUTPUT); // ENA
+  pinMode(5, OUTPUT); // ENB
+  pinMode(0, OUTPUT); // IN1
+  pinMode(2, OUTPUT); // IN2
 
+  // Pastikan motor berhenti di awal
   digitalWrite(4, LOW);
   digitalWrite(5, LOW);
-  // Gunakan port 80 resmi Blynk IoT Cloud (blynk.cloud)
+  digitalWrite(0, LOW);
+  digitalWrite(2, LOW);
+
+  // Hubungkan ke server resmi Blynk Cloud (blynk.cloud port 80)
   Blynk.begin(BLYNK_AUTH_TOKEN, "RoboLab-WiFi", "12345678", "blynk.cloud", 80);
 }
 
 void loop() {
   Blynk.run();
 }`,
-    py: `# Proyek: ESP8266 Blynk IoT Relay Control
+    py: `# Proyek: ESP8266 Blynk IoT Kontrol Motor DC (Robot Car)
+# Virtual Pin: V0=Maju, V1=Mundur, V2=Kanan, V3=Kiri
 import time
 import robolab as robot
+
+def maju():
+    robot.digital_write(2, 1)
+    robot.digital_write(0, 1)
+    robot.digital_write(4, 1)
+    robot.digital_write(5, 1)
+
+def mundur():
+    robot.digital_write(2, 0)
+    robot.digital_write(0, 0)
+    robot.digital_write(4, 1)
+    robot.digital_write(5, 1)
+
+def belok_kanan():
+    robot.digital_write(2, 1)
+    robot.digital_write(0, 0)
+    robot.digital_write(4, 1)
+    robot.digital_write(5, 1)
+
+def belok_kiri():
+    robot.digital_write(2, 0)
+    robot.digital_write(0, 1)
+    robot.digital_write(4, 1)
+    robot.digital_write(5, 1)
+
+def stop_motor():
+    robot.digital_write(4, 0)
+    robot.digital_write(5, 0)
 
 def loop():
     robot.blynk_begin("p1QoM5C_nySynOw3gx8tnVhDfmOsZCcT", "RoboLab-WiFi", "12345678")
     while True:
         robot.blynk_run()
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 if __name__ == '__main__':
     loop()`
@@ -5399,16 +5445,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [isResizingSimulator, setIsResizingSimulator] = useState(false);
   const [projectPath, setProjectPath] = useState<string>('');
   
-  // Responsive screen checker (only stack vertically on small phone screens < 640px)
-  const [isMobile, setIsMobile] = useState(false);
+  // Responsive screen checker across Mobile, Tablet, 13"/14" Laptop, and Desktop
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const [windowHeight, setWindowHeight] = useState(() => typeof window !== 'undefined' ? window.innerHeight : 800);
   const [mobileProjectFiles, setMobileProjectFiles] = useState(false);
+
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 767px)');
-    setIsMobile(mql.matches);
-    const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mql.addEventListener('change', listener);
-    return () => mql.removeEventListener('change', listener);
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const isMobile = windowWidth <= 640;
+  const isTablet = windowWidth > 640 && windowWidth <= 1024;
+  const isCompactLaptop = (windowWidth > 1024 && windowWidth <= 1440) || (windowWidth > 1024 && windowHeight <= 820);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -9158,7 +9212,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }} />}
 
       {/* 3. CORE PANEL CONTAINER (Left sidebar + Workspace area) */}
-      <div className="flex min-h-0 flex-1 flex-col-reverse gap-2 p-1.5 md:flex-row md:gap-3 md:p-3 relative z-10">
+      <div className="flex min-h-0 flex-1 flex-col-reverse gap-1.5 p-1 sm:p-1.5 md:flex-row md:gap-2 md:p-2 2xl:gap-3 2xl:p-3 relative z-10">
         
         {/* A. LEFT NAVIGATION SIDEBAR (narrow layout) */}
         <Sidebar 
@@ -9181,8 +9235,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           {currentTab === 'home' && (
             <div className={`absolute inset-0 flex flex-col justify-between overflow-x-hidden overflow-y-auto home-carousel-bg ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
               {/* Header title */}
-              <div className="pt-8 px-8 text-center space-y-2 select-none relative z-10">
-                <h2 className="text-3xl font-extrabold tracking-tight home-carousel-title" style={{fontFamily: 'Outfit, Inter, sans-serif'}}>
+              <div className="pt-4 lg:pt-8 px-4 sm:px-8 text-center space-y-1.5 sm:space-y-2 select-none relative z-10">
+                <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight home-carousel-title" style={{fontFamily: 'Outfit, Inter, sans-serif'}}>
                   {t(language, 'home', 'carouselTitle')}
                 </h2>
                 <p className={`text-xs max-w-md mx-auto ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
@@ -9191,10 +9245,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               </div>
 
               {/* 3D Circular Carousel Viewport */}
-              <div className="relative flex-1 w-full flex items-center justify-center py-6 select-none" style={{ perspective: 1200, minHeight: '450px' }}>
+              <div className="relative flex-1 w-full flex items-center justify-center py-3 sm:py-6 select-none" style={{ perspective: 1200, minHeight: isCompactLaptop ? '330px' : (isMobile ? '290px' : '420px') }}>
                 
                 {/* 3D Stack Container */}
-                <div className="relative w-full max-w-none h-[380px] flex items-center justify-center overflow-visible">
+                <div className={`relative w-full max-w-none ${isCompactLaptop ? 'h-[310px]' : (isMobile ? 'h-[280px]' : 'h-[370px]')} flex items-center justify-center overflow-visible`}>
                   {allProjectsList.map((proj, index) => {
                     const totalCards = allProjectsList.length;
                     let diff = index - activeCardIndex;
@@ -9217,33 +9271,33 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     if (diff === 0) {
                       xOffset = 0;
                       rotateYAngle = 0;
-                      scaleValue = isMobile ? 1 : 1.08;
+                      scaleValue = isMobile ? 1 : (isCompactLaptop ? 1.04 : 1.08);
                       zIndexValue = 10;
                       opacityValue = 1;
                     } else if (diff === -1) {
-                      xOffset = isMobile ? -155 : -280;
-                      rotateYAngle = 38;
-                      scaleValue = 0.9;
+                      xOffset = isMobile ? -130 : (isTablet ? -175 : (isCompactLaptop ? -210 : -280));
+                      rotateYAngle = isCompactLaptop ? 32 : 38;
+                      scaleValue = isCompactLaptop ? 0.88 : 0.9;
                       zIndexValue = 5;
                       opacityValue = 0.8;
                     } else if (diff === 1) {
-                      xOffset = isMobile ? 155 : 280;
-                      rotateYAngle = -38;
-                      scaleValue = 0.9;
+                      xOffset = isMobile ? 130 : (isTablet ? 175 : (isCompactLaptop ? 210 : 280));
+                      rotateYAngle = isCompactLaptop ? -32 : -38;
+                      scaleValue = isCompactLaptop ? 0.88 : 0.9;
                       zIndexValue = 5;
                       opacityValue = 0.8;
                     } else if (diff === -2) {
-                      xOffset = -540;
+                      xOffset = isMobile ? -250 : (isTablet ? -330 : (isCompactLaptop ? -385 : -540));
                       rotateYAngle = 55;
-                      scaleValue = 0.75;
+                      scaleValue = isCompactLaptop ? 0.72 : 0.75;
                       zIndexValue = 2;
-                      opacityValue = 0.45;
+                      opacityValue = isTablet || isMobile ? 0 : 0.45;
                     } else if (diff === 2) {
-                      xOffset = 540;
+                      xOffset = isMobile ? 250 : (isTablet ? 330 : (isCompactLaptop ? 385 : 540));
                       rotateYAngle = -55;
-                      scaleValue = 0.75;
+                      scaleValue = isCompactLaptop ? 0.72 : 0.75;
                       zIndexValue = 2;
-                      opacityValue = 0.45;
+                      opacityValue = isTablet || isMobile ? 0 : 0.45;
                     }
 
                     let IconComponent = Bot;
@@ -9283,7 +9337,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           handleOpenTemplate(proj.name || "");
                           setActiveCardIndex(index);
                         }}
-                        className="w-[min(74vw,280px)] h-[340px] rounded-3xl p-6 cursor-pointer relative flex flex-col justify-between overflow-hidden"
+                        className={`w-[min(76vw,${isCompactLaptop ? "250px" : (isMobile ? "240px" : "280px")})] ${isCompactLaptop ? "h-[305px] p-4 sm:p-5" : (isMobile ? "h-[285px] p-4" : "h-[340px] p-6")} rounded-3xl cursor-pointer relative flex flex-col justify-between overflow-hidden`}
                         style={{
                           position: 'absolute',
                           zIndex: zIndexValue,
@@ -9312,19 +9366,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         {/* Card body */}
                         <div className="relative z-10 flex flex-col h-full justify-between">
                           <div>
-                            {diff === 0 ? <div className="mb-3"><HomeRobot /></div> : <div
-                              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 border"
+                            {diff === 0 ? <div className={isCompactLaptop ? "mb-1.5" : "mb-3"}><HomeRobot /></div> : <div
+                              className={`${isCompactLaptop ? "w-9 h-9 rounded-xl mb-2" : "w-12 h-12 rounded-2xl mb-4"} flex items-center justify-center border`}
                               style={{ 
                                 color: accentColor, 
                                 backgroundColor: `${accentColor}12`,
                                 borderColor: `${accentColor}25`
                               }}
                             >
-                              <IconComponent className="w-6 h-6" />
+                              <IconComponent className={isCompactLaptop ? "w-4 h-4" : "w-6 h-6"} />
                             </div>}
                             
-                            <h3 className={`text-sm font-bold leading-tight font-display mb-2 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{proj.name}</h3>
-                            <p className={`text-[11px] leading-relaxed font-sans line-clamp-4 ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{proj.description}</p>
+                            <h3 className={`${isCompactLaptop ? "text-xs font-bold mb-1" : "text-sm font-bold mb-2"} leading-tight font-display ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{proj.name}</h3>
+                            <p className={`${isCompactLaptop ? "text-[10px] line-clamp-3" : "text-[11px] line-clamp-4"} leading-relaxed font-sans ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{proj.description}</p>
                           </div>
 
                           <div>
@@ -9374,7 +9428,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setActiveCardIndex((prev) => (prev + 1) % PROJECTS_LIST.length);
+                    setActiveCardIndex((prev) => (prev + 1) % allProjectsList.length);
                   }}
                   className="absolute right-6 w-10 h-10 rounded-full flex items-center justify-center bg-slate-900/60 hover:bg-slate-800 border border-white/10 text-white/70 hover:text-white transition duration-200 cursor-pointer z-20"
                 >
@@ -9383,7 +9437,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               </div>
 
               {/* Progress Indicator dots */}
-              <div className="pb-8 w-full flex items-center justify-center gap-1.5 select-none relative z-10">
+              <div className="pb-4 lg:pb-8 w-full flex items-center justify-center gap-1.5 select-none relative z-10">
                 {allProjectsList.map((_, i) => (
                   <button
                     key={i}
@@ -9553,7 +9607,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               
               {/* SIDEBAR PANEL (Explorer / Files list) */}
               {((!isMobile && showExplorer) || (isMobile && mobileProjectFiles)) && (
-                <div className={`lab-surface panel-explorer w-56 ${isMobile ? 'absolute inset-y-0 left-0 z-[60] max-w-[90vw] shadow-xl' : ''} flex flex-col flex-shrink-0 select-none overflow-hidden`}>
+                <div className={`lab-surface panel-explorer w-48 2xl:w-56 ${isMobile ? 'absolute inset-y-0 left-0 z-[60] max-w-[90vw] shadow-xl' : ''} flex flex-col flex-shrink-0 select-none overflow-hidden`}>
                   {/* Panel Title */}
                   <div className="h-10 flex items-center justify-between px-4 border-b border-white/5">
                     <span className="text-xs font-bold">Berkas proyek</span>

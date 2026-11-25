@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside 
       aria-label="Sidebar Navigation"
-      className="lab-surface z-40 flex w-full shrink-0 select-none flex-col justify-between overflow-hidden rounded-xl border px-1 shadow-sm md:w-20 md:rounded-2xl md:px-2 md:py-3"
+      className="lab-surface z-40 flex w-full shrink-0 select-none flex-col justify-between overflow-hidden rounded-xl border px-1 shadow-sm md:w-16 2xl:w-20 md:rounded-2xl md:px-1.5 2xl:px-2 md:py-2 2xl:py-3"
     >
       {/* ── Top Navigation Links ── */}
       <div className="lab-nav-links flex w-full items-center gap-0.5 overflow-x-auto md:flex-col md:gap-1.5 md:overflow-visible">
@@ -73,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button 
           onClick={() => setCurrentTab('home')}
           style={getNavBtnStyle(currentTab === 'home')}
-          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'home')}`}
+          className={`w-full flex flex-col items-center justify-center py-1.5 2xl:py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'home')}`}
           title={sb('dashboardHome')}
         >
           <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
@@ -88,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button 
           onClick={() => setCurrentTab('packages')}
           style={getNavBtnStyle(currentTab === 'packages')}
-          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'packages')}`}
+          className={`w-full flex flex-col items-center justify-center py-1.5 2xl:py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'packages')}`}
           title={sb('packageManager')}
         >
           <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
@@ -110,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }
           }}
           style={getNavBtnStyle(currentTab === 'ide' && showExplorer)}
-          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'ide' && showExplorer)}`}
+          className={`w-full flex flex-col items-center justify-center py-1.5 2xl:py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'ide' && showExplorer)}`}
           title={sb('fileExplorer')}
         >
           <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button 
           onClick={() => setCurrentTab('simulator')}
           style={getNavBtnStyle(currentTab === 'simulator')}
-          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'simulator')}`}
+          className={`w-full flex flex-col items-center justify-center py-1.5 2xl:py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'simulator')}`}
           title={sb('hardwareSimulator')}
         >
           <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
@@ -140,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button 
           onClick={() => setCurrentTab('learning')}
           style={getNavBtnStyle(currentTab === 'learning')}
-          className={`w-full flex flex-col items-center justify-center py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'learning')}`}
+          className={`w-full flex flex-col items-center justify-center py-1.5 2xl:py-2 px-1 rounded-2xl transition-all cursor-pointer group ${getNavBtnClass(currentTab === 'learning')}`}
           title={sb('learningPortal')}
         >
           <div className="p-1 rounded-xl transition-transform group-hover:scale-110">
