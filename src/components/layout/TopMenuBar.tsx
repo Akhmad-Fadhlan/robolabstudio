@@ -239,25 +239,17 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({
                 {!isLocalBridgeOnline ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = '/downloads/RoboLab-Compiler-Bridge-Setup.exe';
-                      link.download = 'RoboLab-Compiler-Bridge-Setup.exe';
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      onOpenCompilerBridge?.();
-                    }}
+                    onClick={onOpenCompilerBridge}
                     className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer flex-shrink-0 shadow-sm border ${
                       isDark
                         ? 'bg-amber-500/20 hover:bg-amber-500/35 text-amber-300 border-amber-500/40'
                         : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
                     }`}
-                    title="Pasang RoboLab Compiler Bridge (.exe) untuk kompilasi lokal instan (Blynk IoT & ESP) + Driver CH340/CP2102 otomatis"
+                    title="Pasang RoboLab Compiler Bridge (Windows, macOS, Linux) untuk kompilasi lokal instan (Blynk IoT & ESP)"
                   >
                     <span className="text-amber-400 font-extrabold text-xs">⚡</span>
-                    <span className="hidden 2xl:inline font-bold">Install Bridge (.exe)</span>
-                    <span className="hidden sm:inline 2xl:hidden font-bold">Bridge</span>
+                    <span className="hidden 2xl:inline font-bold">Compiler Bridge</span>
+                    <span className="hidden sm:inline 2xl:hidden font-bold">Compiler</span>
                     <span className="sm:hidden font-bold">Bridge</span>
                   </button>
                 ) : (

@@ -23,6 +23,7 @@ import { TopMenuBar } from './components/layout/TopMenuBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { TerminalPanel } from './components/layout/TerminalPanel';
+import { CompilerBridgeModal } from './components/CompilerBridgeModal';
 import { PythonLogo } from './components/icons/PythonLogo';
 import { BlockFieldGuide } from './components/learning/BlockFieldGuide';
 import { ProjectWorkshop } from './components/learning/ProjectWorkshop';
@@ -3490,17 +3491,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [isCheckingBridge, setIsCheckingBridge] = useState(false);
   const [appVersion, setAppVersion] = useState('0.8.0');
 
-  const handleDownloadCompilerBridge = (openModal: boolean = true) => {
-    const link = document.createElement('a');
-    link.href = '/downloads/RoboLab-Compiler-Bridge-Setup.exe';
-    link.download = 'RoboLab-Compiler-Bridge-Setup.exe';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    if (openModal) {
-      setShowCompilerBridgeModal(true);
-    }
-  };
+
 
   const checkBridgeStatus = useCallback(async (force = false) => {
     setIsCheckingBridge(true);
@@ -8181,14 +8172,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             setTerminalLogs(prev => [
               ...prev,
               {
-                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Unduh RoboLab-Compiler-Bridge-Setup.exe (~27MB) via tombol "⚡ Install Bridge (.exe)" di toolbar atas.',
+                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Pasang RoboLab Compiler Bridge (Windows, macOS, Linux) via tombol "⚡ Compiler Bridge" di toolbar atas.',
                 type: 'info'
               }
             ]);
             setInteractiveTerminalLogs(prev => [
               ...prev,
               {
-                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Unduh RoboLab-Compiler-Bridge-Setup.exe (~27MB) via tombol "⚡ Install Bridge (.exe)" di toolbar atas.',
+                text: '💡 [Tips] Ingin kompilasi instan 100% native untuk Blynk & ESP? Pasang RoboLab Compiler Bridge (Windows, macOS, Linux) via tombol "⚡ Compiler Bridge" di toolbar atas.',
                 type: 'output'
               }
             ]);
@@ -12100,7 +12091,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           { id: 'save', title: 'Simpan Berkas', category: 'File', icon: <Save className="w-4 h-4 text-blue-400" />, shortcut: 'Ctrl+S', action: handleSaveFile },
           { id: 'verify', title: 'Kompilasi Firmware (Verify)', category: 'Hardware', icon: <Check className="w-4 h-4 text-emerald-400" />, action: () => handleArduinoHardwareAction('verify') },
           { id: 'upload', title: 'Unggah ke Board (Upload)', category: 'Hardware', icon: <Upload className="w-4 h-4 text-purple-400" />, action: () => handleArduinoHardwareAction('upload') },
-          { id: 'install_bridge', title: 'Pasang RoboLab Compiler Bridge (.exe) (~27MB)', category: 'Hardware', icon: <Cpu className="w-4 h-4 text-amber-400" />, action: () => handleDownloadCompilerBridge(true) },
+          { id: 'install_bridge', title: 'Pasang RoboLab Compiler Bridge (Windows, macOS, Linux)', category: 'Hardware', icon: <Cpu className="w-4 h-4 text-amber-400" />, action: () => setShowCompilerBridgeModal(true) },
           { id: 'board_mgr', title: 'Buka Board Manager', category: 'Tools', icon: <Cpu className="w-4 h-4 text-purple-400" />, action: () => setShowBoardManagerModal(true) },
           { id: 'lib_mgr', title: 'Buka Library Manager', category: 'Tools', icon: <Sliders className="w-4 h-4 text-cyan-400" />, action: () => setShowLibraryManagerModal(true) },
           { id: 'settings', title: 'Buka Pengaturan Sistem', category: 'Settings', icon: <Sliders className="w-4 h-4 text-slate-400" />, action: () => setShowSettingsModal(true) },
@@ -12238,106 +12229,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       )}
 
       {/* ROBOLAB COMPILER BRIDGE MODAL */}
-      {showCompilerBridgeModal && (
-        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
-          <div className="glass-panel rounded-2xl p-6 w-[520px] max-w-[92vw] flex flex-col gap-4 shadow-2xl relative overflow-hidden"
-          style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
-            {/* Header */}
-            <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">⚡</span>
-                <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>RoboLab Compiler Bridge</h3>
-              </div>
-              <button onClick={() => setShowCompilerBridgeModal(false)} className={`transition cursor-pointer p-1 rounded-lg ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Status Card */}
-            <div className={`p-4 rounded-xl border flex items-center justify-between ${
-              isLocalBridgeOnline
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-            }`}>
-              <div className="flex items-center gap-3">
-                <span className={`w-3 h-3 rounded-full ${isLocalBridgeOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                <div>
-                  <h4 className="font-bold text-sm">
-                    {isLocalBridgeOnline ? 'Bridge Aktif (Port 3001)' : 'Bridge Belum Aktif'}
-                  </h4>
-                  <p className="text-xs opacity-80">
-                    {isLocalBridgeOnline
-                      ? 'RoboLab Web terhubung dengan compiler native lokal. Blynk & semua sketch C++ berjalan 100% lancar.'
-                      : 'Nyalakan bridge lokal untuk kompilasi native instan tanpa limit server.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={isCheckingBridge}
-                onClick={() => checkBridgeStatus(true)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 transition cursor-pointer shrink-0"
-              >
-                {isCheckingBridge ? 'Memeriksa…' : 'Cek Ulang'}
-              </button>
-            </div>
-
-            {/* Download & Installation Guide */}
-            <div className={`rounded-xl p-4 border text-xs flex flex-col gap-3 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'}`}>
-              <div className="font-bold text-sm flex items-center gap-1.5">
-                <span>📦</span> Unduh Installer Compiler Bridge (Hanya ~27 MB)
-              </div>
-              <p className="text-xs leading-relaxed opacity-90">
-                Compiler Bridge adalah aplikasi ringan yang berjalan di komputer Anda. Memberikan kemampuan kompilasi native <strong>Blynk IoT, ESP8266, ESP32, dan Arduino</strong> ke RoboLab Web browser, persis seperti di aplikasi desktop.
-              </p>
-
-              <div className="flex gap-2 pt-1">
-                <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
-                  download="RoboLab-Compiler-Bridge-Setup.exe"
-                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/20 transition cursor-pointer"
-                >
-                  <span>⬇️ Unduh Installer (.exe)</span>
-                </a>
-                <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Setup.zip"
-                  download="RoboLab-Compiler-Bridge-Setup.zip"
-                  className="flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs transition cursor-pointer"
-                >
-                  <span>📁 ZIP Portable</span>
-                </a>
-              </div>
-
-              {/* Steps */}
-              <div className="pt-2 border-t border-slate-700/20 space-y-1.5 text-[11px]">
-                <div className="font-semibold text-slate-400">Langkah Pemasangan 1-Menit:</div>
-                <div className="flex items-start gap-2">
-                  <span className="font-bold text-blue-400">1.</span>
-                  <span>Klik tombol unduh di atas (installer otomatis <strong>RoboLab-Compiler-Bridge-Setup.exe</strong>).</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="font-bold text-blue-400">2.</span>
-                  <span>Jalankan installer. Otomatis membuat shortcut di Desktop dan menyalakan bridge.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="font-bold text-blue-400">3.</span>
-                  <span>Indikator di RoboLab Web otomatis hijau dan Anda siap mengompilasi proyek IoT Blynk!</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCompilerBridgeModal(false)}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CompilerBridgeModal
+        isOpen={showCompilerBridgeModal}
+        onClose={() => setShowCompilerBridgeModal(false)}
+        isOnline={isLocalBridgeOnline}
+        isChecking={isCheckingBridge}
+        onCheckStatus={() => checkBridgeStatus(true)}
+        themeMode={themeMode}
+      />
 
       {/* ROBOLAB COMPILER BRIDGE UPLOAD PROMPT MODAL */}
       {showUploadBridgePrompt && (
@@ -12363,7 +12262,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             {/* Content */}
             <div className="flex flex-col gap-3">
               <p className={`text-xs leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
-                Untuk mengompilasi dan mengunggah sketch C++ (terutama <strong>Blynk IoT, ESP8266, dan ESP32</strong>) langsung dari browser dengan performa native, pasang <strong>RoboLab Compiler Bridge (.exe)</strong>.
+                Untuk mengompilasi dan mengunggah sketch C++ (terutama <strong>Blynk IoT, ESP8266, dan ESP32</strong>) langsung dari browser dengan performa native, pasang <strong>RoboLab Compiler Bridge (Windows, macOS, Linux)</strong>.
               </p>
 
               <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${themeMode === 'light' ? 'bg-blue-50/70 border-blue-200/80 text-blue-950' : 'bg-blue-500/10 border-blue-500/20 text-blue-200'}`}>
@@ -12371,9 +12270,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   <span>⚡</span> Keunggulan Compiler Bridge:
                 </div>
                 <div className="space-y-1 text-[11px] opacity-90 pl-1">
-                  <div>✓ <strong>Ringan &amp; Instan:</strong> Hanya ~27 MB, kompilasi 100% lokal tanpa antrean server.</div>
-                  <div>✓ <strong>Driver Otomatis:</strong> Mengecek dan memasang driver USB CH340 &amp; CP2102 jika belum ada.</div>
-                  <div>✓ <strong>System Tray:</strong> Berjalan di background saat dibutuhkan, minim memori.</div>
+                  <div>✓ <strong>Ringan &amp; Instan:</strong> Kompilasi 100% lokal di komputer Anda tanpa antrean server.</div>
+                  <div>✓ <strong>Multiplatform:</strong> Tersedia untuk Windows, macOS (Apple Silicon &amp; Intel), dan Linux.</div>
+                  <div>✓ <strong>System Tray &amp; Background:</strong> Berjalan di background saat dibutuhkan, minim memori.</div>
                 </div>
               </div>
 
@@ -12386,11 +12285,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       try { localStorage.setItem('robolab_skip_bridge_upload_prompt', 'true'); } catch {}
                     }
                     setShowUploadBridgePrompt(false);
-                    handleDownloadCompilerBridge(true);
+                    setShowCompilerBridgeModal(true);
                   }}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition cursor-pointer"
                 >
-                  <span>⚡ Unduh &amp; Pasang Bridge (.exe)</span>
+                  <span>⚡ Unduh &amp; Pasang Bridge</span>
                 </button>
                 <button
                   type="button"

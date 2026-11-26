@@ -17,35 +17,72 @@ const { selectArduinoSketch } = require('./arduino-sketch.cjs');
 
 const PORT = Number(process.env.PORT) || 3001;
 
-// Locate bundled arduino-cli.exe (works from root or from robolab-web subfolder)
+// Locate bundled arduino-cli.exe / binary (works across Windows, macOS, Linux)
 function getArduinoCliPath() {
-  if (process.platform !== 'win32') return 'arduino-cli';
-  const candidates = [
-    path.join(__dirname, '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
-    path.join(__dirname, '..', '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
-    path.join(process.cwd(), 'resources', 'bin', 'win32', 'arduino-cli.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'Arduino15', 'arduino-cli.exe'),
-    ...[process.env.ProgramFiles, path.join(process.env.LOCALAPPDATA || '', 'Programs')]
-      .filter(Boolean)
-      .map(dir => path.join(dir, 'Arduino IDE', 'resources', 'app', 'lib', 'backend', 'resources', 'arduino-cli.exe')),
-    'C:\\Program Files\\Arduino CLI\\arduino-cli.exe',
-  ];
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(c)) return c;
-    } catch {}
+  const isWin = process.platform === 'win32';
+  const binaryName = isWin ? 'arduino-cli.exe' : 'arduino-cli';
+
+  // 1. Check local tools/robolab-compiler-bridge/bin
+  const localBridgeBin = path.join(__dirname, 'bin', binaryName);
+  if (fs.existsSync(localBridgeBin)) return localBridgeBin;
+
+  if (isWin) {
+    const candidates = [
+      path.join(__dirname, '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
+      path.join(__dirname, '..', '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
+      path.join(process.cwd(), 'resources', 'bin', 'win32', 'arduino-cli.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Arduino15', 'arduino-cli.exe'),
+      ...[process.env.ProgramFiles, path.join(process.env.LOCALAPPDATA || '', 'Programs')]
+        .filter(Boolean)
+        .map(dir => path.join(dir, 'Arduino IDE', 'resources', 'app', 'lib', 'backend', 'resources', 'arduino-cli.exe')),
+      'C:\\Program Files\\Arduino CLI\\arduino-cli.exe',
+    ];
+    for (const c of candidates) {
+      try {
+        if (fs.existsSync(c)) return c;
+      } catch {}
+    }
+    return 'arduino-cli.exe';
+  } else {
+    // macOS & Linux candidates
+    const unixCandidates = [
+      '/opt/homebrew/bin/arduino-cli',
+      '/usr/local/bin/arduino-cli',
+      '/usr/bin/arduino-cli',
+      path.join(os.homedir(), '.local', 'bin', 'arduino-cli'),
+      path.join(os.homedir(), 'bin', 'arduino-cli'),
+      path.join(__dirname, '..', 'resources', 'bin', process.platform === 'darwin' ? 'darwin' : 'linux', 'arduino-cli'),
+    ];
+    for (const c of unixCandidates) {
+      try {
+        if (fs.existsSync(c)) return c;
+      } catch {}
+    }
+    return 'arduino-cli';
   }
-  return 'arduino-cli';
 }
 
 // Parse directories from Arduino15/arduino-cli.yaml if present
 function getYamlDirectories() {
   const localAppData = process.env.LOCALAPPDATA || '';
-  const yamlPath = path.join(localAppData, 'Arduino15', 'arduino-cli.yaml');
-  const result = { yamlPath: fs.existsSync(yamlPath) ? yamlPath : '', dataDir: '', userDir: '' };
+  const yamlCandidates = [
+    localAppData ? path.join(localAppData, 'Arduino15', 'arduino-cli.yaml') : '',
+    path.join(os.homedir(), 'Library', 'Arduino15', 'arduino-cli.yaml'), // macOS
+    path.join(os.homedir(), '.arduino15', 'arduino-cli.yaml'), // Linux
+  ].filter(Boolean);
+
+  let yamlPath = '';
+  for (const yp of yamlCandidates) {
+    if (fs.existsSync(yp)) {
+      yamlPath = yp;
+      break;
+    }
+  }
+
+  const result = { yamlPath, dataDir: '', userDir: '' };
   if (!result.yamlPath) return result;
   try {
-    const content = fs.readFileSync(yamlPath, 'utf-8');
+    const content = fs.readFileSync(result.yamlPath, 'utf-8');
     const dataMatch = content.match(/^\s*data:\s*(.+)$/m);
     const userMatch = content.match(/^\s*user:\s*(.+)$/m);
     if (dataMatch && dataMatch[1]) result.dataDir = dataMatch[1].trim().replace(/^['"]|['"]$/g, '');
@@ -62,7 +99,10 @@ function getCliEnv(fqbn = '') {
   const localAppData = process.env.LOCALAPPDATA || '';
 
   const candidateDataDirs = [
+    path.join(__dirname, 'arduino-data'),
     yamlDataDir,
+    path.join(os.homedir(), 'Library', 'Arduino15'), // macOS
+    path.join(os.homedir(), '.arduino15'), // Linux
     localAppData ? path.join(localAppData, 'Arduino15') : '',
     path.join(__dirname, '..', 'resources', 'arduino-data'),
     path.join(__dirname, '..', '..', 'resources', 'arduino-data'),
@@ -99,7 +139,9 @@ function getCliEnv(fqbn = '') {
 
   const candidateUserDirs = [
     yamlUserDir,
+    path.join(__dirname, 'arduino-data'),
     path.join(os.homedir(), 'Documents', 'Arduino'),
+    path.join(os.homedir(), 'Arduino'),
     chosenDataDir,
   ].filter(Boolean);
 
@@ -119,8 +161,10 @@ function getCliEnv(fqbn = '') {
 function getExtraLibraryArgs() {
   const { userDir: yamlUserDir } = getYamlDirectories();
   const libDirs = [
+    path.join(__dirname, 'arduino-data', 'libraries'),
     yamlUserDir ? path.join(yamlUserDir, 'libraries') : '',
     path.join(os.homedir(), 'Documents', 'Arduino', 'libraries'),
+    path.join(os.homedir(), 'Arduino', 'libraries'),
     path.join(__dirname, '..', 'resources', 'arduino-data', 'libraries'),
     path.join(__dirname, '..', '..', 'resources', 'arduino-data', 'libraries'),
     'C:\\KidsBlock Desktop\\resources\\tools\\Arduino\\libraries',
@@ -142,8 +186,16 @@ function getExtraLibraryArgs() {
 
 function getConfigArgs() {
   const localAppData = process.env.LOCALAPPDATA || '';
-  const arduino15ConfigPath = path.join(localAppData, 'Arduino15', 'arduino-cli.yaml');
-  return fs.existsSync(arduino15ConfigPath) ? ['--config-file', arduino15ConfigPath] : [];
+  const candidateConfigs = [
+    localAppData ? path.join(localAppData, 'Arduino15', 'arduino-cli.yaml') : '',
+    path.join(os.homedir(), 'Library', 'Arduino15', 'arduino-cli.yaml'), // macOS
+    path.join(os.homedir(), '.arduino15', 'arduino-cli.yaml'), // Linux
+  ].filter(Boolean);
+
+  for (const c of candidateConfigs) {
+    if (fs.existsSync(c)) return ['--config-file', c];
+  }
+  return [];
 }
 
 function resolveFqbn(board = '') {
@@ -790,6 +842,25 @@ async function detectLocalComPorts() {
     return regPorts;
   }
 
+  // 1b. Fast macOS / Linux /dev scan (<5ms)
+  const unixDevPorts = [];
+  if (process.platform !== 'win32' && fs.existsSync('/dev')) {
+    try {
+      const devFiles = fs.readdirSync('/dev');
+      for (const f of devFiles) {
+        if (/^(ttyUSB|ttyACM|cu\.usbserial|cu\.usbmodem|cu\.SLAB|cu\.wch)/i.test(f)) {
+          const fullPath = path.join('/dev', f);
+          unixDevPorts.push({
+            address: fullPath,
+            label: `${fullPath} (USB Serial)`,
+            protocol: 'serial',
+            isBluetooth: false,
+          });
+        }
+      }
+    } catch {}
+  }
+
   // 2. Fallback / enrichment via arduino-cli board list with a tight 3s timeout
   const configArgs = getConfigArgs();
   const res = await runCli(['board', 'list', '--format', 'json', ...configArgs], null, 3000);
@@ -818,6 +889,11 @@ async function detectLocalComPorts() {
   }
 
   const merged = [...regPorts];
+  for (const up of unixDevPorts) {
+    if (!merged.some((m) => m.address === up.address)) {
+      merged.push(up);
+    }
+  }
   for (const cp of cliPorts) {
     const existing = merged.find((m) => m.address === cp.address);
     if (existing) {

@@ -2,13 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log('[1/4] Preparing RoboLab Compiler Bridge files...');
+console.log('[1/5] Preparing RoboLab Compiler Bridge files...');
 const rootDir = path.resolve(__dirname, '..');
 const bridgeDir = path.join(rootDir, 'tools', 'robolab-compiler-bridge');
 const publicDownloadsDir = path.join(rootDir, 'public', 'downloads');
+const tmpDir = path.join(rootDir, 'tmp');
 
 if (!fs.existsSync(bridgeDir)) fs.mkdirSync(bridgeDir, { recursive: true });
 if (!fs.existsSync(publicDownloadsDir)) fs.mkdirSync(publicDownloadsDir, { recursive: true });
+if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
 // Copy compile-server.cjs and arduino-sketch.cjs
 fs.copyFileSync(
@@ -46,7 +48,7 @@ if (fs.existsSync(cscPath) && fs.existsSync(traySrc)) {
 }
 
 // Copy essential libraries (Blynk, Adafruit, DHT, WiFi, etc.)
-console.log('[2/4] Copying essential Arduino libraries (Blynk, Adafruit, DHT, Servo)...');
+console.log('[2/5] Copying essential Arduino libraries (Blynk, Adafruit, DHT, Servo)...');
 const libSrc = path.join(rootDir, 'resources', 'arduino-data', 'libraries');
 const libDest = path.join(bridgeDir, 'arduino-data', 'libraries');
 if (fs.existsSync(libSrc)) {
@@ -60,37 +62,20 @@ if (fs.existsSync(driversSrc)) {
   fs.cpSync(driversSrc, driversDest, { recursive: true });
 }
 
-// Create README.md
-const readmeContent = `# RoboLab Studio — Local Compiler Bridge
-
-Bridge lokal ultra-ringan untuk RoboLab Web (https://robolabstudio.vercel.app).
-Memungkinkan Anda mengompilasi dan mengunggah kode C++ Arduino, ESP8266, dan ESP32
-secara 100% native dari browser dengan kecepatan penuh.
-
-## Cara Menggunakan:
-1. Klik ganda **start-bridge.bat** (atau jalankan **install-bridge.bat** untuk membuat shortcut di Desktop).
-2. Bridge akan berjalan di \`http://localhost:3001\`.
-3. Buka RoboLab Web di browser (Chrome / Edge / Opera).
-4. Indikator Compiler di RoboLab Web akan otomatis berwarna **HIJAU (Terhubung)**.
-5. Klik **Upload** atau **Verify** — sketch Anda langsung dikompilasi secara native!
-
-## Fitur:
-- Mendukung penuh Blynk IoT Cloud (ESP8266 & ESP32).
-- Pustaka lengkap bawaan (Blynk, WiFi, DHT, Servo, LiquidCrystal, Ultrasonic, dll).
-- Otomatis mendeteksi port COM USB (CH340, CP2102, FTDI).
-`;
-fs.writeFileSync(path.join(bridgeDir, 'README.md'), readmeContent, 'utf-8');
-
-console.log('[3/4] Creating zip package in public/downloads/RoboLab-Compiler-Bridge-Setup.zip...');
+// Windows ZIP & EXE
+console.log('[3/5] Packaging Windows installer & portable zip...');
 const zipOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Setup.zip');
+const winZipOutput = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Windows.zip');
 try {
   if (fs.existsSync(zipOutput)) fs.unlinkSync(zipOutput);
   execSync(
     `tar.exe -a -c -f "${zipOutput}" -C "${bridgeDir}" .`,
     { stdio: 'inherit' }
   );
+  if (fs.existsSync(winZipOutput)) fs.unlinkSync(winZipOutput);
+  fs.copyFileSync(zipOutput, winZipOutput);
   const stats = fs.statSync(zipOutput);
-  console.log(`      * Created: ${zipOutput} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`      * Created Windows ZIP: ${zipOutput} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 } catch (err) {
   console.error('Failed to create zip package with tar, falling back to powershell:', err.message);
   if (fs.existsSync(zipOutput)) fs.unlinkSync(zipOutput);
@@ -98,8 +83,8 @@ try {
     `powershell -Command "Compress-Archive -Path '${bridgeDir}\\*' -DestinationPath '${zipOutput}' -CompressionLevel Optimal -Force"`,
     { stdio: 'inherit' }
   );
-  const stats = fs.statSync(zipOutput);
-  console.log(`      * Created: ${zipOutput} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+  if (fs.existsSync(winZipOutput)) fs.unlinkSync(winZipOutput);
+  fs.copyFileSync(zipOutput, winZipOutput);
 }
 
 // Compile standalone .exe installer using csc.exe
@@ -114,10 +99,77 @@ if (fs.existsSync(cscPath) && fs.existsSync(installerCs) && fs.existsSync(zipOut
       { stdio: 'inherit' }
     );
     const exeStats = fs.statSync(exeOutput);
-    console.log(`      * Created: ${exeOutput} (${(exeStats.size / 1024 / 1024).toFixed(2)} MB)`);
+    console.log(`      * Created Windows EXE: ${exeOutput} (${(exeStats.size / 1024 / 1024).toFixed(2)} MB)`);
   } catch (err) {
     console.error('Failed to compile installer executable:', err.message);
   }
 }
 
-console.log('[4/4] Done! Compiler Bridge package is ready.');
+// macOS & Linux packaging
+console.log('[4/5] Packaging macOS & Linux archives...');
+const unixTemp = path.join(tmpDir, 'robolab-bridge-unix');
+if (fs.existsSync(unixTemp)) fs.rmSync(unixTemp, { recursive: true, force: true });
+fs.mkdirSync(unixTemp, { recursive: true });
+
+// Copy scripts & configs for macOS & Linux (no .exe, no .bat, no Windows drivers!)
+const unixFiles = [
+  'compile-server.cjs',
+  'arduino-sketch.cjs',
+  'start-bridge.sh',
+  'start-bridge.command',
+  'install-bridge.sh',
+  'README.md',
+];
+
+for (const uf of unixFiles) {
+  const src = path.join(bridgeDir, uf);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(unixTemp, uf));
+  }
+}
+
+// Copy libraries to unix temp
+const unixLibDest = path.join(unixTemp, 'arduino-data', 'libraries');
+fs.mkdirSync(path.dirname(unixLibDest), { recursive: true });
+if (fs.existsSync(libSrc)) {
+  fs.cpSync(libSrc, unixLibDest, { recursive: true });
+}
+
+// Package macOS ZIP
+const macZip = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-macOS.zip');
+try {
+  if (fs.existsSync(macZip)) fs.unlinkSync(macZip);
+  execSync(`tar.exe -a -c -f "${macZip}" -C "${unixTemp}" .`, { stdio: 'inherit' });
+  const macStats = fs.statSync(macZip);
+  console.log(`      * Created macOS ZIP: ${macZip} (${(macStats.size / 1024 / 1024).toFixed(2)} MB)`);
+} catch (err) {
+  console.error('Failed to create macOS zip:', err.message);
+}
+
+// Package Linux TAR.GZ and ZIP
+const linuxTar = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Linux.tar.gz');
+const linuxZip = path.join(publicDownloadsDir, 'RoboLab-Compiler-Bridge-Linux.zip');
+try {
+  if (fs.existsSync(linuxTar)) fs.unlinkSync(linuxTar);
+  execSync(`tar.exe -czf "${linuxTar}" -C "${unixTemp}" .`, { stdio: 'inherit' });
+  const tarStats = fs.statSync(linuxTar);
+  console.log(`      * Created Linux TAR.GZ: ${linuxTar} (${(tarStats.size / 1024 / 1024).toFixed(2)} MB)`);
+} catch (err) {
+  console.error('Failed to create Linux tar.gz:', err.message);
+}
+
+try {
+  if (fs.existsSync(linuxZip)) fs.unlinkSync(linuxZip);
+  execSync(`tar.exe -a -c -f "${linuxZip}" -C "${unixTemp}" .`, { stdio: 'inherit' });
+  const lzipStats = fs.statSync(linuxZip);
+  console.log(`      * Created Linux ZIP: ${linuxZip} (${(lzipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+} catch (err) {
+  console.error('Failed to create Linux zip:', err.message);
+}
+
+// Cleanup unixTemp
+try {
+  fs.rmSync(unixTemp, { recursive: true, force: true });
+} catch (_) {}
+
+console.log('[5/5] All Compiler Bridge packages (Windows, macOS, Linux) successfully generated!');
