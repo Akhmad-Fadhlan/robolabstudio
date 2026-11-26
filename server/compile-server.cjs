@@ -795,6 +795,39 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
     };
   }
 
+  // Raspberry Pi Pico (RP2040) UF2 artifact
+  if (fqbn.includes('rp2040') || bLower.includes('pico')) {
+    const uf2File = buildFiles.find((f) => f.endsWith('.uf2'));
+    if (uf2File) {
+      const uf2Buffer = fs.readFileSync(path.join(buildDir, uf2File));
+      return {
+        success: true,
+        binaryType: 'uf2',
+        fileName: path.basename(uf2File),
+        uf2Base64: uf2Buffer.toString('base64'),
+        logs,
+      };
+    }
+  }
+
+  // STM32 binary / hex artifact
+  if (fqbn.includes('stm32') || bLower.includes('stm32')) {
+    const binFile = buildFiles.find((f) => f.endsWith('.bin'));
+    const hexFile = buildFiles.find((f) => f.endsWith('.hex'));
+    if (binFile || hexFile) {
+      const targetFile = binFile || hexFile;
+      const data = fs.readFileSync(path.join(buildDir, targetFile));
+      return {
+        success: true,
+        binaryType: binFile ? 'stm32-bin' : 'avr-hex',
+        hexData: hexFile ? fs.readFileSync(path.join(buildDir, hexFile), 'utf-8') : undefined,
+        fileName: path.basename(targetFile),
+        dataBase64: data.toString('base64'),
+        logs,
+      };
+    }
+  }
+
   return { success: true, logs };
 }
 

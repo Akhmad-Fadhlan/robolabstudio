@@ -728,6 +728,13 @@ async function compileWithCloudEngine({ board = 'ESP32 DevKit V1', files = {}, f
     }
   }
 
+  if (bLower.includes('pico') || bLower.includes('rp2040') || bLower.includes('stm32')) {
+    logs.push({
+      text: `ℹ️ Untuk kompilasi & upload native ${board}, jalankan RoboLab Compiler Bridge lokal di komputer Anda.`,
+      type: 'info',
+    });
+  }
+
   logs.push({ text: '✓ Kompilasi Cloud selesai.', type: 'success' });
   return { success: true, cloudCompiled: true, logs };
 }

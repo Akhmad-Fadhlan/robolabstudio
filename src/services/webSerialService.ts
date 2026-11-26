@@ -816,13 +816,14 @@ export async function uploadMicroPythonViaWebSerial(
 }
 
 // ============================================================================
-// AVR STK500v1 OPTIBOOT FLASHER OVER WEB SERIAL (Arduino Uno / Nano)
+// AVR FLASHER OVER WEB SERIAL (STK500v2 Wiring for Mega 2560 & STK500v1 for Uno/Nano)
 // ============================================================================
 
 function parseIntelHex(hexText: string): Uint8Array {
   const lines = hexText.split(/\r?\n/);
   let maxAddr = 0;
   const records: Array<{ addr: number; data: number[] }> = [];
+  let extAddr = 0;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -831,14 +832,21 @@ function parseIntelHex(hexText: string): Uint8Array {
     const addr = parseInt(line.slice(3, 7), 16);
     const recordType = parseInt(line.slice(7, 9), 16);
     if (recordType === 0x00) {
+      const fullAddr = extAddr + addr;
       const data: number[] = [];
       for (let i = 0; i < byteCount; i++) {
         data.push(parseInt(line.slice(9 + i * 2, 11 + i * 2), 16));
       }
-      records.push({ addr, data });
-      if (addr + byteCount > maxAddr) maxAddr = addr + byteCount;
+      records.push({ addr: fullAddr, data });
+      if (fullAddr + byteCount > maxAddr) maxAddr = fullAddr + byteCount;
     } else if (recordType === 0x01) {
       break;
+    } else if (recordType === 0x02) {
+      // Extended Segment Address: multiply by 16
+      extAddr = parseInt(line.slice(9, 13), 16) << 4;
+    } else if (recordType === 0x04) {
+      // Extended Linear Address: multiply by 65536
+      extAddr = parseInt(line.slice(9, 13), 16) << 16;
     }
   }
 
@@ -852,19 +860,288 @@ function parseIntelHex(hexText: string): Uint8Array {
   return bin;
 }
 
-export async function flashAvrHexViaWebSerial(
+// ----------------------------------------------------------------------------
+// STK500v2 (Wiring Protocol) Implementation for Arduino Mega 2560
+// ----------------------------------------------------------------------------
+const STK500V2_MESSAGE_START = 0x1b;
+const STK500V2_TOKEN = 0x0e;
+const STK500V2_CMD_SIGN_ON = 0x01;
+const STK500V2_CMD_LOAD_ADDRESS = 0x06;
+const STK500V2_CMD_ENTER_PROGMODE_ISP = 0x10;
+const STK500V2_CMD_LEAVE_PROGMODE_ISP = 0x11;
+const STK500V2_CMD_PROGRAM_FLASH_ISP = 0x13;
+const STK500V2_STATUS_CMD_OK = 0x00;
+
+function buildStk500v2Packet(seq: number, body: Uint8Array): Uint8Array {
+  const len = body.length;
+  const packet = new Uint8Array(6 + len);
+  packet[0] = STK500V2_MESSAGE_START;
+  packet[1] = seq & 0xff;
+  packet[2] = (len >> 8) & 0xff;
+  packet[3] = len & 0xff;
+  packet[4] = STK500V2_TOKEN;
+  packet.set(body, 5);
+  let checksum = 0;
+  for (let i = 0; i < 5 + len; i++) {
+    checksum ^= packet[i];
+  }
+  packet[5 + len] = checksum;
+  return packet;
+}
+
+function extractStk500v2Response(rxQueue: number[]): Uint8Array | null {
+  const startIdx = rxQueue.indexOf(STK500V2_MESSAGE_START);
+  if (startIdx === -1) {
+    if (rxQueue.length > 512) rxQueue.length = 0;
+    return null;
+  }
+  if (startIdx > 0) {
+    rxQueue.splice(0, startIdx);
+  }
+  if (rxQueue.length < 6) return null;
+
+  const bodyLen = (rxQueue[2] << 8) | rxQueue[3];
+  const token = rxQueue[4];
+  if (token !== STK500V2_TOKEN) {
+    rxQueue.shift();
+    return null;
+  }
+  const totalLen = 6 + bodyLen;
+  if (rxQueue.length < totalLen) return null;
+
+  let checksum = 0;
+  for (let i = 0; i < totalLen - 1; i++) {
+    checksum ^= rxQueue[i];
+  }
+  if (checksum !== rxQueue[totalLen - 1]) {
+    rxQueue.shift();
+    return null;
+  }
+
+  const body = new Uint8Array(rxQueue.slice(5, 5 + bodyLen));
+  rxQueue.splice(0, totalLen);
+  return body;
+}
+
+async function sendStk500v2Command(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  rxQueue: number[],
+  seq: number,
+  body: Uint8Array,
+  timeoutMs = 1200
+): Promise<Uint8Array | null> {
+  const packet = buildStk500v2Packet(seq, body);
+  rxQueue.length = 0;
+  await writer.write(packet);
+
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const resp = extractStk500v2Response(rxQueue);
+    if (resp) return resp;
+    await sleep(10);
+  }
+  return null;
+}
+
+async function flashAvrStk500v2(
   port: any,
-  hexContent: string,
+  binary: Uint8Array,
   boardName: string,
   onLog: HardwareLogCallback
 ): Promise<{ success: boolean; error?: string }> {
-  await stopWebSerialMonitor();
+  const baudRate = 115200;
+  const isMega2560 = boardName.toLowerCase().includes('mega') || boardName.toLowerCase().includes('2560');
+  const targetLabel = isMega2560 ? 'Arduino Mega 2560' : 'AVR (STK500v2)';
+  onLog({
+    text: `⚡ [STK500v2 WebSerial] Menyiapkan flash ${targetLabel} (${binary.length} bytes) @ ${baudRate} baud...`,
+    type: 'info',
+  });
+
+  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  const rxQueue: number[] = [];
+  let reading = false;
+
+  try {
+    if (port.readable || port.writable) {
+      if (port.readable?.locked || port.writable?.locked) {
+        try { await port.close(); await sleep(300); } catch {}
+        await port.open({ baudRate });
+      }
+    } else {
+      await port.open({ baudRate });
+    }
+    writer = port.writable.getWriter();
+    reader = port.readable.getReader();
+
+    // Pulse DTR/RTS to trigger Arduino Mega auto-reset into bootloader
+    if (typeof port.setSignals === 'function') {
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(100);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+      await sleep(100);
+      await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+      await sleep(250);
+    }
+
+    reading = true;
+    const currentReader = reader;
+    (async () => {
+      try {
+        while (reading && currentReader) {
+          const { value, done } = await currentReader.read();
+          if (done) break;
+          if (value) {
+            for (let i = 0; i < value.length; i++) rxQueue.push(value[i]);
+          }
+        }
+      } catch {}
+    })();
+
+    // 1. Sync with STK500v2 bootloader (CMD_SIGN_ON = 0x01)
+    let seq = 1;
+    let synced = false;
+    let signOnDevice = '';
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const resp = await sendStk500v2Command(writer, rxQueue, seq++, new Uint8Array([STK500V2_CMD_SIGN_ON]), 300);
+      if (resp && resp.length >= 2 && resp[0] === STK500V2_CMD_SIGN_ON && resp[1] === STK500V2_STATUS_CMD_OK) {
+        synced = true;
+        if (resp.length > 3) {
+          const sigLen = resp[2];
+          signOnDevice = String.fromCharCode(...resp.slice(3, 3 + sigLen));
+        }
+        break;
+      }
+      if (attempt === 3 && typeof port.setSignals === 'function') {
+        await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+        await sleep(60);
+        await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+        await sleep(200);
+      }
+      await sleep(40);
+    }
+
+    if (!synced) {
+      return {
+        success: false,
+        error: 'Tidak mendapat respon STK500v2 dari bootloader Arduino Mega. Pastikan board & port USB benar.',
+      };
+    }
+
+    onLog({
+      text: `✓ [STK500v2 WebSerial] Bootloader ${signOnDevice || 'Wiring / AVRISP_2'} tersinkronisasi!`,
+      type: 'success',
+    });
+
+    // 2. Enter Progmode (CMD_ENTER_PROGMODE_ISP = 0x10)
+    const enterProgCmd = new Uint8Array([
+      STK500V2_CMD_ENTER_PROGMODE_ISP,
+      0xc8, 0x64, 0x19, 0x20, 0x00, 0x53, 0x03, 0xac, 0x53, 0x00, 0x00,
+    ]);
+    await sendStk500v2Command(writer, rxQueue, seq++, enterProgCmd, 500);
+
+    // 3. Flash pages (256 bytes per page for ATmega2560 & ATmega128)
+    const pageSize = 256;
+    const totalPages = Math.ceil(binary.length / pageSize);
+
+    for (let page = 0; page < totalPages; page++) {
+      const byteAddr = page * pageSize;
+      // STK500v2 word address with bit 31 set for flash memory
+      const wordAddr = ((byteAddr >> 1) | 0x80000000) >>> 0;
+
+      // STK500V2_CMD_LOAD_ADDRESS (0x06)
+      const loadAddrCmd = new Uint8Array([
+        STK500V2_CMD_LOAD_ADDRESS,
+        (wordAddr >>> 24) & 0xff,
+        (wordAddr >>> 16) & 0xff,
+        (wordAddr >>> 8) & 0xff,
+        wordAddr & 0xff,
+      ]);
+      const loadResp = await sendStk500v2Command(writer, rxQueue, seq++, loadAddrCmd, 600);
+      if (!loadResp || loadResp[1] !== STK500V2_STATUS_CMD_OK) {
+        throw new Error(`Gagal STK500v2 CMD_LOAD_ADDRESS pada alamat 0x${byteAddr.toString(16)} (halaman ${page + 1}/${totalPages})`);
+      }
+
+      // STK500V2_CMD_PROGRAM_FLASH_ISP (0x13)
+      const slice = binary.slice(byteAddr, byteAddr + pageSize);
+      const pageBuf = new Uint8Array(pageSize);
+      pageBuf.fill(0xff);
+      pageBuf.set(slice);
+
+      const progCmd = new Uint8Array(10 + pageSize);
+      progCmd[0] = STK500V2_CMD_PROGRAM_FLASH_ISP;
+      progCmd[1] = (pageSize >> 8) & 0xff;
+      progCmd[2] = pageSize & 0xff;
+      progCmd[3] = 0xc1; // mode: write page, auto-erase
+      progCmd[4] = 0x0a; // delay: 10ms
+      progCmd[5] = 0x40; // cmd1
+      progCmd[6] = 0x4c; // cmd2
+      progCmd[7] = 0x00; // cmd3
+      progCmd[8] = 0x00; // poll1
+      progCmd[9] = 0x00; // poll2
+      progCmd.set(pageBuf, 10);
+
+      const progResp = await sendStk500v2Command(writer, rxQueue, seq++, progCmd, 1800);
+      if (!progResp || progResp[1] !== STK500V2_STATUS_CMD_OK) {
+        throw new Error(`Gagal STK500v2 CMD_PROGRAM_FLASH_ISP pada alamat 0x${byteAddr.toString(16)} (halaman ${page + 1}/${totalPages})`);
+      }
+
+      if (page % 4 === 0 || page === totalPages - 1) {
+        const pct = Math.round(((page + 1) / totalPages) * 100);
+        onLog({
+          text: `Writing at 0x${byteAddr.toString(16).padStart(5, '0')}... (${pct}%)`,
+          type: 'stdout',
+        });
+      }
+    }
+
+    // 4. Leave Progmode (CMD_LEAVE_PROGMODE_ISP = 0x11)
+    const leaveCmd = new Uint8Array([STK500V2_CMD_LEAVE_PROGMODE_ISP, 0x01, 0x01]);
+    await sendStk500v2Command(writer, rxQueue, seq++, leaveCmd, 400);
+
+    reading = false;
+    if (reader) {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+    if (writer) {
+      writer.releaseLock();
+    }
+    await port.close().catch(() => {});
+
+    onLog({
+      text: `🎉 [STK500v2 WebSerial] Flash ${targetLabel} selesai & diverifikasi!`,
+      type: 'success',
+    });
+    return { success: true };
+  } catch (err: any) {
+    reading = false;
+    if (reader) {
+      try { await reader.cancel(); } catch {}
+      try { reader.releaseLock(); } catch {}
+    }
+    if (writer) {
+      try { writer.releaseLock(); } catch {}
+    }
+    try { await port.close(); } catch {}
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// STK500v1 (Optiboot Protocol) Implementation for Arduino Uno & Nano
+// ----------------------------------------------------------------------------
+async function flashAvrStk500v1(
+  port: any,
+  binary: Uint8Array,
+  boardName: string,
+  onLog: HardwareLogCallback
+): Promise<{ success: boolean; error?: string }> {
   const isNano = boardName.toLowerCase().includes('nano');
   const baudCandidates = isNano ? [115200, 57600] : [115200];
 
   try {
-    const binary = parseIntelHex(hexContent);
-
     let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     const rxQueue: number[] = [];
@@ -886,8 +1163,9 @@ export async function flashAvrHexViaWebSerial(
     };
 
     for (const baudRate of baudCandidates) {
+      const bootloaderVariant = isNano ? (baudRate === 115200 ? ' (New Bootloader)' : ' (Old Bootloader)') : '';
       onLog({
-        text: `⚡ [STK500v1 WebSerial] Menyiapkan flash AVR (${binary.length} bytes) @ ${baudRate} baud...`,
+        text: `⚡ [STK500v1 WebSerial] Menyiapkan flash ${boardName}${bootloaderVariant} (${binary.length} bytes) @ ${baudRate} baud...`,
         type: 'info',
       });
 
@@ -1025,6 +1303,47 @@ export async function flashAvrHexViaWebSerial(
       await port.close();
     } catch {}
     return { success: false, error: err?.message || String(err) };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Main AVR Web Serial Flash Entry Point
+// ----------------------------------------------------------------------------
+export async function flashAvrHexViaWebSerial(
+  port: any,
+  hexContent: string,
+  boardName: string,
+  onLog: HardwareLogCallback
+): Promise<{ success: boolean; error?: string }> {
+  await stopWebSerialMonitor();
+  const binary = parseIntelHex(hexContent);
+  if (binary.length === 0) {
+    return { success: false, error: 'Berkas binary HEX kosong atau tidak valid.' };
+  }
+
+  const bLower = boardName.toLowerCase();
+  const isMega = bLower.includes('mega') || bLower.includes('2560');
+
+  // Arduino Mega 2560 uses STK500v2 (Wiring protocol)
+  if (isMega) {
+    const v2Res = await flashAvrStk500v2(port, binary, boardName, onLog);
+    if (v2Res.success) return v2Res;
+    onLog({
+      text: `⚠️ Percobaan STK500v2 selesai: ${v2Res.error || 'gagal'}. Mencoba fallback STK500v1...`,
+      type: 'info',
+    });
+    return flashAvrStk500v1(port, binary, boardName, onLog);
+  } else {
+    const v1Res = await flashAvrStk500v1(port, binary, boardName, onLog);
+    if (v1Res.success) return v1Res;
+    if (bLower.includes('128') || bLower.includes('megacore')) {
+      onLog({
+        text: '⚠️ Mencoba protokol STK500v2 untuk MegaCore...',
+        type: 'info',
+      });
+      return flashAvrStk500v2(port, binary, boardName, onLog);
+    }
+    return v1Res;
   }
 }
 
@@ -1765,12 +2084,147 @@ export async function executeWebHardwareAction(params: {
 
     if (result.binaryType === 'avr-hex' && result.hexData) {
       const avrRes = await flashAvrHexViaWebSerial(targetWebPort.port, result.hexData, board, onLog);
+      if (!avrRes.success && (await checkLocalBridgeAvailable())) {
+        onLog({
+          text: '🔄 [Auto-Fallback] Mencoba upload otomatis melalui Compiler Bridge lokal (avrdude / arduino-cli)...',
+          type: 'info',
+        });
+        try {
+          const localUploadResp = await fetchCompilerApi('/api/upload-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              board,
+              port: isLocalComPort ? port : '',
+            }),
+          });
+          if (localUploadResp.ok) {
+            const localData = await localUploadResp.json();
+            if (Array.isArray(localData.logs)) {
+              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            }
+            if (localData.success) {
+              onProgress?.(100);
+              return { success: true, selectedPort: localData.port || targetWebPort.address };
+            }
+          }
+        } catch {}
+      }
       onProgress?.(100);
       return { ...avrRes, selectedPort: targetWebPort.address };
     } else if (result.binaryType === 'esp-bin' && Array.isArray(result.partitions)) {
       const espRes = await flashEspViaWebSerial(targetWebPort.port, result.partitions, onLog, board);
+      if (!espRes.success && (await checkLocalBridgeAvailable())) {
+        onLog({
+          text: '🔄 [Auto-Fallback] Mencoba upload otomatis melalui Compiler Bridge lokal (esptool)...',
+          type: 'info',
+        });
+        try {
+          const localUploadResp = await fetchCompilerApi('/api/upload-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              board,
+              port: isLocalComPort ? port : '',
+            }),
+          });
+          if (localUploadResp.ok) {
+            const localData = await localUploadResp.json();
+            if (Array.isArray(localData.logs)) {
+              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            }
+            if (localData.success) {
+              onProgress?.(100);
+              return { success: true, selectedPort: localData.port || targetWebPort.address };
+            }
+          }
+        } catch {}
+      }
       onProgress?.(100);
       return { ...espRes, selectedPort: targetWebPort.address };
+    } else if (result.binaryType === 'uf2' && result.uf2Base64) {
+      onLog({
+        text: `📦 [Raspberry Pi Pico] Firmware UF2 (${result.fileName || 'firmware.uf2'}) siap!`,
+        type: 'info',
+      });
+      if (await checkLocalBridgeAvailable()) {
+        onLog({ text: '⚡ Mengunggah ke Raspberry Pi Pico via Compiler Bridge...', type: 'info' });
+        try {
+          const localUploadResp = await fetchCompilerApi('/api/upload-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ board, port: isLocalComPort ? port : '' }),
+          });
+          if (localUploadResp.ok) {
+            const localData = await localUploadResp.json();
+            if (Array.isArray(localData.logs)) {
+              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            }
+            if (localData.success) {
+              onProgress?.(100);
+              return { success: true, selectedPort: localData.port || targetWebPort?.address };
+            }
+          }
+        } catch {}
+      }
+
+      if (targetWebPort?.port) {
+        try {
+          onLog({ text: '⚡ Mengirim sinyal 1200 baud untuk mereset Pico ke mode BOOTSEL...', type: 'info' });
+          await targetWebPort.port.open({ baudRate: 1200 });
+          await sleep(200);
+          await targetWebPort.port.close();
+        } catch {}
+      }
+
+      try {
+        const binStr = atob(result.uf2Base64);
+        const len = binStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binStr.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.fileName || 'RoboLab_Pico.uf2';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        onLog({
+          text: '💾 File .uf2 berhasil diunduh! Cukup seret (drag & drop) file .uf2 ke drive USB "RPI-RP2" Raspberry Pi Pico Anda.',
+          type: 'success',
+        });
+        onProgress?.(100);
+        return { success: true, selectedPort: targetWebPort?.address };
+      } catch (err: any) {
+        onLog({ text: `Gagal mengunduh UF2: ${err.message}`, type: 'error' });
+      }
+    } else if (result.binaryType === 'stm32-bin' || board.toLowerCase().includes('stm32')) {
+      if (await checkLocalBridgeAvailable()) {
+        onLog({ text: '⚡ Mengunggah ke STM32 via Compiler Bridge (ST-Link / STM32CubeProgrammer)...', type: 'info' });
+        try {
+          const localUploadResp = await fetchCompilerApi('/api/upload-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ board, port: isLocalComPort ? port : '' }),
+          });
+          if (localUploadResp.ok) {
+            const localData = await localUploadResp.json();
+            if (Array.isArray(localData.logs)) {
+              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            }
+            if (localData.success) {
+              onProgress?.(100);
+              return { success: true, selectedPort: localData.port || targetWebPort?.address };
+            }
+          }
+        } catch {}
+      }
+      onLog({
+        text: 'ℹ️ Untuk upload STM32 via browser, jalankan Compiler Bridge atau hubungkan menggunakan ST-Link.',
+        type: 'info',
+      });
     }
 
     if (targetWebPort?.port) {
