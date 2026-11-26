@@ -12236,6 +12236,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         isChecking={isCheckingBridge}
         onCheckStatus={() => checkBridgeStatus(true)}
         themeMode={themeMode}
+        themeColor={themeColor}
       />
 
       {/* ROBOLAB COMPILER BRIDGE UPLOAD PROMPT MODAL */}

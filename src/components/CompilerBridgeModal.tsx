@@ -7,12 +7,8 @@ import {
   Download,
   FolderArchive,
   RefreshCw,
-  Sparkles,
-  Zap,
-  CheckCircle2,
   Cpu,
-  Layers,
-  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 
 export interface CompilerBridgeModalProps {
@@ -22,9 +18,58 @@ export interface CompilerBridgeModalProps {
   isChecking: boolean;
   onCheckStatus: () => void;
   themeMode?: string;
+  themeColor?: string;
 }
 
 type OSType = 'windows' | 'macos' | 'linux';
+
+// Clean official Microsoft Windows 4-pane vector logo
+const WindowsLogo: React.FC<{ className?: string }> = ({ className = 'w-7 h-7' }) => (
+  <svg viewBox="0 0 88 88" className={className} xmlns="http://www.w3.org/2000/svg">
+    <path fill="#00adef" d="M0 12.402l35.689-4.86.016 34.423-35.67.203zm35.67 33.529l.026 34.453-35.67-4.901-.026-29.576zm4.326-39.027l47.989-6.904v41.986l-47.989.373zm47.989 39.569v41.947l-47.989-6.756v-35.253z" />
+  </svg>
+);
+
+// Clean official Apple vector logo (high-contrast: black in light mode, white in dark mode)
+const AppleLogo: React.FC<{ className?: string; isLight?: boolean }> = ({ className = 'w-7 h-7', isLight = false }) => (
+  <svg viewBox="0 0 170 170" className={className} fill={isLight ? '#0f172a' : '#ffffff'} xmlns="http://www.w3.org/2000/svg">
+    <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.74 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.6-7.79-11.72-14.24-6.3-9.76-11.2-20.94-14.71-33.55-3.51-12.61-5.26-24.3-5.26-35.08 0-14.44 3.63-26.4 10.88-35.88 7.26-9.48 16.29-14.35 27.08-14.61 5.18 0 11.14 1.48 17.86 4.43 6.73 2.94 11.01 4.47 12.85 4.58 1.5 0 6.05-1.64 13.64-4.93 7.59-3.29 13.79-4.7 18.6-4.22 13.71.74 24.39 5.86 32.05 15.37-12.04 7.28-17.96 17.29-17.74 30.04.22 10.05 4.09 18.52 11.61 25.42 7.53 6.9 16.48 10.78 26.85 11.63-2.19 6.5-4.66 12.68-7.41 18.54zm-30.82-108.57c0 6.38-2.34 12.43-7.03 18.15-4.68 5.72-10.42 9.5-17.22 11.35-.38-1.52-.57-3.05-.57-4.57 0-6.14 2.4-12.24 7.19-18.3 4.8-6.06 10.71-9.79 17.74-11.19.11 1.53.17 3.05.17 4.56z" />
+  </svg>
+);
+
+// Authentic official Linux Tux Penguin logo
+const LinuxTuxLogo: React.FC<{ className?: string }> = ({ className = 'w-7 h-7' }) => {
+  const [imgError, setImgError] = useState(false);
+  if (!imgError) {
+    return (
+      <img
+        src="/tux.svg"
+        alt="Linux Tux"
+        className={`${className} object-contain`}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  return (
+    <svg viewBox="0 0 340 395" className={className} xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="105" cy="355" rx="60" ry="24" fill="#f59e0b" />
+      <ellipse cx="235" cy="355" rx="60" ry="24" fill="#f59e0b" />
+      <path d="M55 358 C70 375, 135 375, 150 358 Z" fill="#d97706" />
+      <path d="M190 358 C205 375, 270 375, 285 358 Z" fill="#d97706" />
+      <path d="M170 30 C120 30, 95 65, 95 125 C95 160, 65 210, 45 270 C25 330, 60 360, 100 360 C130 360, 210 360, 240 360 C280 360, 315 330, 295 270 C275 210, 245 160, 245 125 C245 65, 220 30, 170 30 Z" fill="#111827" />
+      <ellipse cx="65" cy="240" rx="26" ry="58" transform="rotate(-18 65 240)" fill="#111827" />
+      <ellipse cx="275" cy="240" rx="26" ry="58" transform="rotate(18 275 240)" fill="#111827" />
+      <path d="M170 145 C125 145, 100 185, 100 250 C100 308, 125 348, 170 348 C215 348, 240 308, 240 250 C240 185, 215 145, 170 145 Z" fill="#ffffff" />
+      <ellipse cx="148" cy="85" rx="14" ry="20" fill="#ffffff" />
+      <ellipse cx="192" cy="85" rx="14" ry="20" fill="#ffffff" />
+      <ellipse cx="152" cy="88" rx="6" ry="9" fill="#111827" />
+      <ellipse cx="188" cy="88" rx="6" ry="9" fill="#111827" />
+      <circle cx="154" cy="85" r="2.5" fill="#ffffff" />
+      <circle cx="190" cy="85" r="2.5" fill="#ffffff" />
+      <path d="M140 108 C155 100, 185 100, 200 108 C210 120, 185 138, 170 138 C155 138, 130 120, 140 108 Z" fill="#f59e0b" />
+    </svg>
+  );
+};
 
 export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
   isOpen,
@@ -34,25 +79,23 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
   onCheckStatus,
   themeMode = 'dark',
 }) => {
-  const isDark = themeMode !== 'light';
+  const isLight = themeMode === 'light';
   const [detectedOS, setDetectedOS] = useState<OSType>('windows');
-  const [activeTab, setActiveTab] = useState<OSType>('windows');
+  const [terminalTab, setTerminalTab] = useState<'macos' | 'linux'>('macos');
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-  const [showTerminalGuide, setShowTerminalGuide] = useState(false);
 
-  // Detect user OS on mount
+  // Auto-detect user OS
   useEffect(() => {
     const userAgent = window.navigator.userAgent || '';
     const platform = window.navigator.platform || '';
     if (/Mac|iPhone|iPod|iPad/i.test(userAgent) || /Mac/i.test(platform)) {
       setDetectedOS('macos');
-      setActiveTab('macos');
+      setTerminalTab('macos');
     } else if (/Linux/i.test(userAgent) || /Linux/i.test(platform)) {
       setDetectedOS('linux');
-      setActiveTab('linux');
+      setTerminalTab('linux');
     } else {
       setDetectedOS('windows');
-      setActiveTab('windows');
     }
   }, []);
 
@@ -70,54 +113,38 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
   return (
     <div
       className={`fixed inset-0 flex items-center justify-center z-[99999] p-3 sm:p-5 select-none ${
-        isDark ? 'bg-black/75 backdrop-blur-md' : 'bg-slate-900/35 backdrop-blur-md'
+        isLight ? 'bg-slate-900/35 backdrop-blur-sm' : 'bg-black/75 backdrop-blur-sm'
       }`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={`w-full max-w-4xl rounded-3xl flex flex-col shadow-2xl relative overflow-hidden max-h-[92vh] border transition-all ${
-          isDark
-            ? 'bg-[#0e111a]/95 text-slate-100 border-white/10 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)]'
-            : 'bg-white text-slate-800 border-slate-200/90 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.18)]'
+        className={`w-full max-w-4xl rounded-2xl flex flex-col shadow-2xl relative overflow-hidden max-h-[92vh] border transition-colors ${
+          isLight
+            ? 'bg-white text-slate-900 border-slate-200'
+            : 'bg-[#0f111a] text-slate-100 border-white/10'
         }`}
       >
-        {/* Glow ambient background effects */}
-        <div className="absolute top-0 left-1/4 -translate-x-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-0 right-1/4 translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* ── Modal Header ── */}
+        {/* ── Modal Header (Clean & Minimal: No Subtitle, No AI Badges) ── */}
         <div
-          className={`flex items-center justify-between px-6 py-4 border-b relative z-10 ${
-            isDark ? 'border-white/10 bg-white/[0.02]' : 'border-slate-100 bg-slate-50/60'
+          className={`flex items-center justify-between px-6 py-4 border-b ${
+            isLight ? 'border-slate-200 bg-slate-50/70' : 'border-white/10 bg-white/[0.02]'
           }`}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/25 shrink-0">
-              <Zap className="w-5 h-5 fill-current" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black tracking-tight">
-                  RoboLab Compiler Bridge
-                </h3>
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-sm">
-                  v1.0 Multiplatform
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-medium">
-                Kompilasi native C++ (Blynk IoT, ESP8266, ESP32, Arduino) 100% lokal di komputer Anda
-              </p>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <Cpu className={`w-5 h-5 ${isLight ? 'text-slate-800' : 'text-slate-200'}`} />
+            <h3 className={`text-base font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              RoboLab Compiler Bridge
+            </h3>
           </div>
 
           <button
             onClick={onClose}
-            className={`p-2 rounded-xl transition cursor-pointer ${
-              isDark
-                ? 'text-slate-400 hover:text-white hover:bg-white/10'
-                : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
+            className={`p-1.5 rounded-lg transition cursor-pointer ${
+              isLight
+                ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
+                : 'text-slate-400 hover:text-white hover:bg-white/10'
             }`}
             title="Tutup (Esc)"
           >
@@ -125,51 +152,35 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
           </button>
         </div>
 
-        {/* ── Scrollable Body ── */}
-        <div className="overflow-y-auto px-6 py-5 space-y-5 relative z-10 custom-scrollbar">
+        {/* ── Modal Body ── */}
+        <div className="overflow-y-auto px-6 py-5 space-y-5">
           {/* Status Bar */}
           <div
-            className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
               isOnline
-                ? isDark
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : isDark
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                : 'bg-amber-50 border-amber-200 text-amber-900'
+                ? isLight
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : isLight
+                ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
             }`}
           >
-            <div className="flex items-center gap-3.5">
-              <div className="relative shrink-0">
-                <span
-                  className={`block w-3.5 h-3.5 rounded-full ${
-                    isOnline ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50' : 'bg-amber-500 shadow-lg shadow-amber-500/50'
-                  }`}
-                />
-                {isOnline && (
-                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
-                )}
-              </div>
+            <div className="flex items-center gap-3">
+              <span
+                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              />
               <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-extrabold text-sm sm:text-base">
-                    {isOnline ? 'Compiler Bridge Aktif (Port 3001)' : 'Compiler Bridge Belum Terhubung'}
-                  </h4>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      isOnline
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    }`}
-                  >
-                    {isOnline ? 'SIAP PAKAI' : 'STANDBY'}
-                  </span>
+                <div className={`text-xs font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {isOnline ? 'Bridge Aktif (Port 3001)' : 'Bridge Belum Aktif'}
                 </div>
-                <p className="text-xs opacity-85 mt-0.5">
+                <div className={`text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                   {isOnline
-                    ? 'RoboLab Web terhubung ke compiler lokal. Kompilasi & upload Blynk IoT & ESP berjalan dengan performa native penuh.'
-                    : 'Pilih compiler untuk sistem operasi Anda di bawah dan jalankan. RoboLab Web akan otomatis mendeteksi koneksi.'}
-                </p>
+                    ? 'RoboLab Web terhubung dengan compiler lokal di komputer Anda.'
+                    : 'Nyalakan compiler bridge di komputer Anda untuk mengaktifkan kompilasi native lokal.'}
+                </div>
               </div>
             </div>
 
@@ -177,14 +188,10 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
               type="button"
               disabled={isChecking}
               onClick={onCheckStatus}
-              className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 shadow-sm ${
-                isOnline
-                  ? isDark
-                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-emerald-200/60 hover:bg-emerald-200 text-emerald-900 border border-emerald-300'
-                  : isDark
-                  ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
-                  : 'bg-amber-200/60 hover:bg-amber-200 text-amber-900 border border-amber-300'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 border ${
+                isLight
+                  ? 'bg-white hover:bg-slate-50 text-slate-800 border-slate-300 shadow-sm'
+                  : 'bg-white/10 hover:bg-white/20 text-white border-white/10'
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
@@ -192,140 +199,79 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
             </button>
           </div>
 
-          {/* Title OS Selection */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-            <div>
-              <h4 className="text-sm font-extrabold tracking-tight flex items-center gap-2">
-                <span>Pilih Compiler Sesuai Perangkat Anda</span>
-                <span className="text-xs font-normal text-slate-400">
-                  (Gratis &amp; Otomatis Terhubung)
-                </span>
-              </h4>
-            </div>
-
-            {/* Quick OS Tabs for Mobile/Switching */}
-            <div
-              className={`flex p-1 rounded-xl border text-xs font-bold ${
-                isDark ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setActiveTab('windows')}
-                className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'windows'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>🪟 Windows</span>
-                {detectedOS === 'windows' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('macos')}
-                className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'macos'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>🍎 macOS</span>
-                {detectedOS === 'macos' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('linux')}
-                className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'linux'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>🐧 Linux</span>
-                {detectedOS === 'linux' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* ── 3 STYLISH OS CARDS ── */}
+          {/* ── 3 OS CARDS (Unified Clean Design) ── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 1. WINDOWS CARD */}
             <div
-              className={`rounded-2xl p-5 border flex flex-col justify-between transition-all duration-200 relative group ${
-                activeTab === 'windows'
-                  ? 'ring-2 ring-blue-500/60 shadow-xl shadow-blue-500/10'
-                  : 'opacity-90 hover:opacity-100'
-              } ${
-                isDark
-                  ? 'bg-gradient-to-b from-blue-950/20 to-slate-900/60 border-blue-500/25 hover:border-blue-400/50'
-                  : 'bg-gradient-to-b from-blue-50/70 to-white border-blue-200 hover:border-blue-300'
+              className={`rounded-xl p-5 border flex flex-col justify-between transition-all relative ${
+                detectedOS === 'windows'
+                  ? isLight
+                    ? 'bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-md'
+                    : 'bg-white/[0.05] border-blue-400/80 ring-2 ring-blue-500/20 shadow-md'
+                  : isLight
+                  ? 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
+                  : 'bg-white/[0.03] border-white/10 hover:border-white/20'
               }`}
             >
               {detectedOS === 'windows' && (
-                <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 text-[10px] font-extrabold text-white flex items-center gap-1 shadow-md shadow-blue-500/30">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Sistem Anda</span>
+                <div
+                  className={`absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    isLight
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                  }`}
+                >
+                  Sistem Anda
                 </div>
               )}
 
               <div>
-                {/* OS Header */}
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 shrink-0">
-                    {/* Windows Logo Icon */}
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                      <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.801" />
-                    </svg>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                    isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-white/5 border-white/10'
+                  }`}>
+                    <WindowsLogo className="w-6 h-6" />
                   </div>
                   <div>
-                    <h5 className="font-extrabold text-base">Windows</h5>
-                    <p className="text-xs text-slate-400 font-medium">Windows 10 / 11 (64-bit)</p>
+                    <h5 className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>Windows</h5>
+                    <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Windows 10 / 11 (64-bit)</p>
                   </div>
                 </div>
 
-                {/* Features & Badges */}
-                <div className="space-y-2 text-xs py-2">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <div className="space-y-1.5 text-xs py-2">
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Installer otomatis 1-klik (.exe)</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span>Driver USB CH340 &amp; CP2102 otomatis</span>
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Driver USB CH340 &amp; CP2102</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Pintasan Desktop &amp; System Tray</span>
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-4 border-t border-slate-700/20">
+              <div className={`space-y-2 pt-4 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                 <a
                   href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
                   download="RoboLab-Compiler-Bridge-Setup.exe"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5 cursor-pointer text-center"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer text-center"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   <span>Unduh Installer (.exe)</span>
-                  <span className="text-[10px] opacity-80 font-normal">~27 MB</span>
+                  <span className="text-[10px] opacity-80">~27 MB</span>
                 </a>
 
                 <a
                   href="/downloads/RoboLab-Compiler-Bridge-Windows.zip"
                   download="RoboLab-Compiler-Bridge-Windows.zip"
-                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs font-semibold transition cursor-pointer border ${
-                    isDark
-                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition cursor-pointer border ${
+                    isLight
+                      ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
                   }`}
                 >
                   <FolderArchive className="w-3.5 h-3.5" />
@@ -336,297 +282,259 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
 
             {/* 2. MACOS CARD */}
             <div
-              className={`rounded-2xl p-5 border flex flex-col justify-between transition-all duration-200 relative group ${
-                activeTab === 'macos'
-                  ? 'ring-2 ring-purple-500/60 shadow-xl shadow-purple-500/10'
-                  : 'opacity-90 hover:opacity-100'
-              } ${
-                isDark
-                  ? 'bg-gradient-to-b from-purple-950/20 to-slate-900/60 border-purple-500/25 hover:border-purple-400/50'
-                  : 'bg-gradient-to-b from-purple-50/70 to-white border-purple-200 hover:border-purple-300'
+              className={`rounded-xl p-5 border flex flex-col justify-between transition-all relative ${
+                detectedOS === 'macos'
+                  ? isLight
+                    ? 'bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-md'
+                    : 'bg-white/[0.05] border-blue-400/80 ring-2 ring-blue-500/20 shadow-md'
+                  : isLight
+                  ? 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
+                  : 'bg-white/[0.03] border-white/10 hover:border-white/20'
               }`}
             >
               {detectedOS === 'macos' && (
-                <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-pink-500 text-[10px] font-extrabold text-white flex items-center gap-1 shadow-md shadow-purple-500/30">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Sistem Anda</span>
+                <div
+                  className={`absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    isLight
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                  }`}
+                >
+                  Sistem Anda
                 </div>
               )}
 
               <div>
-                {/* OS Header */}
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-slate-700 via-slate-800 to-slate-900 flex items-center justify-center text-white shadow-lg shadow-purple-500/20 shrink-0 border border-white/10">
-                    {/* Apple Logo Icon */}
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.15c.61-.74 1.04-1.76.92-2.78-.9.04-2.01.6-2.65 1.34-.56.64-1.06 1.68-.93 2.69.99.08 2.05-.51 2.66-1.25" />
-                    </svg>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                    isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-white/5 border-white/10'
+                  }`}>
+                    <AppleLogo className="w-6 h-6" isLight={isLight} />
                   </div>
                   <div>
-                    <h5 className="font-extrabold text-base">macOS</h5>
-                    <p className="text-xs text-slate-400 font-medium">Apple Silicon &amp; Intel</p>
+                    <h5 className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>macOS</h5>
+                    <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Apple Silicon &amp; Intel Mac</p>
                   </div>
                 </div>
 
-                {/* Features & Badges */}
-                <div className="space-y-2 text-xs py-2">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <div className="space-y-1.5 text-xs py-2">
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>M1, M2, M3, M4 &amp; Mac Intel</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span>Klik ganda start-bridge.command di Finder</span>
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Klik ganda start-bridge.command</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span>Tanpa driver tambahan (Plug &amp; Play)</span>
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Plug &amp; Play tanpa driver</span>
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-4 border-t border-slate-700/20">
+              <div className={`space-y-2 pt-4 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                 <a
                   href="/downloads/RoboLab-Compiler-Bridge-macOS.zip"
                   download="RoboLab-Compiler-Bridge-macOS.zip"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition transform hover:-translate-y-0.5 cursor-pointer text-center"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer text-center"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   <span>Unduh Package macOS (.zip)</span>
-                  <span className="text-[10px] opacity-80 font-normal">~2.5 MB</span>
+                  <span className="text-[10px] opacity-80">~9.5 MB</span>
                 </a>
 
                 <button
                   type="button"
-                  onClick={() => setShowTerminalGuide(!showTerminalGuide)}
-                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs font-semibold transition cursor-pointer border ${
-                    isDark
-                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  onClick={() => setTerminalTab('macos')}
+                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition cursor-pointer border ${
+                    isLight
+                      ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
                   }`}
                 >
-                  <Terminal className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Panduan Terminal 1-Baris</span>
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Lihat Perintah Terminal</span>
                 </button>
               </div>
             </div>
 
-            {/* 3. LINUX CARD */}
+            {/* 3. LINUX CARD (With Authentic Tux Logo) */}
             <div
-              className={`rounded-2xl p-5 border flex flex-col justify-between transition-all duration-200 relative group ${
-                activeTab === 'linux'
-                  ? 'ring-2 ring-emerald-500/60 shadow-xl shadow-emerald-500/10'
-                  : 'opacity-90 hover:opacity-100'
-              } ${
-                isDark
-                  ? 'bg-gradient-to-b from-emerald-950/20 to-slate-900/60 border-emerald-500/25 hover:border-emerald-400/50'
-                  : 'bg-gradient-to-b from-emerald-50/70 to-white border-emerald-200 hover:border-emerald-300'
+              className={`rounded-xl p-5 border flex flex-col justify-between transition-all relative ${
+                detectedOS === 'linux'
+                  ? isLight
+                    ? 'bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-md'
+                    : 'bg-white/[0.05] border-blue-400/80 ring-2 ring-blue-500/20 shadow-md'
+                  : isLight
+                  ? 'bg-slate-50/80 border-slate-200 hover:border-slate-300'
+                  : 'bg-white/[0.03] border-white/10 hover:border-white/20'
               }`}
             >
               {detectedOS === 'linux' && (
-                <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 text-[10px] font-extrabold text-white flex items-center gap-1 shadow-md shadow-emerald-500/30">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Sistem Anda</span>
+                <div
+                  className={`absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    isLight
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                  }`}
+                >
+                  Sistem Anda
                 </div>
               )}
 
               <div>
-                {/* OS Header */}
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600 via-orange-600 to-yellow-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
-                    {/* Linux Tux Icon */}
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                      <path d="M12.001 2c-2.76 0-4.5 2.1-4.5 4.7 0 1.5.6 2.9 1.5 3.9-.2.5-.5 1.1-.9 1.7-.8 1.1-1.8 2.2-2.1 3.7-.3 1.4-.1 3 .6 4.3.7 1.3 2 2.3 3.5 2.7 1.2.3 2.5.3 3.8.1 1.3-.2 2.5-.7 3.5-1.5 1-0.8 1.8-1.9 2-3.1.2-1.3 0-2.6-.6-3.8-.4-.9-.9-1.7-1.4-2.5.7-.9 1.1-2 1.1-3.3 0-2.6-1.74-4.7-4.5-4.7zm0 2c1.7 0 2.5 1.4 2.5 2.7 0 .8-.3 1.5-.8 2.1-.5.6-1.1.9-1.7.9s-1.2-.3-1.7-.9c-.5-.6-.8-1.3-.8-2.1 0-1.3.8-2.7 2.5-2.7z" />
-                    </svg>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                    isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-white/5 border-white/10'
+                  }`}>
+                    <LinuxTuxLogo className="w-7 h-7" />
                   </div>
                   <div>
-                    <h5 className="font-extrabold text-base">Linux</h5>
-                    <p className="text-xs text-slate-400 font-medium">Ubuntu, Debian, Fedora, Arch</p>
+                    <h5 className={`font-bold text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>Linux</h5>
+                    <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Ubuntu, Debian, Fedora, Arch</p>
                   </div>
                 </div>
 
-                {/* Features & Badges */}
-                <div className="space-y-2 text-xs py-2">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Dukungan x86_64, aarch64 &amp; Raspberry Pi</span>
+                <div className="space-y-1.5 text-xs py-2">
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Dukungan x86_64, aarch64 &amp; ARM</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Auto-setup izin serial USB (dialout)</span>
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Script izin port USB (dialout)</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Ultra-ringan, konsumsi RAM &lt;20MB</span>
+                  <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Launcher menu aplikasi (.desktop)</span>
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-4 border-t border-slate-700/20">
+              <div className={`space-y-2 pt-4 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                 <a
                   href="/downloads/RoboLab-Compiler-Bridge-Linux.tar.gz"
                   download="RoboLab-Compiler-Bridge-Linux.tar.gz"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition transform hover:-translate-y-0.5 cursor-pointer text-center"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer text-center"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   <span>Unduh Package Linux (.tar.gz)</span>
-                  <span className="text-[10px] opacity-80 font-normal">~2.5 MB</span>
+                  <span className="text-[10px] opacity-80">~8.5 MB</span>
                 </a>
 
                 <a
                   href="/downloads/RoboLab-Compiler-Bridge-Linux.zip"
                   download="RoboLab-Compiler-Bridge-Linux.zip"
-                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl text-xs font-semibold transition cursor-pointer border ${
-                    isDark
-                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition cursor-pointer border ${
+                    isLight
+                      ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
                   }`}
                 >
-                  <FolderArchive className="w-3.5 h-3.5 text-emerald-400" />
+                  <FolderArchive className="w-3.5 h-3.5" />
                   <span>ZIP Package (.zip)</span>
                 </a>
               </div>
             </div>
           </div>
 
-          {/* ── CLI / Quick Terminal Box (Mac & Linux) ── */}
+          {/* ── Terminal Commands (Clean & High Contrast) ── */}
           <div
-            className={`rounded-2xl border overflow-hidden ${
-              isDark ? 'bg-black/40 border-white/10' : 'bg-slate-900 text-slate-200 border-slate-800'
+            className={`rounded-xl border overflow-hidden ${
+              isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-black/40'
             }`}
           >
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/30 border-b border-white/5">
+            <div className={`flex items-center justify-between px-4 py-2 border-b ${
+              isLight ? 'border-slate-200 bg-slate-100/80' : 'border-white/5 bg-white/[0.02]'
+            }`}>
               <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs font-bold text-slate-300">
-                  Instalasi Instan via Terminal (macOS &amp; Linux)
+                <Terminal className={`w-3.5 h-3.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`} />
+                <span className={`text-xs font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                  Instalasi via Terminal
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono">
-                1-Liner Bash Command
-              </span>
+
+              {/* Tab Selector macOS / Linux */}
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setTerminalTab('macos')}
+                  className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                    terminalTab === 'macos'
+                      ? isLight
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                        : 'bg-white/15 text-white'
+                      : isLight
+                      ? 'text-slate-600 hover:text-slate-900'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  macOS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTerminalTab('linux')}
+                  className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                    terminalTab === 'linux'
+                      ? isLight
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                        : 'bg-white/15 text-white'
+                      : isLight
+                      ? 'text-slate-600 hover:text-slate-900'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Linux
+                </button>
+              </div>
             </div>
 
-            <div className="p-4 space-y-3">
-              {/* macOS Command */}
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                  <span className="font-semibold text-slate-300">🍎 Perintah Terminal untuk macOS:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(macTerminalCmd, 'mac')}
-                    className="flex items-center gap-1 text-[11px] font-bold text-purple-400 hover:text-purple-300 transition cursor-pointer"
-                  >
-                    {copiedCmd === 'mac' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedCmd === 'mac' ? 'Tersalin!' : 'Salin Perintah'}</span>
-                  </button>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/60 font-mono text-[11px] text-slate-300 overflow-x-auto border border-white/5">
-                  <code>{macTerminalCmd}</code>
-                </div>
-              </div>
-
-              {/* Linux Command */}
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                  <span className="font-semibold text-slate-300">🐧 Perintah Terminal untuk Linux:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(linuxTerminalCmd, 'linux')}
-                    className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
-                  >
-                    {copiedCmd === 'linux' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedCmd === 'linux' ? 'Tersalin!' : 'Salin Perintah'}</span>
-                  </button>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/60 font-mono text-[11px] text-slate-300 overflow-x-auto border border-white/5">
-                  <code>{linuxTerminalCmd}</code>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── 3-Step Setup Guide ── */}
-          <div
-            className={`p-4 rounded-2xl border text-xs space-y-2.5 ${
-              isDark ? 'bg-white/[0.03] border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
-            }`}
-          >
-            <div className="font-bold text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
-              <span>Cara Kerja 3 Langkah Mudah:</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <div className="flex items-start gap-2.5">
-                <span className="w-6 h-6 rounded-lg bg-blue-600/20 text-blue-400 font-black flex items-center justify-center shrink-0 text-xs">
-                  1
+            <div className="p-3">
+              <div className="flex items-center justify-between text-[11px] mb-1.5">
+                <span className={`font-medium ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                  {terminalTab === 'macos' ? 'Jalankan di Terminal macOS:' : 'Jalankan di Terminal Linux:'}
                 </span>
-                <div>
-                  <div className="font-bold text-slate-200">Unduh &amp; Jalankan</div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Unduh file sesuai OS Anda di atas dan jalankan sekali di komputer.
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(terminalTab === 'macos' ? macTerminalCmd : linuxTerminalCmd, terminalTab)}
+                  className={`flex items-center gap-1 font-semibold transition cursor-pointer ${
+                    isLight ? 'text-blue-600 hover:text-blue-700' : 'text-blue-400 hover:text-blue-300'
+                  }`}
+                >
+                  {copiedCmd === terminalTab ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedCmd === terminalTab ? 'Tersalin' : 'Salin Perintah'}</span>
+                </button>
               </div>
 
-              <div className="flex items-start gap-2.5">
-                <span className="w-6 h-6 rounded-lg bg-purple-600/20 text-purple-400 font-black flex items-center justify-center shrink-0 text-xs">
-                  2
-                </span>
-                <div>
-                  <div className="font-bold text-slate-200">Deteksi Otomatis</div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    RoboLab Web otomatis mendeteksi bridge lokal di Port 3001 (Indikator Hijau).
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <span className="w-6 h-6 rounded-lg bg-emerald-600/20 text-emerald-400 font-black flex items-center justify-center shrink-0 text-xs">
-                  3
-                </span>
-                <div>
-                  <div className="font-bold text-slate-200">Kompilasi Cepat</div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Klik Upload di RoboLab. Proyek Blynk, ESP32, dan Arduino terkompilasi instan!
-                  </p>
-                </div>
+              <div className={`p-2.5 rounded-lg font-mono text-[11px] overflow-x-auto border ${
+                isLight
+                  ? 'bg-slate-900 text-slate-100 border-slate-800'
+                  : 'bg-black/70 text-slate-200 border-white/5'
+              }`}>
+                <code>{terminalTab === 'macos' ? macTerminalCmd : linuxTerminalCmd}</code>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Modal Footer ── */}
+        {/* ── Modal Footer (Clean: Just Tutup button) ── */}
         <div
-          className={`flex items-center justify-between px-6 py-3.5 border-t relative z-10 ${
-            isDark ? 'border-white/10 bg-white/[0.02]' : 'border-slate-100 bg-slate-50/60'
+          className={`flex justify-end px-6 py-3 border-t ${
+            isLight ? 'border-slate-200 bg-slate-50/60' : 'border-white/10 bg-white/[0.02]'
           }`}
         >
-          <div className="hidden sm:flex items-center gap-3 text-xs text-slate-400">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> 100% Aman &amp; Open Source
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Cpu className="w-3.5 h-3.5 text-cyan-400" /> Multi-core CPU Speed
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              type="button"
-              onClick={onClose}
-              className={`px-5 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-sm ${
-                isDark
-                  ? 'bg-slate-800 hover:bg-slate-700 text-white'
-                  : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
-              }`}
-            >
-              Tutup
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+              isLight
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/10'
+            }`}
+          >
+            Tutup
+          </button>
         </div>
       </div>
     </div>
