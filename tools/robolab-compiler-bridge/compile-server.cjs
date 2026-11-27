@@ -160,13 +160,13 @@ function getCliEnv(fqbn = '') {
 // Collect all existing library folders so arduino-cli finds libraries across Arduino, KidsBlock, and bundled resources
 function getExtraLibraryArgs() {
   const { userDir: yamlUserDir } = getYamlDirectories();
+  const localAppData = process.env.LOCALAPPDATA || '';
   const libDirs = [
+    localAppData ? path.join(localAppData, 'RoboLabBridge', 'arduino-data', 'libraries') : '',
     path.join(__dirname, 'arduino-data', 'libraries'),
     yamlUserDir ? path.join(yamlUserDir, 'libraries') : '',
     path.join(os.homedir(), 'Documents', 'Arduino', 'libraries'),
     path.join(os.homedir(), 'Arduino', 'libraries'),
-    path.join(__dirname, '..', 'resources', 'arduino-data', 'libraries'),
-    path.join(__dirname, '..', '..', 'resources', 'arduino-data', 'libraries'),
     'C:\\KidsBlock Desktop\\resources\\tools\\Arduino\\libraries',
   ].filter(Boolean);
 
@@ -177,7 +177,7 @@ function getExtraLibraryArgs() {
       const norm = path.resolve(dir).toLowerCase();
       if (!seen.has(norm) && fs.existsSync(dir)) {
         seen.add(norm);
-        args.push('--libraries', dir);
+        args.push('--libraries', path.resolve(dir));
       }
     } catch {}
   }
@@ -268,6 +268,35 @@ function getCoreCacheDir() {
   return cacheDir;
 }
 
+function backupCoreArchive(buildDir, fqbn) {
+  try {
+    const srcCoreA = path.join(buildDir, 'core', 'core.a');
+    if (fs.existsSync(srcCoreA) && fs.statSync(srcCoreA).size > 100000) {
+      const arch = (fqbn.split(':')[0] || 'board').replace(/[^a-zA-Z0-9]/g, '_');
+      const boardModel = ((fqbn.split(':')[2] || 'gen').split(':')[0]).replace(/[^a-zA-Z0-9]/g, '_');
+      const targetArchive = path.join(getCoreCacheDir(), `core_${arch}_${boardModel}.a`);
+      fs.copyFileSync(srcCoreA, targetArchive);
+    }
+  } catch {}
+}
+
+function restoreCoreArchive(buildDir, fqbn) {
+  try {
+    const dstCoreA = path.join(buildDir, 'core', 'core.a');
+    if (!fs.existsSync(dstCoreA)) {
+      const arch = (fqbn.split(':')[0] || 'board').replace(/[^a-zA-Z0-9]/g, '_');
+      const boardModel = ((fqbn.split(':')[2] || 'gen').split(':')[0]).replace(/[^a-zA-Z0-9]/g, '_');
+      const cachedArchive = path.join(getCoreCacheDir(), `core_${arch}_${boardModel}.a`);
+      if (fs.existsSync(cachedArchive) && fs.statSync(cachedArchive).size > 100000) {
+        fs.mkdirSync(path.dirname(dstCoreA), { recursive: true });
+        fs.copyFileSync(cachedArchive, dstCoreA);
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 // Shared persistent compile hash cache on disk (shared with electron/main.cjs)
 const _hashCachePath = path.join(os.tmpdir(), 'RoboLabHashCache.json');
 let lastCompiledHashes = global.__robolabLastCompiledHashes || {};
@@ -300,7 +329,7 @@ function killProcessTree(child) {
   }
 }
 
-function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
+function runCli(args, logs, timeoutMs = 600000, fqbn = '', onLogChunk = null, isAborted = null) {
   return new Promise((resolve) => {
     const cliPath = getArduinoCliPath();
     const child = spawn(cliPath, args, { env: getCliEnv(fqbn), windowsHide: true });
@@ -308,31 +337,109 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
     let stderrText = '';
     let settled = false;
 
+    const emitLog = (item) => {
+      if (!item || !item.text) return;
+      if (logs) {
+        logs.push(item);
+        if (!logs.__streamsChunks && typeof onLogChunk === 'function') onLogChunk(item);
+      } else if (typeof onLogChunk === 'function') {
+        onLogChunk(item);
+      }
+    };
+
+    const startTime = Date.now();
+    const heartbeatTimer = setInterval(() => {
+      const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+      if (elapsedSec > 0) {
+        const isUpload = args[0] === 'upload';
+        emitLog({
+          text: isUpload
+            ? `⏳ Upload sedang berlangsung (${elapsedSec} detik)...`
+            : `⏳ Kompilasi sedang berlangsung (${elapsedSec} detik)...`,
+          type: 'info',
+        });
+      }
+    }, 4000);
+
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      clearInterval(heartbeatTimer);
+      if (abortTimer) clearInterval(abortTimer);
       clearTimeout(timer);
       resolve(result);
     };
 
+    const abortTimer = isAborted
+      ? setInterval(() => {
+          if (typeof isAborted === 'function' && isAborted()) {
+            killProcessTree(child);
+            finish({ success: false, stdout: stdoutText, stderr: 'Aborted by client', aborted: true });
+          }
+        }, 300)
+      : null;
+
     const timer = setTimeout(() => {
       killProcessTree(child);
-      if (logs) logs.push({ text: '⚠️ Waktu kompilasi/eksekusi habis (Timeout).', type: 'error' });
+      emitLog({ text: '⚠️ Waktu kompilasi/eksekusi habis (Timeout).', type: 'error' });
       finish({ success: false, stdout: stdoutText, stderr: stderrText, timedOut: true });
     }, timeoutMs);
 
     child.stdout.on('data', (d) => {
       const str = d.toString();
       stdoutText += str;
-      if (logs) {
+      if (logs || typeof onLogChunk === 'function') {
         str.split(/\r?\n|\r/).forEach((line) => {
           const trimmed = line.trim();
           if (!trimmed) return;
-          // Filter overly noisy compiler command lines while keeping useful status lines
-          if (trimmed.length > 260 && (trimmed.includes('xtensa-esp32-elf-') || trimmed.includes('xtensa-lx106-elf-') || trimmed.includes('avr-g++'))) {
+          if (trimmed.startsWith('Detecting libraries used...')) {
+            emitLog({ text: '🔍 Mendeteksi library yang digunakan...', type: 'stdout' });
             return;
           }
-          logs.push({ text: trimmed, type: 'stdout' });
+          if (trimmed.startsWith('Generating function prototypes...')) {
+            emitLog({ text: '⚙️ Menyiapkan prototipe fungsi...', type: 'stdout' });
+            return;
+          }
+          if (trimmed.startsWith('Compiling sketch...')) {
+            emitLog({ text: '⚙️ Mengompilasi kode sketsa...', type: 'stdout' });
+            return;
+          }
+          if (trimmed.startsWith('Compiling libraries...') || trimmed.startsWith('Compiling library')) {
+            emitLog({ text: `📦 ${trimmed}`, type: 'stdout' });
+            return;
+          }
+          if (trimmed.startsWith('Compiling core...')) {
+            emitLog({ text: '⚙️ Mengompilasi modul inti (core)...', type: 'stdout' });
+            return;
+          }
+          if (trimmed.startsWith('Linking everything together...')) {
+            emitLog({ text: '🔗 Menautkan firmware biner (.bin)...', type: 'stdout' });
+            return;
+          }
+          if (trimmed.includes('Sketch uses') || trimmed.includes('Global variables use')) {
+            emitLog({ text: `📊 ${trimmed}`, type: 'stdout' });
+            return;
+          }
+          // Suppress noisy raw Windows shell/ctags/archiver commands during --verbose compile
+          if (/^(?:cmd\s+\/c\s+|1 file\(s\) copied\.|FQBN:|Using board |Using core )/i.test(trimmed)) {
+            return;
+          }
+          if (trimmed.includes('/ctags') || trimmed.includes('\\ctags')) {
+            return;
+          }
+          // Filter overly noisy compiler command lines while keeping useful status lines
+          if (trimmed.includes(' -c ') && (trimmed.includes('xtensa-') || trimmed.includes('avr-g++') || trimmed.includes('arm-none-eabi-'))) {
+            const m = trimmed.match(/"?([^"'\s]+\.(?:c|cpp|S))"?\s+-o\s+"?([^"'\s]+\.o)"?/i) || trimmed.match(/([a-zA-Z0-9_\-]+\.(?:c|cpp|S))\b/);
+            if (m) {
+              const srcFile = path.basename(m[1]);
+              emitLog({ text: `⚡ Mengompilasi ${srcFile}...`, type: 'stdout' });
+            }
+            return;
+          }
+          if (trimmed.length > 260 && (trimmed.includes('xtensa-esp32-elf-') || trimmed.includes('xtensa-lx106-elf-') || trimmed.includes('avr-g++') || trimmed.includes('esptool'))) {
+            return;
+          }
+          emitLog({ text: trimmed, type: 'stdout' });
         });
       }
     });
@@ -340,7 +447,7 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
     child.stderr.on('data', (d) => {
       const str = d.toString();
       stderrText += str;
-      if (logs) {
+      if (logs || typeof onLogChunk === 'function') {
         str.split(/\r?\n|\r/).forEach((line) => {
           const trimmed = line.trim();
           if (!trimmed) return;
@@ -350,7 +457,7 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
             /\d+%|\d+\s*%|uploading|writing|reading|erasing|bytes|hard resetting|connecting|leaving|[║╠╚]|SEGMENT|RODATA|ICACHE|IRAM|IROM/i.test(
               trimmed
             );
-          logs.push({ text: trimmed, type: isUploadProgress ? 'stdout' : 'error' });
+          emitLog({ text: trimmed, type: isUploadProgress ? 'stdout' : 'error' });
         });
       }
     });
@@ -366,20 +473,23 @@ function runCli(args, logs, timeoutMs = 600000, fqbn = '') {
     });
 
     child.on('error', (err) => {
-      if (logs) logs.push({ text: `❌ Gagal menjalankan arduino-cli: ${err.message}`, type: 'error' });
+      emitLog({ text: `❌ Gagal menjalankan arduino-cli: ${err.message}`, type: 'error' });
       finish({ success: false, stdout: stdoutText, stderr: err.message });
     });
   });
 }
 
 // Global mutex stored on `global` so Vite hot-reloads / multiple endpoints never run two compiles concurrently
-async function handleCompileRequest(body) {
+async function handleCompileRequest(body, onLogChunk = null, isAborted = null) {
   while (global.__robolabActiveCompilePromise) {
+    if (typeof isAborted === 'function' && isAborted()) {
+      return { success: false, error: 'Compile cancelled by client', logs: [] };
+    }
     try {
       await global.__robolabActiveCompilePromise;
     } catch {}
   }
-  const promise = _executeCompileRequest(body);
+  const promise = _executeCompileRequest(body, onLogChunk, isAborted);
   global.__robolabActiveCompilePromise = promise;
   try {
     return await promise;
@@ -402,9 +512,20 @@ function hasLocalArduinoCli() {
   }
 }
 
-async function _executeCompileRequest(body) {
+async function _executeCompileRequest(body, onLogChunk = null, isAborted = null) {
   const { board = 'ESP32 DevKit V1', files = {}, sketchPath, requireNative } = body || {};
   const logs = [];
+  logs.__streamsChunks = true;
+  const origPush = logs.push.bind(logs);
+  logs.push = function (...items) {
+    for (const item of items) {
+      origPush(item);
+      if (typeof onLogChunk === 'function' && item && item.text) {
+        onLogChunk(item);
+      }
+    }
+    return logs.length;
+  };
   const fqbn = resolveFqbn(board);
   const bLower = board.toLowerCase();
   const isEsp32 = fqbn.includes('esp32') || bLower.includes('esp32');
@@ -468,6 +589,12 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 }
 #endif\n`;
       finalCode = ledcCompatHeader + finalCode;
+    }
+  } else if (!isEsp8266) {
+    // AVR compatibility transforms (Arduino Mega, Arduino Uno, Arduino Nano)
+    if (finalCode.includes('<ESP32Servo.h>')) {
+      logs.push({ text: '⚙️ Menyesuaikan arsitektur AVR: Mengubah #include <ESP32Servo.h> menjadi #include <Servo.h>...', type: 'info' });
+      finalCode = finalCode.replace(/#include\s*<ESP32Servo\.h>/g, '#include <Servo.h>');
     }
   }
 
@@ -575,15 +702,17 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       } catch {}
     }
     ensureBuildDirStructure(buildDir, fqbn);
+    restoreCoreArchive(buildDir, fqbn);
 
     const cpuCount = (os.cpus() && os.cpus().length) || 4;
     const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
     const hasPrecompiledCore = fs.existsSync(path.join(buildDir, 'core', 'core.a'));
-    // Limit parallel cc1plus.exe jobs on ESP8266 or low-RAM Windows systems to prevent 32-bit cc1plus.exe OOM
-    let jobCount = Math.min(6, Math.max(2, Math.floor(cpuCount / 2)));
-    if (freeMemMB < 450) {
+    // Limit parallel cc1plus.exe jobs on ESP32, ESP8266 or systems with <2.5GB free RAM to prevent memory exhaustion and disk pagefile thrashing
+    let jobCount = Math.min(4, Math.max(1, Math.floor(cpuCount / 2)));
+    if (freeMemMB < 600) {
       jobCount = 1;
-    } else if (isEsp8266 || freeMemMB < 800) {
+    } else if (isEsp32 || isEsp8266 || freeMemMB < 2500) {
+      // ESP32 core 3.x (ESP-IDF v5) consumes ~350MB RAM per compiler job. Limit to 2 jobs max to prevent thrashing.
       jobCount = Math.min(2, jobCount);
     }
 
@@ -602,31 +731,49 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       buildDir,
       '--jobs',
       String(jobs),
-      '--warnings',
-      'none',
+      '--verbose',
       ...extraLibArgs,
       ...configArgs,
       tempDir,
     ];
 
     const compileArgs = buildCompileArgs(jobCount);
-    let res = await runCli(compileArgs, logs, 600000, fqbn);
+    let res = await runCli(compileArgs, logs, 600000, fqbn, onLogChunk, isAborted);
 
-    // Check if failure was due to cc1plus.exe OOM, missing ld_h, or parallel race (NOT a user sketch syntax error)
+    // Check if failure was due to cc1plus.exe OOM, missing ld_h, or parallel race (NOT a user sketch syntax error or missing header)
     const stderrStr = res.stderr || '';
+    const isMissingHeader = /fatal error:\s*[a-zA-Z0-9_\-]+\.h:\s*No such file or directory/i.test(stderrStr);
     const hasSketchSyntaxError =
-      /RoboLabSketch\.ino:\d+:\d+:\s*(?:fatal\s+)?error:/i.test(stderrStr) &&
-      !/No such file or directory/i.test(stderrStr);
+      /(?:\.ino|\.cpp|\.c|\.h|\.hpp):\d+:\d+:\s*(?:fatal\s+)?error:/i.test(stderrStr) &&
+      !isMissingHeader;
     const isOomOrLdError =
       /out of memory|cannot allocate|virtual memory|errno=1455|ld_h|local\.eagle\.flash\.ld|cp\.py/i.test(stderrStr);
+    const isDepFileError =
+      /opening dependency file|\.d:\s*No such file|archive has no index|file format not recognized/i.test(stderrStr);
 
-    if (!res.success && (isOomOrLdError || (!hasSketchSyntaxError && jobCount > 1))) {
+    // If build cache has corrupted dependency (.d) or archive (.a) file, fix it immediately
+    if (!res.success && isDepFileError) {
+      logs.push({
+        text: '🔄 Memperbaiki berkas cache dependensi dan mengompilasi ulang dengan mode stabil (1 job)...',
+        type: 'info',
+      });
+      try {
+        const sketchCache = path.join(buildDir, 'sketch');
+        if (fs.existsSync(sketchCache)) fs.rmSync(sketchCache, { recursive: true, force: true });
+        if (/archive has no index|file format not recognized/i.test(res.stderr)) {
+          const coreArchive = path.join(buildDir, 'core', 'core.a');
+          if (fs.existsSync(coreArchive)) fs.unlinkSync(coreArchive);
+        }
+        ensureBuildDirStructure(buildDir, fqbn);
+      } catch {}
+      res = await runCli(buildCompileArgs(1), logs, 600000, fqbn, onLogChunk, isAborted);
+    } else if (!res.success && !isMissingHeader && !hasSketchSyntaxError && (isOomOrLdError || jobCount > 1)) {
       logs.push({
         text: '🔄 Mengoptimalkan penggunaan RAM (mode hemat memori single-job) dan melanjutkan kompilasi...',
         type: 'info',
       });
       ensureBuildDirStructure(buildDir, fqbn);
-      res = await runCli(buildCompileArgs(1), logs, 600000, fqbn);
+      res = await runCli(buildCompileArgs(1), logs, 600000, fqbn, onLogChunk, isAborted);
 
       // If incremental build still hit OOM partway through the core, run one more single-job pass to finish remaining .o files
       if (!res.success && /out of memory|cannot allocate|virtual memory/i.test(res.stderr || '')) {
@@ -635,15 +782,21 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
           type: 'info',
         });
         ensureBuildDirStructure(buildDir, fqbn);
-        res = await runCli(buildCompileArgs(1), logs, 600000, fqbn);
+        res = await runCli(buildCompileArgs(1), logs, 600000, fqbn, onLogChunk, isAborted);
       }
     }
 
-    // Auto-install missing library if needed
+    // Auto-install missing library if needed (support multiple missing libraries in sequence)
     if (!res.success && res.stderr) {
-      const missingLibMatch = res.stderr.match(/fatal error:\s*([a-zA-Z0-9_]+)\.h:\s*No such file or directory/i);
-      if (missingLibMatch) {
+      let autoInstallTries = 0;
+      while (!res.success && res.stderr && autoInstallTries < 5) {
+        const missingLibMatch = res.stderr.match(/fatal error:\s*([a-zA-Z0-9_\-]+)\.h:\s*No such file or directory/i);
+        if (!missingLibMatch) break;
         const rawHeader = missingLibMatch[1];
+        if (/^(?:esp32-hal|avr\/|freertos\/|sdkconfig|pins_arduino)/i.test(rawHeader)) {
+          break;
+        }
+        autoInstallTries++;
         const rawLower = rawHeader.toLowerCase();
         let libToInstall = rawHeader;
         if (rawLower.includes('dht')) libToInstall = 'DHT sensor library';
@@ -658,11 +811,13 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
         else if (rawHeader === 'PubSubClient') libToInstall = 'PubSubClient';
         else if (rawHeader === 'WebSocketsClient') libToInstall = 'WebSockets';
         else if (rawHeader.startsWith('Blynk')) libToInstall = 'Blynk';
+        else if (rawHeader === 'OneWire') libToInstall = 'OneWire';
+        else if (rawHeader === 'DallasTemperature') libToInstall = 'DallasTemperature';
 
         logs.push({ text: `📦 Menginstal library '${libToInstall}' secara otomatis...`, type: 'info' });
-        await runCli(['lib', 'install', libToInstall, ...configArgs], logs, 240000, fqbn);
+        await runCli(['lib', 'install', libToInstall, ...configArgs], logs, 240000, fqbn, onLogChunk, isAborted);
         ensureBuildDirStructure(buildDir, fqbn);
-        res = await runCli(buildCompileArgs(1), logs, 600000, fqbn);
+        res = await runCli(buildCompileArgs(jobCount), logs, 600000, fqbn, onLogChunk, isAborted);
       }
 
       // Auto-install missing platform core if needed
@@ -672,35 +827,13 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       if (!res.success && missingPlatformMatch) {
         const coreToInstall = fqbn.split(':').slice(0, 2).join(':');
         logs.push({ text: `⚙️ Menginstal platform core '${coreToInstall}' secara otomatis...`, type: 'info' });
-        await runCli(['core', 'update-index', ...configArgs], logs, 120000, fqbn);
-        await runCli(['core', 'install', coreToInstall, ...configArgs], logs, 600000, fqbn);
+        await runCli(['core', 'update-index', ...configArgs], logs, 120000, fqbn, onLogChunk, isAborted);
+        await runCli(['core', 'install', coreToInstall, ...configArgs], logs, 600000, fqbn, onLogChunk, isAborted);
         ensureBuildDirStructure(buildDir, fqbn);
-        res = await runCli(buildCompileArgs(1), logs, 600000, fqbn);
+        res = await runCli(buildCompileArgs(jobCount), logs, 600000, fqbn, onLogChunk, isAborted);
       }
 
-      // Auto-recovery ONLY if build cache has genuinely corrupted dependency (.d) or archive (.a) files
-      // Never wipe buildDir on general errors or OOM so precompiled core.a is preserved!
-      if (
-        !res.success &&
-        /opening dependency file|\.d:\s*No such file|archive has no index|file format not recognized/i.test(
-          res.stderr
-        )
-      ) {
-        logs.push({
-          text: '🔄 Memperbaiki berkas cache dependensi dan mengompilasi ulang dengan mode stabil (1 job)...',
-          type: 'info',
-        });
-        try {
-          const sketchCache = path.join(buildDir, 'sketch');
-          if (fs.existsSync(sketchCache)) fs.rmSync(sketchCache, { recursive: true, force: true });
-          if (/archive has no index|file format not recognized/i.test(res.stderr)) {
-            const coreArchive = path.join(buildDir, 'core', 'core.a');
-            if (fs.existsSync(coreArchive)) fs.unlinkSync(coreArchive);
-          }
-          ensureBuildDirStructure(buildDir, fqbn);
-        } catch {}
-        res = await runCli(buildCompileArgs(1), logs, 600000, fqbn);
-      }
+
     }
 
     if (!res.success) {
@@ -714,6 +847,7 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       sketchSize: sketchMatch ? sketchMatch[0] : '',
       globVarSize: globMatch ? globMatch[0] : '',
     };
+    backupCoreArchive(buildDir, fqbn);
     saveHashCache();
     logs.push({ text: '✓ Kompilasi berhasil!', type: 'success' });
   }
@@ -793,6 +927,39 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       partitions,
       logs,
     };
+  }
+
+  // Raspberry Pi Pico (RP2040) UF2 artifact
+  if (fqbn.includes('rp2040') || bLower.includes('pico')) {
+    const uf2File = buildFiles.find((f) => f.endsWith('.uf2'));
+    if (uf2File) {
+      const uf2Buffer = fs.readFileSync(path.join(buildDir, uf2File));
+      return {
+        success: true,
+        binaryType: 'uf2',
+        fileName: path.basename(uf2File),
+        uf2Base64: uf2Buffer.toString('base64'),
+        logs,
+      };
+    }
+  }
+
+  // STM32 binary / hex artifact
+  if (fqbn.includes('stm32') || bLower.includes('stm32')) {
+    const binFile = buildFiles.find((f) => f.endsWith('.bin'));
+    const hexFile = buildFiles.find((f) => f.endsWith('.hex'));
+    if (binFile || hexFile) {
+      const targetFile = binFile || hexFile;
+      const data = fs.readFileSync(path.join(buildDir, targetFile));
+      return {
+        success: true,
+        binaryType: binFile ? 'stm32-bin' : 'avr-hex',
+        hexData: hexFile ? fs.readFileSync(path.join(buildDir, hexFile), 'utf-8') : undefined,
+        fileName: path.basename(targetFile),
+        dataBase64: data.toString('base64'),
+        logs,
+      };
+    }
   }
 
   return { success: true, logs };
@@ -1052,10 +1219,21 @@ function runEsp8266Ch340SafeUpload(targetComPort, buildDir, logs, baudRate = '11
   });
 }
 
-async function handleUploadLocalRequest(body) {
+async function handleUploadLocalRequest(body, onLogChunk = null, isAborted = null) {
   await stopLocalSerialMonitor();
   const { board = 'Arduino Uno', port = '' } = body || {};
   const logs = [];
+  logs.__streamsChunks = true;
+  const origPush = logs.push.bind(logs);
+  logs.push = function (...items) {
+    for (const item of items) {
+      origPush(item);
+      if (typeof onLogChunk === 'function' && item && item.text) {
+        onLogChunk(item);
+      }
+    }
+    return logs.length;
+  };
   const fqbn = resolveFqbn(board);
   const bLower = board.toLowerCase();
   const isEsp32 = fqbn.includes('esp32') || bLower.includes('esp32');
@@ -1144,7 +1322,7 @@ async function handleUploadLocalRequest(body) {
     ];
   }
 
-  let res = await runCli(uploadArgs, logs, 180000, fqbn);
+  let res = await runCli(uploadArgs, logs, 180000, fqbn, onLogChunk, isAborted);
 
   // Fallback for ESP8266 Lolin / NodeMCU on CH340/CP2102 if first upload attempt failed
   if (!res.success && isEsp8266) {
@@ -1169,7 +1347,7 @@ async function handleUploadLocalRequest(body) {
         ...configArgs,
         tempDir,
       ];
-      res = await runCli(esp8266FallbackArgs, logs, 180000, fqbn);
+      res = await runCli(esp8266FallbackArgs, logs, 180000, fqbn, onLogChunk, isAborted);
     }
   }
 
@@ -1195,7 +1373,7 @@ async function handleUploadLocalRequest(body) {
       ...configArgs,
       tempDir,
     ];
-    res = await runCli(fallback460Args, logs, 180000, fqbn);
+    res = await runCli(fallback460Args, logs, 180000, fqbn, onLogChunk, isAborted);
 
     if (!res.success) {
       logs.push({
@@ -1218,7 +1396,7 @@ async function handleUploadLocalRequest(body) {
         ...configArgs,
         tempDir,
       ];
-      res = await runCli(fallback115Args, logs, 180000, fqbn);
+      res = await runCli(fallback115Args, logs, 180000, fqbn, onLogChunk, isAborted);
     }
   }
 
@@ -1237,7 +1415,7 @@ async function handleUploadLocalRequest(body) {
       ...configArgs,
       tempDir,
     ];
-    res = await runCli(oldNanoArgs, logs, 120000, fqbn);
+    res = await runCli(oldNanoArgs, logs, 120000, fqbn, onLogChunk, isAborted);
   }
 
   if (res.success) {
@@ -1502,23 +1680,65 @@ function createApiMiddleware() {
         rawBody += chunk;
       });
       req.on('end', async () => {
+        const wantsStreaming =
+          req.headers['x-stream-logs'] === 'true' ||
+          Boolean(req.headers['accept'] && req.headers['accept'].includes('application/x-ndjson'));
+
+        let clientAborted = false;
+        res.on('close', () => {
+          if (!res.writableEnded) {
+            clientAborted = true;
+          }
+        });
+
+        if (wantsStreaming) {
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ndjson; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          });
+        }
+
+        const onLogChunk = (log) => {
+          if (wantsStreaming && !res.writableEnded && !clientAborted) {
+            try {
+              res.write(JSON.stringify({ type: 'log', data: log }) + '\n');
+            } catch {}
+          }
+        };
+
         try {
           const body = JSON.parse(rawBody || '{}');
           const result =
             parsedUrl.pathname === '/api/upload-local'
-              ? await handleUploadLocalRequest(body)
-              : await handleCompileRequest(body);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(result));
+              ? await handleUploadLocalRequest(body, onLogChunk, () => clientAborted)
+              : await handleCompileRequest(body, onLogChunk, () => clientAborted);
+
+          if (wantsStreaming) {
+            if (!res.writableEnded) {
+              res.write(JSON.stringify({ type: 'result', data: result }) + '\n');
+              res.end();
+            }
+          } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          }
         } catch (err) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              success: false,
-              error: err.message || String(err),
-              logs: [{ text: `Server Error: ${err.message || err}`, type: 'error' }],
-            })
-          );
+          const errPayload = {
+            success: false,
+            error: err.message || String(err),
+            logs: [{ text: `Server Error: ${err.message || err}`, type: 'error' }],
+          };
+          if (wantsStreaming) {
+            if (!res.writableEnded) {
+              res.write(JSON.stringify({ type: 'result', data: errPayload }) + '\n');
+              res.end();
+            }
+          } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(errPayload));
+          }
         }
       });
       return;

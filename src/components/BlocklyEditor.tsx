@@ -3618,7 +3618,14 @@ export const BlocklyEditor: React.FC<BlocklyEditorProps> = ({
       });
 
       if (servoPins.size > 0) {
-        const servoHeader = activeBoard.toLowerCase().includes('esp32') ? 'ESP32Servo' : 'Servo';
+        const isEsp32Board = activeBoard.toLowerCase().includes('esp32');
+        const servoHeader = isEsp32Board ? 'ESP32Servo' : 'Servo';
+        // Clean mismatched servo headers if target board switched between ESP32 and AVR
+        if (isEsp32Board) {
+          generatedCode = generatedCode.replace(/#include\s*<Servo\.h>\n?/g, '');
+        } else {
+          generatedCode = generatedCode.replace(/#include\s*<ESP32Servo\.h>\n?/g, '');
+        }
         if (!generatedCode.includes(`#include <${servoHeader}.h>`)) {
           generatedCode += `#include <${servoHeader}.h>\n`;
         }

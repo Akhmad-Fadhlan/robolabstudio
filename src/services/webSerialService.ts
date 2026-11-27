@@ -119,6 +119,50 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
   throw lastErr || new Error('Failed to fetch Cloud Compiler API');
 }
 
+/**
+ * Reads streaming NDJSON response from Cloud Compiler / Local Bridge
+ * and immediately delivers progressive compiler logs to the terminal.
+ */
+async function readNdjsonStream(body: ReadableStream<Uint8Array>, onLog: HardwareLogCallback): Promise<any> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: any = null;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const item = JSON.parse(trimmed);
+          if (item.type === 'log' && item.data) {
+            onLog({ text: item.data.text, type: item.data.type || 'stdout' });
+          } else if (item.type === 'result') {
+            result = item.data;
+          }
+        } catch {}
+      }
+    }
+    if (!result && buffer.trim()) {
+      try {
+        const item = JSON.parse(buffer.trim());
+        if (item.type === 'result') result = item.data;
+        else result = item;
+      } catch {}
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+  return result || { success: false, error: 'Empty stream response' };
+}
+
 // Known USB Vendor IDs for IoT Microcontroller Boards
 const USB_VENDOR_NAMES: Record<number, string> = {
   0x1a86: 'CH340/CH341 USB-Serial',
@@ -971,8 +1015,13 @@ async function flashAvrStk500v2(
     } else {
       await port.open({ baudRate });
     }
-    writer = port.writable.getWriter();
-    reader = port.readable.getReader();
+    if (!port.writable || !port.readable) {
+      throw new Error('Port serial tidak mendukung stream baca/tulis.');
+    }
+    const activeWriter = port.writable.getWriter();
+    const activeReader = port.readable.getReader();
+    writer = activeWriter;
+    reader = activeReader;
 
     // Pulse DTR/RTS to trigger Arduino Mega auto-reset into bootloader
     if (typeof port.setSignals === 'function') {
@@ -1004,7 +1053,7 @@ async function flashAvrStk500v2(
     let signOnDevice = '';
 
     for (let attempt = 0; attempt < 12; attempt++) {
-      const resp = await sendStk500v2Command(writer, rxQueue, seq++, new Uint8Array([STK500V2_CMD_SIGN_ON]), 300);
+      const resp = await sendStk500v2Command(activeWriter, rxQueue, seq++, new Uint8Array([STK500V2_CMD_SIGN_ON]), 300);
       if (resp && resp.length >= 2 && resp[0] === STK500V2_CMD_SIGN_ON && resp[1] === STK500V2_STATUS_CMD_OK) {
         synced = true;
         if (resp.length > 3) {
@@ -1039,7 +1088,7 @@ async function flashAvrStk500v2(
       STK500V2_CMD_ENTER_PROGMODE_ISP,
       0xc8, 0x64, 0x19, 0x20, 0x00, 0x53, 0x03, 0xac, 0x53, 0x00, 0x00,
     ]);
-    await sendStk500v2Command(writer, rxQueue, seq++, enterProgCmd, 500);
+    await sendStk500v2Command(activeWriter, rxQueue, seq++, enterProgCmd, 500);
 
     // 3. Flash pages (256 bytes per page for ATmega2560 & ATmega128)
     const pageSize = 256;
@@ -1058,7 +1107,7 @@ async function flashAvrStk500v2(
         (wordAddr >>> 8) & 0xff,
         wordAddr & 0xff,
       ]);
-      const loadResp = await sendStk500v2Command(writer, rxQueue, seq++, loadAddrCmd, 600);
+      const loadResp = await sendStk500v2Command(activeWriter, rxQueue, seq++, loadAddrCmd, 600);
       if (!loadResp || loadResp[1] !== STK500V2_STATUS_CMD_OK) {
         throw new Error(`Gagal STK500v2 CMD_LOAD_ADDRESS pada alamat 0x${byteAddr.toString(16)} (halaman ${page + 1}/${totalPages})`);
       }
@@ -1082,7 +1131,7 @@ async function flashAvrStk500v2(
       progCmd[9] = 0x00; // poll2
       progCmd.set(pageBuf, 10);
 
-      const progResp = await sendStk500v2Command(writer, rxQueue, seq++, progCmd, 1800);
+      const progResp = await sendStk500v2Command(activeWriter, rxQueue, seq++, progCmd, 1800);
       if (!progResp || progResp[1] !== STK500V2_STATUS_CMD_OK) {
         throw new Error(`Gagal STK500v2 CMD_PROGRAM_FLASH_ISP pada alamat 0x${byteAddr.toString(16)} (halaman ${page + 1}/${totalPages})`);
       }
@@ -1098,7 +1147,7 @@ async function flashAvrStk500v2(
 
     // 4. Leave Progmode (CMD_LEAVE_PROGMODE_ISP = 0x11)
     const leaveCmd = new Uint8Array([STK500V2_CMD_LEAVE_PROGMODE_ISP, 0x01, 0x01]);
-    await sendStk500v2Command(writer, rxQueue, seq++, leaveCmd, 400);
+    await sendStk500v2Command(activeWriter, rxQueue, seq++, leaveCmd, 400);
 
     reading = false;
     if (reader) {
@@ -1889,7 +1938,10 @@ export async function executeWebHardwareAction(params: {
   // 1. If action requires a hardware port ('upload' or 'flash-firmware'), ensure Web Serial port is selected & verified
   // IMPORTANT: Verify/open Web Serial port BEFORE any network/timer awaits so browser user gesture activation is preserved!
   let targetWebPort: { port: any; address: string; openError?: string } | null = null;
-  if (action === 'upload' || action === 'flash-firmware') {
+  const hasLocalBridge = await checkLocalBridgeAvailable();
+  const shouldUseBridgeDirect = isLocalComPort && hasLocalBridge && !isPython && action !== 'flash-firmware';
+
+  if ((action === 'upload' || action === 'flash-firmware') && !shouldUseBridgeDirect) {
     await stopWebSerialMonitor();
     if (!isLocalComPort || isRemoteWebOrigin() || isPython || action === 'flash-firmware' || isWebSerialSupported()) {
       targetWebPort = await ensureWebSerialPort(port, true, 115200);
@@ -1988,7 +2040,11 @@ export async function executeWebHardwareAction(params: {
   try {
     const response = await fetchCompilerApi('/api/compile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Stream-Logs': 'true',
+        'Accept': 'application/x-ndjson, application/json',
+      },
       body: JSON.stringify({
         board,
         action,
@@ -2003,19 +2059,27 @@ export async function executeWebHardwareAction(params: {
       throw new Error(`Cloud Compiler HTTP ${response.status}`);
     }
 
-    const result = await response.json();
-    if (Array.isArray(result.logs)) {
-      for (const l of result.logs) {
-        onLog({ text: l.text, type: l.type || 'stdout' });
+    let result: any = null;
+    const compileCt = response.headers.get('content-type') || '';
+    if (compileCt.includes('application/x-ndjson') && response.body) {
+      result = await readNdjsonStream(response.body, onLog);
+    } else {
+      result = await response.json();
+      if (Array.isArray(result.logs)) {
+        for (const l of result.logs) {
+          onLog({ text: l.text, type: l.type || 'stdout' });
+        }
       }
     }
 
-    if (!result.success) {
+    if (!result || !result.success) {
       if (targetWebPort?.port) {
         try { await targetWebPort.port.close(); } catch {}
       }
       onProgress?.(100);
-      return { success: false, error: result.error || 'Kompilasi gagal.' };
+      const compileErrMsg = result?.error || 'Kompilasi gagal.';
+      onLog({ text: `❌ ${compileErrMsg}`, type: 'error' });
+      return { success: false, error: compileErrMsg };
     }
 
     onProgress?.(65);
@@ -2026,30 +2090,41 @@ export async function executeWebHardwareAction(params: {
     }
 
     // Action === 'upload':
-    // When the user has selected a device via Web Serial (targetWebPort), always flash
-    // directly via Web Serial (flashEspViaWebSerial / flashAvrHexViaWebSerial) so real-time
-    // erasing flash (delete firmware) and writing progress blocks stream directly into the terminal!
-    // Local background bridge (/api/upload-local) is only used when no browser Web Serial port
-    // is active and a local COM port was specified.
-    const shouldUseLocalBridge = !targetWebPort && isLocalComPort && !result.cloudCompiled && (await checkLocalBridgeAvailable());
+    // When the user has compiler bridge active with a local COM port, flash directly via native bridge uploader (esptool / avrdude).
+    // Local background bridge (/api/upload-local) is used directly when bridge is available.
+    const shouldUseLocalBridge = (shouldUseBridgeDirect || !targetWebPort) && isLocalComPort && !result.cloudCompiled && hasLocalBridge;
     if (shouldUseLocalBridge) {
+      if (targetWebPort?.port) {
+        try { await targetWebPort.port.close(); } catch {}
+        await sleep(200);
+      }
       try {
         const localUploadResp = await fetchCompilerApi('/api/upload-local', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Stream-Logs': 'true',
+            'Accept': 'application/x-ndjson, application/json',
+          },
           body: JSON.stringify({
             board,
             port: isLocalComPort ? port : '',
           }),
         });
         if (localUploadResp.ok) {
-          const localData = await localUploadResp.json();
-          if (Array.isArray(localData.logs)) {
-            for (const l of localData.logs) {
-              onLog({ text: l.text, type: l.type || 'stdout' });
+          let localData: any = null;
+          const uploadCt = localUploadResp.headers.get('content-type') || '';
+          if (uploadCt.includes('application/x-ndjson') && localUploadResp.body) {
+            localData = await readNdjsonStream(localUploadResp.body, onLog);
+          } else {
+            localData = await localUploadResp.json();
+            if (Array.isArray(localData.logs)) {
+              for (const l of localData.logs) {
+                onLog({ text: l.text, type: l.type || 'stdout' });
+              }
             }
           }
-          if (localData.success) {
+          if (localData?.success) {
             onProgress?.(100);
             const finalPort = localData.port || port;
             if (finalPort && onPortSelected) onPortSelected(finalPort);
@@ -2057,7 +2132,7 @@ export async function executeWebHardwareAction(params: {
           }
           if (!targetWebPort) {
             onProgress?.(100);
-            return { success: false, error: localData.error || 'Upload gagal.' };
+            return { success: false, error: localData?.error || 'Upload gagal.' };
           }
         }
       } catch {}
@@ -2084,26 +2159,40 @@ export async function executeWebHardwareAction(params: {
 
     if (result.binaryType === 'avr-hex' && result.hexData) {
       const avrRes = await flashAvrHexViaWebSerial(targetWebPort.port, result.hexData, board, onLog);
-      if (!avrRes.success && (await checkLocalBridgeAvailable())) {
+      if (!avrRes.success && hasLocalBridge) {
         onLog({
           text: '🔄 [Auto-Fallback] Mencoba upload otomatis melalui Compiler Bridge lokal (avrdude / arduino-cli)...',
           type: 'info',
         });
+        if (targetWebPort?.port) {
+          try { await targetWebPort.port.close(); } catch {}
+          await sleep(250);
+        }
         try {
           const localUploadResp = await fetchCompilerApi('/api/upload-local', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Stream-Logs': 'true',
+              'Accept': 'application/x-ndjson, application/json',
+            },
             body: JSON.stringify({
               board,
               port: isLocalComPort ? port : '',
             }),
           });
           if (localUploadResp.ok) {
-            const localData = await localUploadResp.json();
-            if (Array.isArray(localData.logs)) {
-              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            let localData: any = null;
+            const fallbackCt = localUploadResp.headers.get('content-type') || '';
+            if (fallbackCt.includes('application/x-ndjson') && localUploadResp.body) {
+              localData = await readNdjsonStream(localUploadResp.body, onLog);
+            } else {
+              localData = await localUploadResp.json();
+              if (Array.isArray(localData.logs)) {
+                for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+              }
             }
-            if (localData.success) {
+            if (localData?.success) {
               onProgress?.(100);
               return { success: true, selectedPort: localData.port || targetWebPort.address };
             }
@@ -2114,26 +2203,40 @@ export async function executeWebHardwareAction(params: {
       return { ...avrRes, selectedPort: targetWebPort.address };
     } else if (result.binaryType === 'esp-bin' && Array.isArray(result.partitions)) {
       const espRes = await flashEspViaWebSerial(targetWebPort.port, result.partitions, onLog, board);
-      if (!espRes.success && (await checkLocalBridgeAvailable())) {
+      if (!espRes.success && hasLocalBridge) {
         onLog({
           text: '🔄 [Auto-Fallback] Mencoba upload otomatis melalui Compiler Bridge lokal (esptool)...',
           type: 'info',
         });
+        if (targetWebPort?.port) {
+          try { await targetWebPort.port.close(); } catch {}
+          await sleep(250);
+        }
         try {
           const localUploadResp = await fetchCompilerApi('/api/upload-local', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Stream-Logs': 'true',
+              'Accept': 'application/x-ndjson, application/json',
+            },
             body: JSON.stringify({
               board,
               port: isLocalComPort ? port : '',
             }),
           });
           if (localUploadResp.ok) {
-            const localData = await localUploadResp.json();
-            if (Array.isArray(localData.logs)) {
-              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            let localData: any = null;
+            const fallbackCt = localUploadResp.headers.get('content-type') || '';
+            if (fallbackCt.includes('application/x-ndjson') && localUploadResp.body) {
+              localData = await readNdjsonStream(localUploadResp.body, onLog);
+            } else {
+              localData = await localUploadResp.json();
+              if (Array.isArray(localData.logs)) {
+                for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+              }
             }
-            if (localData.success) {
+            if (localData?.success) {
               onProgress?.(100);
               return { success: true, selectedPort: localData.port || targetWebPort.address };
             }

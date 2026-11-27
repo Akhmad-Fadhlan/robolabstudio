@@ -1608,6 +1608,13 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
 `;
         finalCode = ledcCompatHeader + finalCode;
       }
+    } else if (!bLower.includes('esp8266')) {
+      // Fix for AVR boards (Arduino Uno / Mega / Nano):
+      // If code has #include <ESP32Servo.h>, replace with #include <Servo.h> automatically.
+      if (finalCode.includes('<ESP32Servo.h>')) {
+        safeSend(event, 'arduino-log', { text: '⚙️ Penyesuaian AVR: Mengubah #include <ESP32Servo.h> menjadi #include <Servo.h>...', type: 'info' });
+        finalCode = finalCode.replace(/#include\s*<ESP32Servo\.h>/g, '#include <Servo.h>');
+      }
     }
 
     fs.writeFileSync(inoPath, finalCode, 'utf-8');
@@ -1786,6 +1793,13 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
         } catch (e) {
           console.warn('[RoboLab] Failed to clean stale binaries in buildDir:', e.message);
         }
+        // Always reset sketch/ subfolder to prevent stale .d dependency locks, preserving core/ and libraries/ caches
+        const staleSketch = path.join(buildDir, 'sketch');
+        if (fs.existsSync(staleSketch)) {
+          try {
+            fs.rmSync(staleSketch, { recursive: true, force: true });
+          } catch (_) {}
+        }
       }
       ensureElectronBuildDir();
 
@@ -1821,11 +1835,24 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
       let compileSuccess = await runArduinoCLI(compileArgs, event);
 
       const stderrStr = lastCLISterr || '';
-      const hasSketchSyntaxError = /RoboLabSketch\.ino:\d+:\d+:\s*(?:fatal\s+)?error:/i.test(stderrStr) && !/No such file or directory/i.test(stderrStr);
+      const isMissingHeader = /fatal error:\s*[a-zA-Z0-9_\-]+\.h:\s*No such file or directory/i.test(stderrStr);
+      const hasSketchSyntaxError = /(?:\.ino|\.cpp|\.c|\.h|\.hpp):\d+:\d+:\s*(?:fatal\s+)?error:/i.test(stderrStr) && !isMissingHeader;
       const isOomOrLdError = /out of memory|cannot allocate|virtual memory|errno=1455|ld_h|local\.eagle\.flash\.ld|cp\.py/i.test(stderrStr);
+      const isDepFileError = /opening dependency file|\.d:\s*No such file|archive has no index|file format not recognized/i.test(stderrStr);
 
-      // Auto-retry with single job if first compile failed due to OOM, ld_h race, or non-syntax issue
-      if (!compileSuccess && (isOomOrLdError || (!hasSketchSyntaxError && jobCount > 1))) {
+      if (!compileSuccess && isDepFileError) {
+        safeSend(event, 'arduino-log', { text: '🔄 Memperbaiki berkas cache dependensi dan mengompilasi ulang dengan mode stabil (1 job)...', type: 'info' });
+        try {
+          const sketchCache = path.join(buildDir, 'sketch');
+          if (fs.existsSync(sketchCache)) fs.rmSync(sketchCache, { recursive: true, force: true });
+          if (/archive has no index|file format not recognized/i.test(stderrStr)) {
+            const coreArchive = path.join(buildDir, 'core', 'core.a');
+            if (fs.existsSync(coreArchive)) fs.unlinkSync(coreArchive);
+          }
+          ensureElectronBuildDir();
+        } catch (_) {}
+        compileSuccess = await runArduinoCLI(singleJobArgs, event, 600000);
+      } else if (!compileSuccess && !isMissingHeader && !hasSketchSyntaxError && (isOomOrLdError || jobCount > 1)) {
         safeSend(event, 'arduino-log', { text: '🔄 Mengoptimalkan penggunaan RAM (mode hemat memori single-job) dan melanjutkan kompilasi...', type: 'info' });
         ensureElectronBuildDir();
         compileSuccess = await runArduinoCLI(singleJobArgs, event, 600000);
