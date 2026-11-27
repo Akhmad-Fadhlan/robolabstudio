@@ -104,8 +104,8 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
       }
       const resp = await fetch(url, request);
       const ct = resp.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        // Never re-send POST /api/compile or /api/upload-local to fallback aliases if server responded with JSON
+      if (ct.includes('application/json') || ct.includes('application/x-ndjson')) {
+        // Never re-send POST /api/compile or /api/upload-local to fallback aliases if server responded with JSON/NDJSON
         if (resp.ok || init?.method === 'POST') {
           return resp;
         }
@@ -1941,8 +1941,11 @@ export async function executeWebHardwareAction(params: {
   const hasLocalBridge = await checkLocalBridgeAvailable();
   const shouldUseBridgeDirect = isLocalComPort && hasLocalBridge && !isPython && action !== 'flash-firmware';
 
-  if ((action === 'upload' || action === 'flash-firmware') && !shouldUseBridgeDirect) {
+  if (action === 'upload' || action === 'flash-firmware') {
     await stopWebSerialMonitor();
+  }
+
+  if ((action === 'upload' || action === 'flash-firmware') && !shouldUseBridgeDirect) {
     if (!isLocalComPort || isRemoteWebOrigin() || isPython || action === 'flash-firmware' || isWebSerialSupported()) {
       targetWebPort = await ensureWebSerialPort(port, true, 115200);
     }
@@ -2250,20 +2253,34 @@ export async function executeWebHardwareAction(params: {
         text: `📦 [Raspberry Pi Pico] Firmware UF2 (${result.fileName || 'firmware.uf2'}) siap!`,
         type: 'info',
       });
-      if (await checkLocalBridgeAvailable()) {
+      if (hasLocalBridge) {
         onLog({ text: '⚡ Mengunggah ke Raspberry Pi Pico via Compiler Bridge...', type: 'info' });
+        if (targetWebPort?.port) {
+          try { await targetWebPort.port.close(); } catch {}
+          await sleep(200);
+        }
         try {
           const localUploadResp = await fetchCompilerApi('/api/upload-local', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Stream-Logs': 'true',
+              'Accept': 'application/x-ndjson, application/json',
+            },
             body: JSON.stringify({ board, port: isLocalComPort ? port : '' }),
           });
           if (localUploadResp.ok) {
-            const localData = await localUploadResp.json();
-            if (Array.isArray(localData.logs)) {
-              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            let localData: any = null;
+            const uploadCt = localUploadResp.headers.get('content-type') || '';
+            if (uploadCt.includes('application/x-ndjson') && localUploadResp.body) {
+              localData = await readNdjsonStream(localUploadResp.body, onLog);
+            } else {
+              localData = await localUploadResp.json();
+              if (Array.isArray(localData.logs)) {
+                for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+              }
             }
-            if (localData.success) {
+            if (localData?.success) {
               onProgress?.(100);
               return { success: true, selectedPort: localData.port || targetWebPort?.address };
             }
@@ -2304,20 +2321,34 @@ export async function executeWebHardwareAction(params: {
         onLog({ text: `Gagal mengunduh UF2: ${err.message}`, type: 'error' });
       }
     } else if (result.binaryType === 'stm32-bin' || board.toLowerCase().includes('stm32')) {
-      if (await checkLocalBridgeAvailable()) {
+      if (hasLocalBridge) {
         onLog({ text: '⚡ Mengunggah ke STM32 via Compiler Bridge (ST-Link / STM32CubeProgrammer)...', type: 'info' });
+        if (targetWebPort?.port) {
+          try { await targetWebPort.port.close(); } catch {}
+          await sleep(200);
+        }
         try {
           const localUploadResp = await fetchCompilerApi('/api/upload-local', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Stream-Logs': 'true',
+              'Accept': 'application/x-ndjson, application/json',
+            },
             body: JSON.stringify({ board, port: isLocalComPort ? port : '' }),
           });
           if (localUploadResp.ok) {
-            const localData = await localUploadResp.json();
-            if (Array.isArray(localData.logs)) {
-              for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+            let localData: any = null;
+            const uploadCt = localUploadResp.headers.get('content-type') || '';
+            if (uploadCt.includes('application/x-ndjson') && localUploadResp.body) {
+              localData = await readNdjsonStream(localUploadResp.body, onLog);
+            } else {
+              localData = await localUploadResp.json();
+              if (Array.isArray(localData.logs)) {
+                for (const l of localData.logs) onLog({ text: l.text, type: l.type || 'stdout' });
+              }
             }
-            if (localData.success) {
+            if (localData?.success) {
               onProgress?.(100);
               return { success: true, selectedPort: localData.port || targetWebPort?.address };
             }
