@@ -3544,7 +3544,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [showExtensionsModal, setShowExtensionsModal] = useState(false);
   const [libSearchQuery, setLibSearchQuery] = useState('');
   const [libCategoryFilter, setLibCategoryFilter] = useState<'Semua' | 'Sensor' | 'Display' | 'IoT' | 'Aktuator'>('Semua');
+  const [libStatusFilter, setLibStatusFilter] = useState<'all' | 'installed'>('all');
   const [installingLib, setInstallingLib] = useState<string | null>(null);
+  const [customGithubUrlInput, setCustomGithubUrlInput] = useState('');
+  const [showCustomGithubForm, setShowCustomGithubForm] = useState(false);
   const [, setLiveSearchResults] = useState<Array<{ name: string; author: string; desc: string; cat: string; version: string }>>([]);
   const [isSearchingLibs, setIsSearchingLibs] = useState(false);
 
@@ -4952,7 +4955,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const [pinStates, setPinStates] = useState<{ [pin: string]: 'HIGH' | 'LOW' | number }>({});
   const isRunningRef = useRef(false);
   
-  // Blynk Simulation & Real Cloud Sync State
+  // Blynk Simulation & Real Cloud Sync State + Real MQTT over WebSocket
   const [blynkStatus, setBlynkStatus] = useState<'offline' | 'connecting' | 'online'>('offline');
   const [blynkVirtualPins, setBlynkVirtualPins] = useState<{ [vpin: string]: number }>({});
   const blynkHandlersRef = useRef<{ [vpin: string]: any[] }>({});
@@ -4962,6 +4965,175 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
   const blynkPingIntervalRef = useRef<any>(null);
   const blynkWsRef = useRef<any>(null);
   const lastRealBlynkValuesRef = useRef<{ [vpin: string]: number | string }>({});
+  const mqttWsRef = useRef<WebSocket | null>(null);
+  const mqttPingTimerRef = useRef<any>(null);
+  const mqttSubscribedTopicsRef = useRef<Set<string>>(new Set());
+  const mqttCallbackBodyRef = useRef<any[]>([]);
+  const activeWebSocketRef = useRef<WebSocket | null>(null);
+
+  const encodeMqttRemainingLength = (len: number): number[] => {
+    const out: number[] = [];
+    let x = len;
+    do {
+      let encoded = x % 128;
+      x = Math.floor(x / 128);
+      if (x > 0) encoded |= 128;
+      out.push(encoded);
+    } while (x > 0);
+    return out;
+  };
+
+  const encodeMqttUtf8 = (str: string): number[] => {
+    const bytes = Array.from(new TextEncoder().encode(str));
+    return [(bytes.length >> 8) & 0xff, bytes.length & 0xff, ...bytes];
+  };
+
+  const buildMqttConnectPacket = (clientId: string): Uint8Array => {
+    const varHeader = [0x00, 0x04, 0x4d, 0x51, 0x54, 0x54, 0x04, 0x02, 0x00, 0x3c]; // MQTT 3.1.1, CleanSession, KeepAlive 60s
+    const payload = encodeMqttUtf8(clientId);
+    const rem = encodeMqttRemainingLength(varHeader.length + payload.length);
+    return new Uint8Array([0x10, ...rem, ...varHeader, ...payload]);
+  };
+
+  const buildMqttPublishPacket = (topic: string, message: string): Uint8Array => {
+    const topicBytes = encodeMqttUtf8(topic);
+    const msgBytes = Array.from(new TextEncoder().encode(message));
+    const rem = encodeMqttRemainingLength(topicBytes.length + msgBytes.length);
+    return new Uint8Array([0x30, ...rem, ...topicBytes, ...msgBytes]);
+  };
+
+  const buildMqttSubscribePacket = (topic: string, packetId = 1): Uint8Array => {
+    const varHeader = [(packetId >> 8) & 0xff, packetId & 0xff];
+    const payload = [...encodeMqttUtf8(topic), 0x00]; // QoS 0
+    const rem = encodeMqttRemainingLength(varHeader.length + payload.length);
+    return new Uint8Array([0x82, ...rem, ...varHeader, ...payload]);
+  };
+
+  const getMqttWssUrls = (brokerHost: string): string[] => {
+    const clean = (brokerHost || 'broker.hivemq.com').trim().replace(/^mqtts?:\/\//i, '').replace(/\/.*$/, '');
+    if (clean.startsWith('ws://') || clean.startsWith('wss://')) return [clean];
+    if (clean.includes('hivemq.com')) return ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+    if (clean.includes('emqx.io')) return ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+    if (clean.includes('mosquitto.org')) return ['wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+    return [`wss://${clean}:8084/mqtt`, `wss://${clean}:8884/mqtt`, 'wss://broker.hivemq.com:8884/mqtt'];
+  };
+
+  const dispatchIncomingMqttMessage = useCallback((topic: string, payloadStr: string) => {
+    setTerminalLogs(prev => [
+      ...prev,
+      { text: `[MQTT RECV 📩] Topic "${topic}" -> "${payloadStr}"`, type: 'stdout' }
+    ]);
+    setSerialRawOutput(prev => (prev + `Pesan diterima di topik [${topic}]: ${payloadStr}\r\n`).slice(-50000));
+    const upper = payloadStr.trim().toUpperCase();
+    if (upper === '1' || upper === 'ON' || upper === 'HIGH' || upper === 'TRUE') {
+      handlePinStateChange('2', 'HIGH');
+      handlePinStateChange('4', 'HIGH');
+    } else if (upper === '0' || upper === 'OFF' || upper === 'LOW' || upper === 'FALSE') {
+      handlePinStateChange('2', 'LOW');
+      handlePinStateChange('4', 'LOW');
+    }
+  }, []);
+
+  const ensureRealMqttConnection = useCallback((brokerHost: string, clientId: string, onReady?: (ws: WebSocket) => void) => {
+    const existing = mqttWsRef.current;
+    if (existing && existing.readyState === WebSocket.OPEN) {
+      onReady?.(existing);
+      return;
+    }
+    if (existing && existing.readyState === WebSocket.CONNECTING) {
+      existing.addEventListener('open', () => onReady?.(existing), { once: true });
+      return;
+    }
+
+    const candidates = getMqttWssUrls(brokerHost);
+    let tried = 0;
+
+    const tryNext = () => {
+      if (tried >= candidates.length) return;
+      const wssUrl = candidates[tried++];
+      try {
+        const ws = new WebSocket(wssUrl, 'mqtt');
+        ws.binaryType = 'arraybuffer';
+        mqttWsRef.current = ws;
+
+        ws.onopen = () => {
+          try {
+            ws.send(buildMqttConnectPacket(clientId));
+            setTerminalLogs(prev => [
+              ...prev,
+              { text: `[MQTT WSS 🟢] Live WebSocket tunnel established to ${wssUrl}`, type: 'stdout' }
+            ]);
+            mqttSubscribedTopicsRef.current.forEach((t) => {
+              ws.send(buildMqttSubscribePacket(t));
+            });
+            if (mqttPingTimerRef.current) clearInterval(mqttPingTimerRef.current);
+            mqttPingTimerRef.current = setInterval(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(new Uint8Array([0xc0, 0x00])); // PINGREQ
+              }
+            }, 25000);
+            onReady?.(ws);
+          } catch (_) {}
+        };
+
+        ws.onmessage = (ev) => {
+          try {
+            const bytes = new Uint8Array(ev.data as ArrayBuffer);
+            if (bytes.length < 4) return;
+            const packetType = (bytes[0] >> 4) & 0x0f;
+            if (packetType === 3) {
+              // PUBLISH packet
+              let idx = 1;
+              let multiplier = 1;
+              let remLen = 0;
+              while (idx < bytes.length) {
+                const b = bytes[idx++];
+                remLen += (b & 127) * multiplier;
+                multiplier *= 128;
+                if ((b & 128) === 0) break;
+              }
+              void remLen;
+              const topicLen = (bytes[idx] << 8) | bytes[idx + 1];
+              idx += 2;
+              const topic = new TextDecoder().decode(bytes.slice(idx, idx + topicLen));
+              idx += topicLen;
+              const qos = (bytes[0] >> 1) & 0x03;
+              if (qos > 0) idx += 2; // Packet Identifier
+              const payloadStr = new TextDecoder().decode(bytes.slice(idx));
+              dispatchIncomingMqttMessage(topic, payloadStr);
+            }
+          } catch (_) {}
+        };
+
+        ws.onerror = () => {
+          try { ws.close(); } catch (_) {}
+          tryNext();
+        };
+      } catch (_) {
+        tryNext();
+      }
+    };
+
+    tryNext();
+  }, [dispatchIncomingMqttMessage]);
+
+  useEffect(() => {
+    const onMqttInject = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const broker = detail.broker || 'broker.hivemq.com';
+      const topic = detail.topic || 'robolab/control';
+      const payload = String(detail.payload ?? '');
+      updateSimulatorNetwork(true);
+      ensureRealMqttConnection(broker, `RoboLab_Panel_${Math.floor(Math.random() * 9000 + 1000)}`, (ws) => {
+        try {
+          ws.send(buildMqttPublishPacket(topic, payload));
+        } catch (_) {}
+      });
+      dispatchIncomingMqttMessage(topic, payload);
+    };
+    window.addEventListener('robolab-mqtt-inject', onMqttInject);
+    return () => window.removeEventListener('robolab-mqtt-inject', onMqttInject);
+  }, [ensureRealMqttConnection, dispatchIncomingMqttMessage]);
 
   useEffect(() => {
     isRunningRef.current = isRunning;
@@ -4986,6 +5158,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       if (blynkPollingTimerRef.current) {
         clearInterval(blynkPollingTimerRef.current);
         blynkPollingTimerRef.current = null;
+      }
+      if (mqttPingTimerRef.current) {
+        clearInterval(mqttPingTimerRef.current);
+        mqttPingTimerRef.current = null;
+      }
+      if (mqttWsRef.current) {
+        try { mqttWsRef.current.close(); } catch (e) {}
+        mqttWsRef.current = null;
+      }
+      mqttSubscribedTopicsRef.current.clear();
+      mqttCallbackBodyRef.current = [];
+      if (activeWebSocketRef.current) {
+        try { activeWebSocketRef.current.close(); } catch (e) {}
+        activeWebSocketRef.current = null;
       }
     }
   }, [isRunning]);
@@ -7750,16 +7936,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         }
         next();
       } else if (item.type === 'wifi_start') {
-        setSelectedWifi(String(evalExpr(item.value, executionVars)));
+        const ssidVal = String(evalExpr(item.value, executionVars) || 'Wokwi-GUEST').replace(/^['"]|['"]$/g, '');
+        setSelectedWifi(ssidVal);
         updateSimulatorNetwork(true);
-        setTerminalLogs(prev => [...prev, {text: navigator.onLine ? 'WiFi virtual menggunakan jaringan browser. Jalankan HTTP untuk menguji endpoint.' : 'Browser offline.', type: 'info'}]);
+        setTerminalLogs(prev => [
+          ...prev,
+          { text: `[WiFi] Connecting to "${ssidVal}"...`, type: 'stdout' },
+          { text: `[WiFi] Connected! IP Address: 10.13.37.2 (Gateway: 10.13.37.1, DNS: 8.8.8.8)`, type: 'success' }
+        ]);
         next();
-      } else if (['http_get','http_post','http_fetch'].includes(item.type) && (!networkEnabled.current || !navigator.onLine)) {
+      } else if (['http_get','http_post','http_fetch'].includes(item.type) && !navigator.onLine) {
         executionVars.httpCode = -1;
         executionVars.payload = '';
-        setTerminalLogs(prev => [...prev, {text: 'HTTP dibatalkan. Aktifkan WiFi pada program atau panel simulator.', type: 'error'}]);
+        setTerminalLogs(prev => [...prev, {text: 'Perangkat komputer sedang offline.', type: 'error'}]);
         next();
       } else if (item.type === 'http_begin') {
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
         executionVars['__http_url'] = item.value.url;
         setTerminalLogs(prev => [
           ...prev,
@@ -7767,10 +7959,12 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         ]);
         next();
       } else if (item.type === 'http_get' || (item.type === 'http_fetch' && item.value.method === 'GET')) {
-        const targetUrl = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
+        const rawTarget = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
+        const targetUrl = rawTarget.replace(/^http:\/\/(httpbin\.org|api\.thingspeak\.com|blynk\.cloud|sgp1\.blynk\.cloud|postman-echo\.com)/i, 'https://$1');
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[HTTPClient GET 🌐] Sending GET request to ${targetUrl}...`, type: 'stdout' }
+          { text: `[HTTPClient GET 🌐] Sending real GET request to ${targetUrl}...`, type: 'stdout' }
         ]);
         
         Promise.resolve().then(() => new URL(targetUrl).href).then(url => fetch(url))
@@ -7779,9 +7973,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             executionVars['httpCode'] = res.status;
             executionVars['payload'] = bodyText;
             executionVars['__http_response'] = bodyText;
+            setSerialRawOutput(prev => (prev + bodyText + '\r\n').slice(-50000));
             setTerminalLogs(prev => [
               ...prev,
-              { text: `[HTTPClient GET] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
+              { text: `[HTTPClient GET] Response (${res.status}): ${bodyText.slice(0, 180)}${bodyText.length > 180 ? '...' : ''}`, type: 'stdout' }
             ]);
             next();
           })
@@ -7796,14 +7991,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           });
         return; // async step
       } else if (item.type === 'http_post' || (item.type === 'http_fetch' && item.value.method === 'POST')) {
-        const targetUrl = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
+        const rawTarget = String(executionVars[item.value?.url || executionVars.__http_url] ?? item.value?.url ?? executionVars.__http_url ?? '').replace(/^['"]|['"]$/g, '');
+        const targetUrl = rawTarget.replace(/^http:\/\/(httpbin\.org|api\.thingspeak\.com|blynk\.cloud|sgp1\.blynk\.cloud|postman-echo\.com)/i, 'https://$1');
         const rawPayload = resolveSensorReads(String(item.value?.payload || '{}'));
         const evaluatedPayload = evalExpr(rawPayload, executionVars);
         const payloadStr = typeof evaluatedPayload === 'object' ? JSON.stringify(evaluatedPayload) : String(evaluatedPayload).replace(/^['"]|['"]$/g, '');
 
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[HTTPClient POST 🌐] Sending POST to ${targetUrl} (Body: ${payloadStr})...`, type: 'stdout' }
+          { text: `[HTTPClient POST 🌐] Sending real POST to ${targetUrl} (Body: ${payloadStr})...`, type: 'stdout' }
         ]);
 
         Promise.resolve().then(() => fetch(new URL(targetUrl).href, {
@@ -7816,9 +8013,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             executionVars['httpCode'] = res.status;
             executionVars['payload'] = bodyText;
             executionVars['__http_response'] = bodyText;
+            setSerialRawOutput(prev => (prev + bodyText + '\r\n').slice(-50000));
             setTerminalLogs(prev => [
               ...prev,
-              { text: `[HTTPClient POST] Response (${res.status}): ${bodyText.slice(0, 150)}${bodyText.length > 150 ? '...' : ''}`, type: 'stdout' }
+              { text: `[HTTPClient POST] Response (${res.status}): ${bodyText.slice(0, 180)}${bodyText.length > 180 ? '...' : ''}`, type: 'stdout' }
             ]);
             next();
           })
@@ -7834,57 +8032,96 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         return; // async step
       } else if (item.type === 'mqtt_config') {
         const { server, port } = item.value;
-        executionVars['__mqtt_server'] = server;
+        const resolvedServer = String(executionVars[server] ?? server ?? 'broker.hivemq.com').replace(/^['"]|['"]$/g, '');
+        executionVars['__mqtt_server'] = resolvedServer;
         executionVars['__mqtt_port'] = port;
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[MQTT] Broker configured: ${server}:${port}`, type: 'stdout' }
+          { text: `[MQTT] Broker configured: ${resolvedServer}:${port}`, type: 'stdout' }
         ]);
         next();
       } else if (item.type === 'mqtt_connect') {
-        const server = executionVars['__mqtt_server'] || 'broker.hivemq.com';
-        const clientId = item.value.clientId || `ESP_Sim_${Math.floor(Math.random()*10000)}`;
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
+        const server = String(executionVars['__mqtt_server'] || 'broker.hivemq.com');
+        const clientId = String(item.value.clientId || `RoboLab_ESP_${Math.floor(Math.random() * 10000)}`).replace(/^['"]|['"]$/g, '');
         setTerminalLogs(prev => [
           ...prev,
           { text: `[MQTT] Connecting to Broker "${server}" (Client ID: ${clientId})...`, type: 'stdout' },
-          { text: `[MQTT] Connected to Broker "${server}"! Status: ONLINE 🟢`, type: 'stdout' }
         ]);
+        ensureRealMqttConnection(server, clientId);
         next();
       } else if (item.type === 'mqtt_publish') {
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
         const topic = resolveSensorReads(String(item.value.topic)).replace(/^['"]|['"]$/g, '');
         const rawPayload = resolveSensorReads(String(item.value.payload));
         const evaluatedPayload = evalExpr(rawPayload, executionVars);
-        const server = executionVars['__mqtt_server'] || 'broker.hivemq.com';
+        const payloadStr = String(evaluatedPayload).replace(/^['"]|['"]$/g, '');
+        const server = String(executionVars['__mqtt_server'] || 'broker.hivemq.com');
         
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[MQTT PUBLISH 🚀] Topic: "${topic}" -> Payload: "${evaluatedPayload}" (Broker: ${server})`, type: 'stdout' }
+          { text: `[MQTT PUBLISH 🚀] Topic: "${topic}" -> Payload: "${payloadStr}" (Broker: ${server})`, type: 'stdout' }
         ]);
 
-        fetch(`https://broker.hivemq.com/api/v1/publish`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, payload: String(evaluatedPayload) })
-        }).catch(() => {});
+        ensureRealMqttConnection(server, `RoboLab_ESP_${Math.floor(Math.random() * 10000)}`, (ws) => {
+          try {
+            ws.send(buildMqttPublishPacket(topic, payloadStr));
+          } catch (_) {}
+        });
         next();
       } else if (item.type === 'mqtt_subscribe') {
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
         const topic = resolveSensorReads(String(item.value.topic)).replace(/^['"]|['"]$/g, '');
+        const server = String(executionVars['__mqtt_server'] || 'broker.hivemq.com');
+        mqttSubscribedTopicsRef.current.add(topic);
         setTerminalLogs(prev => [
           ...prev,
-          { text: `[MQTT SUBSCRIBE 📥] Subscribed to Topic: "${topic}"`, type: 'stdout' }
+          { text: `[MQTT SUBSCRIBE 📥] Subscribed to live topic "${topic}" on ${server}`, type: 'stdout' }
         ]);
+        ensureRealMqttConnection(server, `RoboLab_ESP_${Math.floor(Math.random() * 10000)}`, (ws) => {
+          try {
+            ws.send(buildMqttSubscribePacket(topic));
+          } catch (_) {}
+        });
         next();
       } else if (item.type === 'ws_connect') {
-        const targetUrl = item.value.url;
+        if (!networkEnabled.current) updateSimulatorNetwork(true);
+        const rawUrl = String(item.value.url || 'wss://echo.websocket.org');
+        const targetUrl = rawUrl.replace(/^ws:\/\/(echo\.websocket\.events|echo\.websocket\.org|ws\.postman-echo\.com)/i, 'wss://$1');
         setTerminalLogs(prev => [
           ...prev,
           { text: `[WEBSOCKET 🔌] Connecting to ${targetUrl}...`, type: 'stdout' },
-          { text: `[WEBSOCKET] Connected to ${targetUrl}! Status: ONLINE 🟢`, type: 'stdout' }
         ]);
+        try {
+          if (activeWebSocketRef.current) {
+            try { activeWebSocketRef.current.close(); } catch (_) {}
+          }
+          const ws = new WebSocket(targetUrl);
+          activeWebSocketRef.current = ws;
+          ws.onopen = () => {
+            setTerminalLogs(prev => [
+              ...prev,
+              { text: `[WEBSOCKET] Connected to ${targetUrl}! Status: ONLINE 🟢`, type: 'stdout' }
+            ]);
+          };
+          ws.onmessage = (ev) => {
+            const msg = String(ev.data ?? '');
+            executionVars['_ws_last_message'] = msg;
+            executionVars['_ws_has_message'] = true;
+            setSerialRawOutput(prev => (prev + msg + '\r\n').slice(-50000));
+            setTerminalLogs(prev => [
+              ...prev,
+              { text: `[WEBSOCKET IN 📩] ${msg}`, type: 'stdout' }
+            ]);
+          };
+        } catch (_) {}
         next();
       } else if (item.type === 'ws_send') {
         const rawMsg = resolveSensorReads(String(item.value.msg));
-        const evaluatedMsg = evalExpr(rawMsg, executionVars);
+        const evaluatedMsg = String(evalExpr(rawMsg, executionVars)).replace(/^['"]|['"]$/g, '');
+        if (activeWebSocketRef.current && activeWebSocketRef.current.readyState === WebSocket.OPEN) {
+          try { activeWebSocketRef.current.send(evaluatedMsg); } catch (_) {}
+        }
         setTerminalLogs(prev => [
           ...prev,
           { text: `[WEBSOCKET OUT 📤] Sent message: "${evaluatedMsg}"`, type: 'stdout' }
@@ -8705,10 +8942,44 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setAiChat([]);
   };
 
-  const handleOpenTemplate = (name: string) => {
+  const normalizeTemplateComponents = (rawComponents?: string[], codeText?: string): string[] => {
+    const out: string[] = [];
+    const addUnique = (c: string) => {
+      if (c && !out.includes(c)) out.push(c);
+    };
+    (rawComponents || []).forEach((raw) => {
+      const lower = (raw || '').toLowerCase().trim();
+      if (!lower || ['esp32', 'wire', 'i2c', 'json', 'iot', 'wifi', 'mqtt', 'custom_lib'].includes(lower)) return;
+      if (lower === 'motordc' || lower === 'dc_motor' || lower === 'motor_dc' || lower === 'motor') addUnique('motor');
+      else if (lower === 'dht' || lower === 'temp' || lower === 'dht11' || lower === 'dht22') addUnique('dht11');
+      else if (lower === 'neopixel' || lower === 'rgb' || lower === 'ws2812' || lower === 'ws2812b') addUnique('wokwi-neopixel');
+      else if (lower === 'imu' || lower === 'mpu6050') addUnique('wokwi-mpu6050');
+      else if (lower === 'ir' || lower === 'remote' || lower === 'irremote') addUnique('wokwi-ir-receiver');
+      else if (lower === 'oled' || lower === 'ssd1306') addUnique('wokwi-ssd1306');
+      else if (lower === 'hx711' || lower === 'loadcell') addUnique('wokwi-hx711');
+      else if (lower === 'rtc' || lower === 'ds1307' || lower === 'ds3231') addUnique('wokwi-ds1307');
+      else if (lower === 'hcsr04' || lower === 'hc-sr04' || lower === 'ultrasonic') addUnique('ultrasonic');
+      else if (lower === 'rc522' || lower === 'mfrc522' || lower === 'pn532' || lower === 'rfid') addUnique('rfid');
+      else addUnique(raw);
+    });
+    if (out.length === 0 && codeText) {
+      const upper = codeText.toUpperCase();
+      if (upper.includes('DHT')) addUnique('dht11');
+      if (upper.includes('SERVO')) addUnique('servo');
+      if (upper.includes('ULTRASONIC') || upper.includes('NEWPING') || upper.includes('PULSEIN')) addUnique('ultrasonic');
+      if (upper.includes('LIQUIDCRYSTAL') || upper.includes('LCD')) addUnique('lcd');
+      if (upper.includes('MFRC522') || upper.includes('PN532') || upper.includes('RFID')) addUnique('rfid');
+      if (upper.includes('DIGITALWRITE') || upper.includes('BLYNK') || upper.includes('HTTPCLIENT') || upper.includes('PUBSUBCLIENT')) addUnique('led');
+    }
+    return out;
+  };
+
+  const handleOpenTemplate = (name: string, destination: 'ide' | 'simulator' | 'stay' = 'ide') => {
     setShowExplorer(true);
     const proj = allProjectsList.find(p => p.name === name) || PROJECTS_LIST.find(p => p.name === name);
     if (!proj) return;
+
+    if (isRunningRef.current) handleStopCode();
 
     // Choose active file based on board
     const primaryFile = (proj.board === 'BBC micro:bit') ? 'python/main.py' : 'firmware/main.ino';
@@ -8716,11 +8987,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setProjectName(proj.name?.toUpperCase() || "");
     setBoard(proj.board as "ESP32 DevKit V1" | "BBC micro:bit" | "Arduino Uno");
     setActiveFile(primaryFile);
+    setSimActiveFile(primaryFile);
     setWorkspaceMode('split');
     setIsBlocklyCollapsed(false);
     setIsEditorCollapsed(false);
     setStudentSubMode('block');
-    setCurrentTab('ide');
+    if (destination !== 'stay') {
+      setCurrentTab(destination);
+    }
 
     // Set handcrafted code sebagai fallback awal
     const libName = ((proj as any).libraryName || '').toLowerCase();
@@ -8735,16 +9009,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       } catch (_) {}
     }
 
-    setFiles((prev: any) => ({
-      ...prev,
+    const nextFiles = {
       'firmware/main.ino': initialIno,
       'python/main.py': initialPy
+    };
+
+    setFiles((prev: any) => ({
+      ...prev,
+      ...nextFiles
     }));
 
     setSimFiles((prev: any) => ({
       ...prev,
-      'firmware/main.ino': initialIno,
-      'python/main.py': initialPy
+      ...nextFiles
     }));
 
     if (proj.board) {
@@ -8784,48 +9061,61 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       }).catch(() => {});
     }
 
-    // Load XML ke workspace Blockly
-    setWorkspaceXmls({
+    const nextXmls = {
       'firmware/main.ino': targetXml,
       'python/main.py': targetXml
-    });
+    };
 
-    setSimWorkspaceXmls({
-      'firmware/main.ino': targetXml,
-      'python/main.py': targetXml
-    });
+    // Load XML ke workspace Blockly
+    setWorkspaceXmls(nextXmls);
+    setSimWorkspaceXmls(nextXmls);
 
     // Aktifkan auto-sync secara default untuk template proyek
     const hasBlocksInXml = !!(targetXml && (targetXml.includes('<block') || targetXml.includes('<statement name="STACK">') || targetXml.includes('custom_library_')));
-    setSyncStatuses({
+    const nextSync = {
       'firmware/main.ino': hasBlocksInXml || true,
       'python/main.py': hasBlocksInXml || true
-    });
-
-    setSimSyncStatuses({
-      'firmware/main.ino': hasBlocksInXml || true,
-      'python/main.py': hasBlocksInXml || true
-    });
+    };
+    setSyncStatuses(nextSync);
+    setSimSyncStatuses(nextSync);
 
     setSensorData(prev => ({ ...prev, rfidCardPresent: false }));
 
-    // Reset simulator to show only the components this project uses
-    setSimulatorActiveComponents(proj.components || []);
+    const normalizedComps = normalizeTemplateComponents(proj.components, initialIno);
+    setSimulatorActiveComponents(normalizedComps);
     setSimulatorWires([]);
+    setSimulatorMode('circuit');
+    simulatorWorkspaces.current.circuit = {
+      files: nextFiles,
+      xmls: nextXmls,
+      sync: nextSync,
+      board: proj.board || 'ESP32 DevKit V1',
+      activeFile: primaryFile,
+      components: normalizedComps,
+      wires: [],
+    };
+    setSimResetKey(prev => prev + 1);
     setSimulatorPositions({
       board: { x: 85, y: 15 },
       breadboard: { x: 18, y: 380 },
       led: { x: 15, y: 420 },
       servo: { x: 110, y: 420 },
-      ultrasonic: { x: 15, y: 520 },
-      pot: { x: 15, y: 630 },
+      ultrasonic: { x: 215, y: 420 },
+      pot: { x: 15, y: 530 },
       button: { x: 120, y: 530 },
       lcd: { x: 210, y: 530 },
-      dht11: { x: 120, y: 640 },
+      motor: { x: 330, y: 420 },
+      dht11: { x: 15, y: 640 },
       rfid: { x: 160, y: 640 }
     });
 
-    setTerminalLogs((prev: any) => [...prev, { text: `✓ Loaded template: ${name} (auto-sync aktif)`, type: 'success' }]);
+    // Auto-enable Virtual WiFi if project uses WiFi/Blynk/HTTP/MQTT
+    if (/WiFi\.begin|Blynk\.|HTTPClient|PubSubClient|wifi_connect|http_get|http_post/i.test(initialIno + '\n' + initialPy)) {
+      updateSimulatorNetwork(true);
+      if (!selectedWifi) setSelectedWifi('Wokwi-GUEST');
+    }
+
+    setTerminalLogs((prev: any) => [...prev, { text: `✓ Template '${name}' dimuat ke IDE & Simulator Rangkaian (${normalizedComps.length} komponen siap uji).`, type: 'success' }]);
   };
 
 
@@ -9454,10 +9744,24 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               </div>
                             )}
 
-                            <div className={`flex items-center justify-between border-t pt-3 ${themeMode === 'light' ? 'border-slate-200/70' : 'border-white/10'}`}>
-                              <span className={`text-[9.5px] font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Siap Praktik
-                              </span>
+                            <div className={`flex items-center justify-between gap-1.5 border-t pt-3 ${themeMode === 'light' ? 'border-slate-200/70' : 'border-white/10'}`}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenTemplate(proj.name || "", 'simulator');
+                                  setActiveCardIndex(index);
+                                }}
+                                title="Buka langsung di Arena Simulator Rangkaian lengkap dengan pengkabelan otomatis"
+                                className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-2.5 py-1 rounded-full border transition cursor-pointer ${
+                                  themeMode === 'light'
+                                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                    : 'bg-white/[0.06] hover:bg-white/15 text-slate-200 border-white/10'
+                                }`}
+                              >
+                                <Cpu className="w-3 h-3" />
+                                <span>Uji Simulator</span>
+                              </button>
                               <span 
                                 className="inline-flex items-center gap-1 text-[10px] font-extrabold px-3 py-1 rounded-full transition-transform group-hover/card:translate-x-0.5"
                                 style={{
@@ -9691,16 +9995,34 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 )}
                               </div>
 
-                              <span
-                                className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold px-3 py-1.5 rounded-full transition-transform group-hover:translate-x-0.5 shrink-0"
-                                style={{
-                                  color: accentColor,
-                                  backgroundColor: `${accentColor}14`,
-                                }}
-                              >
-                                <span>{t(language, 'home', 'openProject')}</span>
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenTemplate(proj.name || "", 'simulator');
+                                  }}
+                                  title="Uji langsung di Arena Simulator dengan rangkaian siap pakai"
+                                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-full border transition cursor-pointer ${
+                                    themeMode === 'light'
+                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                      : 'bg-white/[0.06] hover:bg-white/15 text-slate-200 border-white/10'
+                                  }`}
+                                >
+                                  <Cpu className="w-3 h-3" />
+                                  <span>Simulator</span>
+                                </button>
+                                <span
+                                  className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold px-3 py-1.5 rounded-full transition-transform group-hover:translate-x-0.5 shrink-0"
+                                  style={{
+                                    color: accentColor,
+                                    backgroundColor: `${accentColor}14`,
+                                  }}
+                                >
+                                  <span>{t(language, 'home', 'openProject')}</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
                             </div>
                           </div>
                         );
@@ -10310,398 +10632,672 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
           )}
 
-          {/* TAB 3: PACKAGE MANAGER - UPGRADED */}
-          {currentTab === 'packages' && (
-            <div className="absolute inset-0 p-6 overflow-y-auto space-y-5" style={{background: 'transparent'}}>
-              {/* Header */}
-              <div className="flex items-center justify-between pb-4 select-none border-b border-white/10">
-                <div>
-                  <h2 className={`text-lg font-bold flex items-center gap-1.5 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`} style={{fontFamily: 'Outfit, Inter, sans-serif'}}>
-                    <Sliders className="w-5 h-5" style={{ color: 'var(--accent-primary)' }} /> Library &amp; Board Manager
-                  </h2>
-                  <p className={`text-xs mt-0.5 ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>Kelola library Arduino, paket Python, dan board core mikrokontroler.</p>
-                </div>
-                <div className="relative w-56">
-                  <Search className={`w-3.5 h-3.5 absolute left-3 top-2.5 ${themeMode === 'light' ? 'text-slate-450' : 'text-slate-600'}`} />
-                  <input
-                    type="text"
-                    placeholder="Cari library/board..."
-                    value={pkgSearch}
-                    onChange={(e) => setPkgSearch(e.target.value)}
-                    className={`w-full rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none transition border ${themeMode === 'light' ? 'bg-slate-200/50 border-slate-200 text-slate-850 focus:border-[var(--accent-primary)]' : 'bg-white/5 border-white/10 text-slate-200 focus:border-blue-500'}`}
-                  />
-                </div>
-              </div>
+          {/* TAB 3: PACKAGE MANAGER - PROFESSIONAL ENGINEERING WORKBENCH */}
+          {currentTab === 'packages' && (() => {
+            const isLight = themeMode === 'light';
+            const installedArduinoCount = (packages.arduino || []).filter((p: any) => p.installed).length;
+            const installedPythonCount = (packages.python || []).filter((p: any) => p.installed).length;
+            const installedBoardsCount = (packages.boards || []).filter((b: any) => b.installed).length;
 
-              {/* Category Tabs */}
-              <div className={`flex gap-1 p-1 rounded-lg w-fit border ${themeMode === 'light' ? 'bg-slate-200/60 border-slate-200' : 'bg-[#0c0d12] border-slate-800'}`}>
-                {(['arduino', 'python', 'boards'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setPkgTab(tab)}
-                    className={`px-4 py-1.5 rounded-md text-xs font-semibold transition select-none cursor-pointer ${
-                      pkgTab === tab
-                        ? 'text-white shadow-sm'
-                        : themeMode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'
-                    }`}
-                    style={pkgTab === tab ? { background: 'var(--accent-gradient)' } : {}}
-                  >
-                    {tab === 'arduino' ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <ArduinoLogo className="w-4 h-4" />
-                        <span>Arduino Library</span>
-                      </span>
-                    ) : tab === 'python' ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <PythonLogo className="w-3.5 h-3.5" />
-                        <span>Python (PIP)</span>
-                      </span>
-                    ) : (
-                      '🔲 Board Manager'
-                    )}
-                  </button>
-                ))}
-              </div>
+            const renderLibBadgeIcon = (name: string, cat?: string) => {
+              const lower = name.toLowerCase();
+              if (lower.includes('blynk') || lower.includes('firebase') || lower.includes('mqtt') || lower.includes('pubsub')) {
+                return <Compass className="w-4 h-4" />;
+              }
+              if (lower.includes('oled') || lower.includes('ssd1306') || lower.includes('lcd') || lower.includes('display')) {
+                return <FileText className="w-4 h-4" />;
+              }
+              if (lower.includes('servo') || lower.includes('stepper') || lower.includes('neopixel')) {
+                return <Sliders className="w-4 h-4" />;
+              }
+              if (cat === 'Sensor') {
+                return <Activity className="w-4 h-4" />;
+              }
+              return <Package className="w-4 h-4" />;
+            };
 
-              {/* Arduino Libraries */}
-              {pkgTab === 'arduino' && (
-                <div className="space-y-4">
-                  {/* Category Filter Pills */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                    {(['Semua', 'Sensor', 'Display', 'IoT', 'Aktuator'] as const).map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setLibCategoryFilter(cat)}
-                        className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer select-none whitespace-nowrap ${
-                          libCategoryFilter === cat
-                            ? 'text-white shadow-sm'
-                            : themeMode === 'light' ? 'bg-slate-200/60 text-slate-700 hover:bg-slate-200' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
-                        }`}
-                        style={libCategoryFilter === cat ? { background: 'var(--accent-gradient)' } : {}}
-                      >
-                        {cat === 'Semua' ? '🌟 Semua' : cat === 'Sensor' ? '🌡️ Sensor' : cat === 'Display' ? '🖥️ Display' : cat === 'IoT' ? '☁️ IoT & Cloud' : '⚙️ Aktuator'}
-                      </button>
-                    ))}
-                  </div>
+            const handleAddCustomGithubRepo = () => {
+              const raw = customGithubUrlInput.trim();
+              if (!raw) return;
+              const match = raw.match(/github\.com\/([^/\s]+)\/([^/\s#?]+)/i);
+              const repoName = match ? match[2].replace(/\.git$/i, '') : raw.split('/').pop()?.replace(/\.git$/i, '') || raw;
+              const author = match ? match[1] : 'GitHub Repository';
+              const githubUrl = raw.startsWith('http') ? raw : (match ? `https://github.com/${match[1]}/${repoName}` : '');
+              handleToggleLibraryBlock({
+                name: repoName,
+                author,
+                desc: `Custom Arduino library imported from ${githubUrl || repoName}`,
+                version: '1.0.0',
+                githubUrl
+              }, true);
+              setCustomGithubUrlInput('');
+              setShowCustomGithubForm(false);
+            };
 
-                  <div className="space-y-2">
-                    {(() => {
-                      const query = pkgSearch.toLowerCase().trim();
-                      const filterCat = libCategoryFilter;
-
-                      // Merge IOT_LIBRARY_CATALOG with any existing packages not in catalog
-                      const catalogMap = new Map<string, any>();
-                      IOT_LIBRARY_CATALOG.forEach(item => catalogMap.set(item.name.toLowerCase(), item));
-
-                      (packages.arduino || []).forEach((p: any) => {
-                        const key = p.name.toLowerCase();
-                        if (!catalogMap.has(key)) {
-                          catalogMap.set(key, {
-                            name: p.name,
-                            displayName: p.displayName || p.name,
-                            author: p.author || 'Custom Library',
-                            desc: p.desc || `Library kustom ${p.name}`,
-                            cat: p.cat || 'Lainnya',
-                            version: p.version || '1.0.0',
-                            githubUrl: p.githubUrl || '',
-                            tags: p.tags || [p.name.toLowerCase()]
-                          });
-                        }
-                      });
-
-                      const allItems = Array.from(catalogMap.values());
-
-                      const filtered = allItems.filter(item => {
-                        if (filterCat !== 'Semua') {
-                          if (filterCat === 'Sensor' && item.cat !== 'Sensor') return false;
-                          if (filterCat === 'Display' && item.cat !== 'Display') return false;
-                          if (filterCat === 'IoT' && item.cat !== 'IoT') return false;
-                          if (filterCat === 'Aktuator' && item.cat !== 'Aktuator') return false;
-                        }
-                        if (!query) return true;
-                        if (item.name.toLowerCase().includes(query)) return true;
-                        if ((item.displayName || '').toLowerCase().includes(query)) return true;
-                        if ((item.desc || '').toLowerCase().includes(query)) return true;
-                        if (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(query))) return true;
-                        return false;
-                      });
-
-                      if (filtered.length === 0) {
-                        return (
-                          <div className="text-center py-12 space-y-2">
-                            <div className="text-3xl">🔍</div>
-                            <p className={`text-sm font-semibold ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-300'}`}>
-                              Tidak ada library yang cocok dengan "{pkgSearch}"
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              Coba kata kunci lain atau pilih kategori Semua.
-                            </p>
-                          </div>
-                        );
-                      }
-
-                      const getLibEmoji = (name: string, cat?: string) => {
-                        const lower = name.toLowerCase();
-                        if (lower.includes('dht') || lower.includes('pt100') || lower.includes('max31865')) return '🌡️';
-                        if (lower.includes('ultra') || lower.includes('newping') || lower.includes('vl53')) return '📏';
-                        if (lower.includes('ph') || lower.includes('ec') || lower.includes('tds')) return '💧';
-                        if (lower.includes('oled') || lower.includes('ssd1306') || lower.includes('lcd') || lower.includes('display')) return '🖥️';
-                        if (lower.includes('firebase') || lower.includes('blynk') || lower.includes('mqtt') || lower.includes('pubsub')) return '☁️';
-                        if (lower.includes('rfid') || lower.includes('rc522') || lower.includes('pn532')) return '🏷️';
-                        if (lower.includes('neopixel') || lower.includes('ws2812')) return '💡';
-                        if (lower.includes('servo') || lower.includes('stepper') || lower.includes('mp3') || lower.includes('dfplayer')) return '⚙️';
-                        if (cat === 'Sensor') return '📡';
-                        return '📦';
-                      };
-
-                      return filtered.map((lib) => {
-                        const isLibInstalled = (packages.arduino || []).some((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
-                        const isInstalling = installingLib === lib.name;
-                        const isUninstalling = !!uninstallingMap[lib.name];
-
-                        return (
-                          <div
-                            key={lib.name}
-                            className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${
-                              isLibInstalled
-                                ? themeMode === 'light'
-                                  ? 'bg-emerald-50/60 border-emerald-300 shadow-sm'
-                                  : 'bg-emerald-950/20 border-emerald-500/30'
-                                : themeMode === 'light'
-                                  ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-                                  : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'
-                            }`}
-                          >
-                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-white/10 border border-white/10 shadow-xs">
-                                {getLibEmoji(lib.name, lib.cat)}
-                              </div>
-                              <div className="space-y-1 min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
-                                    {lib.displayName || lib.name}
-                                  </span>
-                                  {lib.displayName && lib.displayName !== lib.name && (
-                                    <span className="text-[10px] font-mono text-slate-400">({lib.name})</span>
-                                  )}
-                                  {lib.cat && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                      {lib.cat}
-                                    </span>
-                                  )}
-                                  {lib.version && (
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>
-                                      v{lib.version}
-                                    </span>
-                                  )}
-                                  {isLibInstalled && (
-                                    <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded font-semibold">
-                                      ✓ Terpasang di Blok
-                                    </span>
-                                  )}
-                                </div>
-                                <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
-                                  {lib.desc}
-                                </p>
-                                <div className="flex items-center gap-2 pt-0.5">
-                                  <span className="text-[9px] text-slate-500 font-medium">by {lib.author || 'GitHub Community'}</span>
-                                  {lib.githubUrl && (
-                                    <a
-                                      href={lib.githubUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-[9px] text-cyan-500 hover:text-cyan-400 underline flex items-center gap-0.5"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      GitHub ↗
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {isLibInstalled ? (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Blok aktif</span>
-                                  </span>
-                                  <button className="rounded-lg bg-sky-100 px-2 py-2 text-xs font-bold text-sky-900" onClick={() => openLibraryBlocks(lib.name)}>Lihat blok</button>
-                                  <button
-                                    disabled={isUninstalling}
-                                    onClick={() => handleToggleLibraryBlock(lib, false)}
-                                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
-                                    title={`Hapus ${lib.name} dari blok kode`}
-                                  >
-                                    {isUninstalling ? (
-                                      <>
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        <span>Menghapus...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                        <span>Hapus</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  disabled={isInstalling}
-                                  onClick={() => handleToggleLibraryBlock(lib, true)}
-                                  className="text-xs font-semibold px-3.5 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 text-white hover:opacity-90 disabled:opacity-50"
-                                  style={{ background: 'var(--accent-gradient)' }}
-                                >
-                                  {isInstalling ? (
-                                    <>
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      <span>Menambahkan...</span>
-                                    </>
-                                  ) : (
-                                    <span>+ Tambah ke Blok</span>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* Python PIP */}
-              {pkgTab === 'python' && (
-                <div className="space-y-2">
-                  <p className="text-xs opacity-80">{desktopPython ? 'Paket dipasang ke Python lokal yang dipakai RoboLab Desktop.' : 'Salin perintah pip untuk memasang paket di Python komputer. Browser RoboLab menjalankan simulator.'}</p>
-                  {pipFeedback && <p role="status" className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{pipFeedback}</p>}
-                  {packages.python
-                    .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.desc || '').toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.category || '').toLowerCase().includes(pkgSearch.toLowerCase()))
-                    .map((pkg: any) => (
-                      <div key={pkg.name} className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${themeMode === 'light' ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm' : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'}`}>
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>{pkg.category || 'Python'}{pkg.version ? ` · v${pkg.version}` : ''}</span>
-                            {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
-                          </div>
-                          <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
+            return (
+              <div className="absolute inset-0 overflow-y-auto px-6 py-5" style={{ background: 'transparent' }}>
+                <div className="max-w-6xl mx-auto space-y-5">
+                  {/* Workbench Header & Summary Bar */}
+                  <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b select-none ${
+                    isLight ? 'border-slate-200/80' : 'border-slate-800/80'
+                  }`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                          isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
+                        }`}>
+                          <Package className="w-4 h-4" style={{ color: 'var(--accent-primary)' }} />
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {pkg.installed ? (
-                            <>
-                              <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 select-none flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Installed</span>
-                              </span>
-                              <button
-                                disabled={uninstallingMap[pkg.name]}
-                                onClick={() => handleUninstallPkg('python', pkg.name)}
-                                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/40 hover:border-rose-700/60 transition cursor-pointer select-none flex items-center gap-1 disabled:opacity-50"
-                                title={`Hapus package ${pkg.name}`}
-                              >
-                                {uninstallingMap[pkg.name] ? (
-                                  <>
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Menghapus...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Hapus</span>
-                                  </>
-                                )}
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              disabled={installingMap[pkg.name]?.loading}
-                              onClick={() => handleInstallPkg('python', pkg.name)}
-                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
-                                installingMap[pkg.name]?.loading
-                                  ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
-                                  : 'text-white hover:opacity-90'
-                              }`}
-                              style={!installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
-                            >
-                              {installingMap[pkg.name]?.loading ? (
-                                <>
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
-                                </>
-                              ) : (
-                                desktopPython ? 'Pasang' : 'Salin pip'
-                              )}
-                            </button>
-                          )}
+                        <div>
+                          <h2 className={`text-base font-bold tracking-tight flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                            <span>Library &amp; Toolchain Manager</span>
+                            <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md border ${
+                              isLight ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'
+                            }`}>
+                              {installedArduinoCount} Active in Toolbox
+                            </span>
+                          </h2>
+                          <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                            Kelola pustaka C++ Arduino, paket Python (pip), dan core kompilator mikrokontroler.
+                          </p>
                         </div>
                       </div>
-                    ))}
-                </div>
-              )}
+                    </div>
 
-              {/* Board Manager */}
-              {pkgTab === 'boards' && (
-                <div className="space-y-2">
-                  {packages.boards
-                    .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || p.desc.toLowerCase().includes(pkgSearch.toLowerCase()))
-                    .map((pkg: any) => (
-                      <div key={pkg.name} className={`p-4 rounded-xl flex justify-between items-start gap-4 transition border ${themeMode === 'light' ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm' : 'bg-[#0c0d14] border-slate-800/70 hover:border-slate-700'}`}>
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{pkg.name}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${themeMode === 'light' ? 'text-slate-600 bg-slate-100' : 'text-slate-400 bg-slate-900'}`}>v{pkg.version}</span>
-                            {pkg.installed && <span className="text-[9px] text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">✓ Installed</span>}
-                          </div>
-                          <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
-                          <p className={`text-[10px] font-mono truncate ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-600'}`}>{pkg.url}</p>
-                        </div>
-                        <button
-                          disabled={pkg.installed || installingMap[pkg.name]?.loading}
-                          onClick={() => {
-                            const coreMap: Record<string, { coreName: string; url?: string }> = {
-                              'ESP32 Arduino': { coreName: 'esp32:esp32', url: 'https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json' },
-                              'Arduino AVR Boards': { coreName: 'arduino:avr', url: 'https://downloads.arduino.cc/packages/package_index.json' },
-                              'ESP8266 Arduino': { coreName: 'esp8266:esp8266', url: 'https://arduino.esp8266.com/stable/package_esp8266com_index.json' },
-                              'STM32 Boards': { coreName: 'STMicroelectronics:stm32', url: 'https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json' },
-                              'Raspberry Pi Pico': { coreName: 'rp2040:rp2040', url: 'https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json' }
-                            };
-                            const target = coreMap[pkg.name] || { coreName: pkg.name, url: pkg.url };
-                            handleInstallBoardCore(pkg.name, target.coreName, target.url);
-                          }}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex-shrink-0 flex items-center gap-1.5 ${
-                            pkg.installed
-                              ? 'bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 cursor-default'
-                              : installingMap[pkg.name]?.loading
-                              ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 cursor-wait'
-                              : 'text-white hover:opacity-90'
+                    {/* Search & Import Bar */}
+                    <div className="flex items-center gap-2.5 w-full md:w-auto">
+                      <div className="relative flex-1 md:w-72">
+                        <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+                        <input
+                          type="text"
+                          placeholder="Cari nama library, header (.h), sensor, atau fungsi..."
+                          value={pkgSearch}
+                          onChange={(e) => setPkgSearch(e.target.value)}
+                          className={`w-full rounded-lg pl-9 pr-8 py-2 text-xs focus:outline-none transition border ${
+                            isLight
+                              ? 'bg-white border-slate-200/90 text-slate-800 placeholder-slate-400 focus:border-slate-400 shadow-2xs'
+                              : 'bg-[#0b0e17] border-slate-800 text-slate-200 placeholder-slate-500 focus:border-slate-600'
                           }`}
-                          style={!pkg.installed && !installingMap[pkg.name]?.loading ? { background: 'var(--accent-gradient)' } : {}}
+                        />
+                        {pkgSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setPkgSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {pkgTab === 'arduino' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomGithubForm(prev => !prev)}
+                          className={`px-3 py-2 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                            isLight
+                              ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-2xs'
+                              : 'bg-[#0b0e17] hover:bg-slate-900 text-slate-200 border-slate-800'
+                          }`}
                         >
-                          {installingMap[pkg.name]?.loading ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>{installingMap[pkg.name]?.progress || 'Mengunduh Core...'}</span>
-                            </>
-                          ) : pkg.installed ? (
-                            '✓ Installed'
-                          ) : (
-                            'Install Core'
-                          )}
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Impor GitHub</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Optional Custom GitHub Repo Importer */}
+                  {pkgTab === 'arduino' && showCustomGithubForm && (
+                    <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 ${
+                      isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#0b0e17] border-slate-800'
+                    }`}>
+                      <div className="space-y-0.5">
+                        <div className={`text-xs font-bold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
+                          Tambah Pustaka Arduino dari URL GitHub / Nama Repository
+                        </div>
+                        <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          Contoh: <code className="font-mono">https://github.com/adafruit/DHT-sensor-library</code> atau nama library resmi Arduino.
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 sm:w-96">
+                        <input
+                          type="text"
+                          value={customGithubUrlInput}
+                          onChange={(e) => setCustomGithubUrlInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomGithubRepo(); }}
+                          placeholder="https://github.com/owner/library-name"
+                          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-mono border outline-none ${
+                            isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#070910] border-slate-700 text-slate-200'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCustomGithubRepo}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white cursor-pointer shrink-0"
+                          style={{ background: 'var(--accent-gradient)' }}
+                        >
+                          Pasang
                         </button>
                       </div>
-                    ))}
-                  <div className={`mt-4 p-3 rounded-lg border ${themeMode === 'light' ? 'bg-[#f1f5f9] border-slate-200/60' : 'bg-[#0a0b12] border-slate-800'}`}>
-                    <p className={`text-[10px] font-mono ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>💡 Untuk board custom, tambahkan URL Additional Board Manager di Settings → Board Manager URLs</p>
-                  </div>
-                </div>
-              )}
+                    </div>
+                  )}
 
-            </div>
-          )}
+                  {/* Navigation Bar: Section Switcher + Category & Status Filters */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className={`inline-flex p-1 rounded-lg border ${
+                      isLight ? 'bg-slate-100 border-slate-200/80' : 'bg-[#0b0e17] border-slate-800'
+                    }`}>
+                      {([
+                        { id: 'arduino', label: 'Arduino C++ Libraries', count: installedArduinoCount, icon: <ArduinoLogo className="w-3.5 h-3.5" /> },
+                        { id: 'python', label: 'Python Packages (PyPI)', count: installedPythonCount, icon: <PythonLogo className="w-3.5 h-3.5" /> },
+                        { id: 'boards', label: 'Board Cores (MCU)', count: installedBoardsCount, icon: <Cpu className="w-3.5 h-3.5" /> },
+                      ] as const).map(tab => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setPkgTab(tab.id)}
+                          className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition select-none cursor-pointer inline-flex items-center gap-2 ${
+                            pkgTab === tab.id
+                              ? isLight
+                                ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/60'
+                                : 'bg-slate-800/90 text-white shadow-2xs border border-slate-700'
+                              : isLight
+                                ? 'text-slate-600 hover:text-slate-900'
+                                : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                            pkgTab === tab.id
+                              ? isLight ? 'bg-slate-100 text-slate-700' : 'bg-slate-900 text-slate-300'
+                              : isLight ? 'bg-slate-200/70 text-slate-600' : 'bg-slate-900/60 text-slate-500'
+                          }`}>
+                            {tab.count}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {pkgTab === 'arduino' && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Status Filter: All vs Installed */}
+                        <div className={`inline-flex p-0.5 rounded-lg border text-[11px] font-semibold ${
+                          isLight ? 'bg-slate-100 border-slate-200' : 'bg-[#0b0e17] border-slate-800'
+                        }`}>
+                          <button
+                            type="button"
+                            onClick={() => setLibStatusFilter('all')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                              libStatusFilter === 'all'
+                                ? isLight ? 'bg-white text-slate-900 shadow-2xs' : 'bg-slate-800 text-white'
+                                : isLight ? 'text-slate-600' : 'text-slate-400'
+                            }`}
+                          >
+                            Semua Katalog
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLibStatusFilter('installed')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                              libStatusFilter === 'installed'
+                                ? isLight ? 'bg-white text-emerald-700 shadow-2xs' : 'bg-slate-800 text-emerald-400'
+                                : isLight ? 'text-slate-600' : 'text-slate-400'
+                            }`}
+                          >
+                            Terpasang ({installedArduinoCount})
+                          </button>
+                        </div>
+
+                        {/* Category Filter */}
+                        <div className="flex items-center gap-1 overflow-x-auto text-[11px]">
+                          {(['Semua', 'Sensor', 'Display', 'IoT', 'Aktuator'] as const).map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setLibCategoryFilter(cat)}
+                              className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer select-none whitespace-nowrap border ${
+                                libCategoryFilter === cat
+                                  ? isLight
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'bg-slate-100 text-slate-900 border-slate-100'
+                                  : isLight
+                                    ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    : 'bg-[#0b0e17] text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                              }`}
+                            >
+                              {cat === 'IoT' ? 'IoT & Cloud' : cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TAB CONTENT 1: ARDUINO LIBRARIES */}
+                  {pkgTab === 'arduino' && (
+                    <div>
+                      {(() => {
+                        const query = pkgSearch.toLowerCase().trim();
+                        const filterCat = libCategoryFilter;
+
+                        const catalogMap = new Map<string, any>();
+                        IOT_LIBRARY_CATALOG.forEach(item => catalogMap.set(item.name.toLowerCase(), item));
+
+                        (packages.arduino || []).forEach((p: any) => {
+                          const key = p.name.toLowerCase();
+                          if (!catalogMap.has(key)) {
+                            catalogMap.set(key, {
+                              name: p.name,
+                              displayName: p.displayName || p.name,
+                              author: p.author || 'Arduino / Community',
+                              desc: p.desc || `Pustaka C++ ${p.name}`,
+                              cat: p.cat || 'Core',
+                              version: p.version || '1.0.0',
+                              githubUrl: p.githubUrl || '',
+                              tags: p.tags || [p.name.toLowerCase()]
+                            });
+                          }
+                        });
+
+                        const allItems = Array.from(catalogMap.values());
+
+                        const filtered = allItems.filter(item => {
+                          const isInstalled = (packages.arduino || []).some((p: any) => p.name.toLowerCase() === item.name.toLowerCase() && p.installed);
+                          if (libStatusFilter === 'installed' && !isInstalled) return false;
+                          if (filterCat !== 'Semua') {
+                            if (filterCat === 'Sensor' && item.cat !== 'Sensor') return false;
+                            if (filterCat === 'Display' && item.cat !== 'Display') return false;
+                            if (filterCat === 'IoT' && item.cat !== 'IoT') return false;
+                            if (filterCat === 'Aktuator' && item.cat !== 'Aktuator') return false;
+                          }
+                          if (!query) return true;
+                          if (item.name.toLowerCase().includes(query)) return true;
+                          if ((item.displayName || '').toLowerCase().includes(query)) return true;
+                          if ((item.desc || '').toLowerCase().includes(query)) return true;
+                          if (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(query))) return true;
+                          return false;
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className={`text-center py-14 rounded-xl border border-dashed space-y-2 ${
+                              isLight ? 'bg-slate-50/50 border-slate-300 text-slate-600' : 'bg-[#0b0e17]/40 border-slate-800 text-slate-400'
+                            }`}>
+                              <Package className="w-7 h-7 mx-auto opacity-40" />
+                              <p className="text-sm font-semibold">
+                                Tidak ada library yang cocok dengan filter saat ini
+                              </p>
+                              <p className="text-xs opacity-75">
+                                Coba ubah kata kunci pencarian atau gunakan tombol &ldquo;Impor GitHub&rdquo; di kanan atas.
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            {filtered.map((lib) => {
+                              const installedPkg = (packages.arduino || []).find((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
+                              const isLibInstalled = Boolean(installedPkg);
+                              const isInstalling = installingLib === lib.name;
+                              const isUninstalling = !!uninstallingMap[lib.name];
+                              const known = findKnownLibrary(lib.name);
+                              const headerFile = known?.mainHeader || installedPkg?.headers?.[0] || `${lib.name.replace(/\s+/g, '_')}.h`;
+                              const methodCount = known?.methods?.length || installedPkg?.parsedApi?.methods?.length || 0;
+                              const matchingExample = PROJECTS_LIST.find(
+                                (p) => ((p as any).libraryName || '').toLowerCase() === lib.name.toLowerCase()
+                              );
+
+                              return (
+                                <div
+                                  key={lib.name}
+                                  className={`p-4 rounded-xl border flex flex-col justify-between gap-3.5 transition ${
+                                    isLibInstalled
+                                      ? isLight
+                                        ? 'bg-white border-emerald-500/40 shadow-2xs'
+                                        : 'bg-[#0d121d] border-emerald-500/30'
+                                      : isLight
+                                        ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+                                        : 'bg-[#0b0e17] border-slate-800/80 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+                                        isLibInstalled
+                                          ? isLight
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                          : isLight
+                                            ? 'bg-slate-100 border-slate-200/80 text-slate-600'
+                                            : 'bg-slate-900 border-slate-800 text-slate-400'
+                                      }`}>
+                                        {renderLibBadgeIcon(lib.name, lib.cat)}
+                                      </div>
+
+                                      <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h3 className={`text-sm font-bold tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                                            {lib.displayName || lib.name}
+                                          </h3>
+                                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                                            isLight ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'
+                                          }`}>
+                                            v{lib.version || '1.0.0'}
+                                          </span>
+                                          {lib.cat && (
+                                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                              isLight ? 'bg-sky-50 text-sky-700 border border-sky-200/60' : 'bg-sky-500/10 text-sky-300 border border-sky-500/20'
+                                            }`}>
+                                              {lib.cat}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <p className={`text-xs leading-relaxed line-clamp-2 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                                          {lib.desc}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {isLibInstalled && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold shrink-0 border ${
+                                        isLight
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                                      }`}>
+                                        <Check className="w-3 h-3" />
+                                        <span>Installed</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Technical Metadata & Action Footer */}
+                                  <div className={`pt-2.5 border-t flex flex-wrap items-center justify-between gap-2 ${
+                                    isLight ? 'border-slate-100' : 'border-slate-800/70'
+                                  }`}>
+                                    <div className="flex items-center gap-2 flex-wrap text-[10.5px]">
+                                      <code className={`font-mono px-1.5 py-0.5 rounded border ${
+                                        isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800 text-slate-300'
+                                      }`}>
+                                        #include &lt;{headerFile}&gt;
+                                      </code>
+                                      {methodCount > 0 && (
+                                        <span className={`font-mono ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                                          • {methodCount} API blocks
+                                        </span>
+                                      )}
+                                      <span className={isLight ? 'text-slate-400' : 'text-slate-500'}>
+                                        • {lib.author || 'Community'}
+                                      </span>
+                                      {lib.githubUrl && (
+                                        <a
+                                          href={lib.githubUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className={`font-semibold hover:underline ${isLight ? 'text-sky-600' : 'text-sky-400'}`}
+                                        >
+                                          Repo ↗
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {matchingExample && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenTemplate(matchingExample.name, 'simulator')}
+                                          title={`Uji contoh rangkaian ${matchingExample.name} di Simulator`}
+                                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition cursor-pointer inline-flex items-center gap-1 ${
+                                            isLight
+                                              ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                                          }`}
+                                        >
+                                          <Cpu className="w-3 h-3" />
+                                          <span>Uji Simulasi</span>
+                                        </button>
+                                      )}
+
+                                      {isLibInstalled ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => openLibraryBlocks(lib.name)}
+                                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition cursor-pointer ${
+                                              isLight
+                                                ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                                                : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
+                                            }`}
+                                          >
+                                            Buka Blok
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={isUninstalling}
+                                            onClick={() => handleToggleLibraryBlock(lib, false)}
+                                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 ${
+                                              isLight
+                                                ? 'bg-white hover:bg-rose-50 text-rose-600 border-slate-200 hover:border-rose-200'
+                                                : 'bg-slate-900 hover:bg-rose-950/40 text-rose-400 border-slate-800 hover:border-rose-800/50'
+                                            }`}
+                                            title={`Nonaktifkan ${lib.name} dari toolbox Blockly`}
+                                          >
+                                            {isUninstalling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                            <span>Copot</span>
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          disabled={isInstalling}
+                                          onClick={() => handleToggleLibraryBlock(lib, true)}
+                                          className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50 ${
+                                            isLight
+                                              ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-2xs'
+                                              : 'bg-sky-600 hover:bg-sky-500 text-white'
+                                          }`}
+                                        >
+                                          {isInstalling ? (
+                                            <>
+                                              <Loader2 className="w-3 h-3 animate-spin" />
+                                              <span>Memasang...</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Plus className="w-3 h-3" />
+                                              <span>Pasang ke Toolbox</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT 2: PYTHON PIP PACKAGES */}
+                  {pkgTab === 'python' && (
+                    <div className="space-y-3">
+                      <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                        isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-[#0b0e17] border-slate-800 text-slate-400'
+                      }`}>
+                        <span>
+                          {desktopPython
+                            ? 'Paket di bawah ini dipasang langsung ke environment Python lokal yang terhubung dengan RoboLab Desktop.'
+                            : 'Mode Web: Klik "Salin pip" untuk menyalin perintah instalasi ke terminal Python lokal Anda.'}
+                        </span>
+                        {pipFeedback && <span role="status" className="font-mono font-semibold text-sky-400">{pipFeedback}</span>}
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        {packages.python
+                          .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.desc || '').toLowerCase().includes(pkgSearch.toLowerCase()) || String(p.category || '').toLowerCase().includes(pkgSearch.toLowerCase()))
+                          .map((pkg: any) => (
+                            <div
+                              key={pkg.name}
+                              className={`p-4 rounded-xl border flex flex-col justify-between gap-3 transition ${
+                                isLight ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs' : 'bg-[#0b0e17] border-slate-800/80 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-sm font-bold font-mono ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>{pkg.name}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                                      isLight ? 'text-slate-600 bg-slate-100 border-slate-200' : 'text-slate-400 bg-slate-900 border-slate-800'
+                                    }`}>
+                                      {pkg.category || 'Python'}{pkg.version ? ` · v${pkg.version}` : ''}
+                                    </span>
+                                  </div>
+                                  {pkg.installed && (
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                                      isLight ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                                    }`}>
+                                      ✓ Installed
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
+                              </div>
+
+                              <div className={`pt-2.5 border-t flex items-center justify-between gap-2 ${isLight ? 'border-slate-100' : 'border-slate-800/70'}`}>
+                                <code className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                  isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}>
+                                  pip install {pkg.name}
+                                </code>
+                                <div className="flex items-center gap-1.5">
+                                  {pkg.installed ? (
+                                    <button
+                                      type="button"
+                                      disabled={uninstallingMap[pkg.name]}
+                                      onClick={() => handleUninstallPkg('python', pkg.name)}
+                                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 ${
+                                        isLight
+                                          ? 'bg-white hover:bg-rose-50 text-rose-600 border-slate-200'
+                                          : 'bg-slate-900 hover:bg-rose-950/40 text-rose-400 border-slate-800'
+                                      }`}
+                                    >
+                                      {uninstallingMap[pkg.name] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                      <span>Uninstall</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={installingMap[pkg.name]?.loading}
+                                      onClick={() => handleInstallPkg('python', pkg.name)}
+                                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer inline-flex items-center gap-1.5 ${
+                                        isLight ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
+                                      }`}
+                                    >
+                                      {installingMap[pkg.name]?.loading ? (
+                                        <>
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          <span>{installingMap[pkg.name]?.progress || 'Mengunduh...'}</span>
+                                        </>
+                                      ) : (
+                                        <span>{desktopPython ? 'Install Package' : 'Salin Perintah pip'}</span>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT 3: BOARD MANAGER */}
+                  {pkgTab === 'boards' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {packages.boards
+                        .filter((p: any) => p.name.toLowerCase().includes(pkgSearch.toLowerCase()) || p.desc.toLowerCase().includes(pkgSearch.toLowerCase()))
+                        .map((pkg: any) => (
+                          <div
+                            key={pkg.name}
+                            className={`p-4 rounded-xl border flex flex-col justify-between gap-3 transition ${
+                              isLight ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs' : 'bg-[#0b0e17] border-slate-800/80 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-bold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>{pkg.name}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                                    isLight ? 'text-slate-600 bg-slate-100 border-slate-200' : 'text-slate-400 bg-slate-900 border-slate-800'
+                                  }`}>
+                                    v{pkg.version}
+                                  </span>
+                                </div>
+                                {pkg.installed && (
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                                    isLight ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                                  }`}>
+                                    ✓ Core Installed
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>{pkg.desc}</p>
+                            </div>
+
+                            <div className={`pt-2.5 border-t flex items-center justify-between gap-2 ${isLight ? 'border-slate-100' : 'border-slate-800/70'}`}>
+                              <span className={`text-[10px] font-mono truncate max-w-[260px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {pkg.url}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={pkg.installed || installingMap[pkg.name]?.loading}
+                                onClick={() => {
+                                  const coreMap: Record<string, { coreName: string; url?: string }> = {
+                                    'ESP32 Arduino': { coreName: 'esp32:esp32', url: 'https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json' },
+                                    'Arduino AVR Boards': { coreName: 'arduino:avr', url: 'https://downloads.arduino.cc/packages/package_index.json' },
+                                    'ESP8266 Arduino': { coreName: 'esp8266:esp8266', url: 'https://arduino.esp8266.com/stable/package_esp8266com_index.json' },
+                                    'STM32 Boards': { coreName: 'STMicroelectronics:stm32', url: 'https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json' },
+                                    'Raspberry Pi Pico': { coreName: 'rp2040:rp2040', url: 'https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json' }
+                                  };
+                                  const target = coreMap[pkg.name] || { coreName: pkg.name, url: pkg.url };
+                                  handleInstallBoardCore(pkg.name, target.coreName, target.url);
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition cursor-pointer shrink-0 inline-flex items-center gap-1.5 ${
+                                  pkg.installed
+                                    ? isLight
+                                      ? 'bg-slate-100 text-slate-500 cursor-default'
+                                      : 'bg-slate-900 text-slate-500 cursor-default'
+                                    : isLight
+                                      ? 'bg-slate-900 hover:bg-slate-800 text-white'
+                                      : 'bg-sky-600 hover:bg-sky-500 text-white'
+                                }`}
+                              >
+                                {installingMap[pkg.name]?.loading ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>{installingMap[pkg.name]?.progress || 'Mengunduh Core...'}</span>
+                                  </>
+                                ) : pkg.installed ? (
+                                  <span>Terpasang</span>
+                                ) : (
+                                  <span>Install Core</span>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* TAB: HARDWARE SIMULATOR (ISOLATED WORKSPACE) */}
           {currentTab === 'simulator' && (
@@ -10758,6 +11354,40 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     >
                       <option value="python/main.py" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>Python (py)</option>
                       {simBoard !== 'BBC micro:bit' && <option value="firmware/main.ino" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>C++ (ino)</option>}
+                    </select>
+                  </div>
+
+                  {/* Template Rangkaian Preset Selector (Load Home Templates directly into Simulator Arena) */}
+                  <div className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold shadow-sm ${
+                    themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
+                  }`}>
+                    <select
+                      value=""
+                      aria-label="Muat Template Rangkaian"
+                      onChange={(e) => {
+                        const selectedName = e.target.value;
+                        if (!selectedName) return;
+                        handleOpenTemplate(selectedName, 'stay');
+                      }}
+                      className="bg-transparent outline-none cursor-pointer text-xs font-bold max-w-[170px] truncate"
+                    >
+                      <option value="" className={themeMode === 'light' ? 'bg-white text-slate-500' : 'bg-slate-900 text-slate-400'}>
+                        ⚡ Template Rangkaian...
+                      </option>
+                      <optgroup label="Template Proyek & IoT" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>
+                        {BASE_PROJECTS_LIST.map((p) => (
+                          <option key={`sim-tpl-base-${p.name}`} value={p.name} className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>
+                            {p.name} ({p.board})
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Contoh Library Resmi" className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>
+                        {LIBRARY_PROJECT_TEMPLATES.map((p) => (
+                          <option key={`sim-tpl-lib-${p.name}`} value={p.name} className={themeMode === 'light' ? 'bg-white text-slate-800' : 'bg-slate-900 text-white'}>
+                            {p.name} ({p.board})
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                   </div>
 
@@ -13173,255 +13803,361 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         </div>
       )}
 
-      {/* 12. LIBRARY MANAGER MODAL */}
-      {showLibraryManagerModal && (
-        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
-          <div className="glass-panel rounded-2xl p-6 w-[640px] max-h-[620px] flex flex-col shadow-2xl relative overflow-hidden"
-          style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
-            <div className="flex justify-between items-center pb-3 border-b flex-shrink-0" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <div className="flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>Katalog Library IoT (GitHub)</h3>
-                  <p className="text-[10px] text-slate-400">Cari dan pasang library GitHub untuk memunculkan blok kode di Blockly</p>
-                </div>
-              </div>
-              <button onClick={() => setShowLibraryManagerModal(false)} className={`transition cursor-pointer p-1 rounded-lg ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-650 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="py-2.5 space-y-2 flex-shrink-0">
-              {/* Search Box */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={libSearchQuery}
-                  onChange={(e) => setLibSearchQuery(e.target.value)}
-                  placeholder="Cari library IoT (contoh: DHT11, Ultrasonik, OLED, pH, EC, PT100, Firebase, RFID, LCD)..."
-                  className="w-full rounded-xl pl-8 pr-8 py-2 text-xs focus:outline-none"
-                  style={{
-                    background: themeMode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
-                    color: themeMode === 'light' ? '#0f172a' : '#f8fafc',
-                    border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)'
-                  }}
-                />
-                <span className="absolute left-2.5 top-2 text-xs opacity-60">🔍</span>
-                {libSearchQuery && (
-                  <button onClick={() => setLibSearchQuery('')} className="absolute right-2.5 top-2 text-xs opacity-60 hover:opacity-100 cursor-pointer">
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
-                {(['Semua', 'Sensor', 'Display', 'IoT', 'Aktuator'] as const).map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setLibCategoryFilter(cat)}
-                    className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer select-none whitespace-nowrap ${
-                      libCategoryFilter === cat
-                        ? 'text-white shadow-sm'
-                        : themeMode === 'light' ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
-                    }`}
-                    style={libCategoryFilter === cat ? { background: 'var(--accent-gradient)' } : {}}
-                  >
-                    {cat === 'Semua' ? '🌟 Semua' : cat === 'Sensor' ? '🌡️ Sensor' : cat === 'Display' ? '🖥️ Display' : cat === 'IoT' ? '☁️ IoT & Cloud' : '⚙️ Aktuator'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto py-2 space-y-2.5 pr-1">
-              {isSearchingLibs && (
-                <div className="text-center py-6 text-xs text-slate-400 animate-pulse">
-                  🔍 Mencari pustaka di GitHub &amp; Arduino Index...
-                </div>
-              )}
-              {(() => {
-                const query = libSearchQuery.toLowerCase().trim();
-                const filterCat = libCategoryFilter;
-
-                // Merge IOT_LIBRARY_CATALOG with any existing packages not in catalog
-                const catalogMap = new Map<string, any>();
-                IOT_LIBRARY_CATALOG.forEach(item => catalogMap.set(item.name.toLowerCase(), item));
-
-                (packages.arduino || []).forEach((p: any) => {
-                  const key = p.name.toLowerCase();
-                  if (!catalogMap.has(key)) {
-                    catalogMap.set(key, {
-                      name: p.name,
-                      displayName: p.name,
-                      author: p.author || 'Custom Library',
-                      desc: p.desc || `Library kustom ${p.name}`,
-                      cat: 'Lainnya',
-                      version: p.version || '1.0.0',
-                      githubUrl: '',
-                      tags: [p.name.toLowerCase()]
-                    });
-                  }
-                });
-
-                const allItems = Array.from(catalogMap.values());
-
-                const filtered = allItems.filter(item => {
-                  if (filterCat !== 'Semua') {
-                    if (filterCat === 'Sensor' && item.cat !== 'Sensor') return false;
-                    if (filterCat === 'Display' && item.cat !== 'Display') return false;
-                    if (filterCat === 'IoT' && item.cat !== 'IoT') return false;
-                    if (filterCat === 'Aktuator' && item.cat !== 'Aktuator') return false;
-                  }
-                  if (!query) return true;
-                  if (item.name.toLowerCase().includes(query)) return true;
-                  if ((item.displayName || '').toLowerCase().includes(query)) return true;
-                  if ((item.desc || '').toLowerCase().includes(query)) return true;
-                  if (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(query))) return true;
-                  return false;
-                });
-
-                if (filtered.length === 0) {
-                  return (
-                    <div className="text-center py-10 space-y-2">
-                      <div className="text-3xl">🔍</div>
-                      <p className={`text-xs font-semibold ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
-                        Tidak ada library yang cocok dengan "{libSearchQuery}"
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Coba gunakan kata kunci lain untuk mencari library di katalog.
-                      </p>
+      {/* 12. LIBRARY MANAGER MODAL (Professional Engineering Dialog) */}
+      {showLibraryManagerModal && (() => {
+        const isLight = themeMode === 'light';
+        const installedCount = (packages.arduino || []).filter((p: any) => p.installed).length;
+        return (
+          <div
+            className={`fixed inset-0 flex items-center justify-center z-[99999] select-none p-4 ${
+              isLight ? 'bg-slate-900/30 backdrop-blur-xs' : 'bg-black/65 backdrop-blur-xs'
+            }`}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowLibraryManagerModal(false); }}
+          >
+            <div
+              className={`rounded-2xl w-full max-w-[760px] max-h-[82vh] flex flex-col shadow-2xl relative overflow-hidden border ${
+                isLight ? 'bg-white border-slate-200' : 'bg-[#0b0e17] border-slate-800'
+              }`}
+            >
+              {/* Header */}
+              <div className={`flex justify-between items-center px-5 py-4 border-b shrink-0 ${
+                isLight ? 'border-slate-200/80' : 'border-slate-800'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                    isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'
+                  }`}>
+                    <Package className="w-4 h-4" style={{ color: 'var(--accent-primary)' }} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-sm font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                        Arduino &amp; IoT Library Manager
+                      </h3>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        isLight ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'
+                      }`}>
+                        {installedCount} Active
+                      </span>
                     </div>
-                  );
-                }
+                    <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Aktifkan pustaka C++ untuk memunculkan kategori blok di Blockly dan menyertakan header saat kompilasi.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLibraryManagerModal(false)}
+                  className={`transition cursor-pointer p-1.5 rounded-lg ${
+                    isLight ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
+                  }`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-                const getLibEmoji = (name: string, cat: string) => {
-                  const lower = name.toLowerCase();
-                  if (lower.includes('dht') || lower.includes('pt100') || lower.includes('max31865')) return '🌡️';
-                  if (lower.includes('ultra') || lower.includes('newping') || lower.includes('vl53')) return '📏';
-                  if (lower.includes('ph') || lower.includes('ec') || lower.includes('tds')) return '💧';
-                  if (lower.includes('oled') || lower.includes('ssd1306') || lower.includes('lcd') || lower.includes('display')) return '🖥️';
-                  if (lower.includes('firebase') || lower.includes('blynk') || lower.includes('mqtt') || lower.includes('pubsub')) return '☁️';
-                  if (lower.includes('rfid') || lower.includes('rc522') || lower.includes('pn532')) return '🏷️';
-                  if (lower.includes('neopixel') || lower.includes('ws2812')) return '💡';
-                  if (lower.includes('servo') || lower.includes('stepper') || lower.includes('mp3') || lower.includes('dfplayer')) return '⚙️';
-                  if (cat === 'Sensor') return '📡';
-                  return '📦';
-                };
+              {/* Search & Category Bar */}
+              <div className={`px-5 py-3 border-b space-y-2.5 shrink-0 ${
+                isLight ? 'bg-slate-50/70 border-slate-200/70' : 'bg-[#080a11] border-slate-800/80'
+              }`}>
+                <div className="relative">
+                  <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <input
+                    type="text"
+                    value={libSearchQuery}
+                    onChange={(e) => setLibSearchQuery(e.target.value)}
+                    placeholder="Cari nama library, sensor, atau header (contoh: DHT11, NewPing, SSD1306, Blynk, MFRC522)..."
+                    className={`w-full rounded-lg pl-9 pr-8 py-2 text-xs focus:outline-none border ${
+                      isLight
+                        ? 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-slate-400'
+                        : 'bg-[#0d111c] border-slate-800 text-slate-100 placeholder-slate-500 focus:border-slate-600'
+                    }`}
+                  />
+                  {libSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLibSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
-                return filtered.map((lib) => {
-                  const isLibInstalled = (packages.arduino || []).some((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
-                  const isInstalling = installingLib === lib.name;
-                  const isUninstalling = !!uninstallingMap[lib.name];
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1 overflow-x-auto text-[11px]">
+                    {(['Semua', 'Sensor', 'Display', 'IoT', 'Aktuator'] as const).map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setLibCategoryFilter(cat)}
+                        className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer select-none whitespace-nowrap border ${
+                          libCategoryFilter === cat
+                            ? isLight
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-slate-100 text-slate-900 border-slate-100'
+                            : isLight
+                              ? 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                              : 'bg-[#0d111c] text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {cat === 'IoT' ? 'IoT & Cloud' : cat}
+                      </button>
+                    ))}
+                  </div>
 
-                  return (
-                    <div
-                      key={lib.name}
-                      className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition ${
-                        isLibInstalled
-                          ? themeMode === 'light'
-                            ? 'bg-emerald-50/70 border-emerald-300 shadow-xs'
-                            : 'bg-emerald-950/25 border-emerald-500/30'
-                          : themeMode === 'light'
-                            ? 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
-                            : 'bg-white/5 hover:bg-white/8 border-white/10'
+                  <div className={`inline-flex p-0.5 rounded-md border text-[10.5px] font-semibold ${
+                    isLight ? 'bg-slate-200/70 border-slate-200' : 'bg-[#0d111c] border-slate-800'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setLibStatusFilter('all')}
+                      className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                        libStatusFilter === 'all'
+                          ? isLight ? 'bg-white text-slate-900 shadow-2xs' : 'bg-slate-800 text-white'
+                          : isLight ? 'text-slate-600' : 'text-slate-400'
                       }`}
                     >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 bg-white/10 border border-white/10 shadow-xs">
-                          {getLibEmoji(lib.name, lib.cat)}
-                        </div>
-                        <div className="space-y-0.5 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className={`text-xs font-bold truncate ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                      Semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLibStatusFilter('installed')}
+                      className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                        libStatusFilter === 'installed'
+                          ? isLight ? 'bg-white text-emerald-700 shadow-2xs' : 'bg-slate-800 text-emerald-400'
+                          : isLight ? 'text-slate-600' : 'text-slate-400'
+                      }`}
+                    >
+                      Terpasang ({installedCount})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Libraries List */}
+              <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+                {isSearchingLibs && (
+                  <div className="text-center py-4 text-xs text-slate-400">
+                    Mencari pustaka di indeks Arduino...
+                  </div>
+                )}
+                {(() => {
+                  const query = libSearchQuery.toLowerCase().trim();
+                  const filterCat = libCategoryFilter;
+
+                  const catalogMap = new Map<string, any>();
+                  IOT_LIBRARY_CATALOG.forEach(item => catalogMap.set(item.name.toLowerCase(), item));
+
+                  (packages.arduino || []).forEach((p: any) => {
+                    const key = p.name.toLowerCase();
+                    if (!catalogMap.has(key)) {
+                      catalogMap.set(key, {
+                        name: p.name,
+                        displayName: p.displayName || p.name,
+                        author: p.author || 'Arduino / Community',
+                        desc: p.desc || `Pustaka ${p.name}`,
+                        cat: p.cat || 'Core',
+                        version: p.version || '1.0.0',
+                        githubUrl: '',
+                        tags: [p.name.toLowerCase()]
+                      });
+                    }
+                  });
+
+                  const allItems = Array.from(catalogMap.values());
+
+                  const filtered = allItems.filter(item => {
+                    const isInstalled = (packages.arduino || []).some((p: any) => p.name.toLowerCase() === item.name.toLowerCase() && p.installed);
+                    if (libStatusFilter === 'installed' && !isInstalled) return false;
+                    if (filterCat !== 'Semua') {
+                      if (filterCat === 'Sensor' && item.cat !== 'Sensor') return false;
+                      if (filterCat === 'Display' && item.cat !== 'Display') return false;
+                      if (filterCat === 'IoT' && item.cat !== 'IoT') return false;
+                      if (filterCat === 'Aktuator' && item.cat !== 'Aktuator') return false;
+                    }
+                    if (!query) return true;
+                    if (item.name.toLowerCase().includes(query)) return true;
+                    if ((item.displayName || '').toLowerCase().includes(query)) return true;
+                    if ((item.desc || '').toLowerCase().includes(query)) return true;
+                    if (Array.isArray(item.tags) && item.tags.some((t: string) => t.toLowerCase().includes(query))) return true;
+                    return false;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-10 space-y-1.5">
+                        <Package className="w-6 h-6 mx-auto text-slate-400 opacity-50" />
+                        <p className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                          Tidak ada library yang cocok dengan &ldquo;{libSearchQuery}&rdquo;
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Coba gunakan kata kunci lain atau pilih tab Semua.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((lib) => {
+                    const installedPkg = (packages.arduino || []).find((p: any) => p.name.toLowerCase() === lib.name.toLowerCase() && p.installed);
+                    const isLibInstalled = Boolean(installedPkg);
+                    const isInstalling = installingLib === lib.name;
+                    const isUninstalling = !!uninstallingMap[lib.name];
+                    const known = findKnownLibrary(lib.name);
+                    const headerFile = known?.mainHeader || installedPkg?.headers?.[0] || `${lib.name.replace(/\s+/g, '_')}.h`;
+                    const matchingExample = PROJECTS_LIST.find(
+                      (p) => ((p as any).libraryName || '').toLowerCase() === lib.name.toLowerCase()
+                    );
+
+                    return (
+                      <div
+                        key={lib.name}
+                        className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                          isLibInstalled
+                            ? isLight
+                              ? 'bg-emerald-50/40 border-emerald-500/40'
+                              : 'bg-emerald-950/15 border-emerald-500/30'
+                            : isLight
+                              ? 'bg-white hover:bg-slate-50/80 border-slate-200'
+                              : 'bg-[#0f1320] hover:bg-[#131829] border-slate-800'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`text-xs font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                               {lib.displayName || lib.name}
                             </h4>
+                            <code className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                              isLight ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
+                            }`}>
+                              &lt;{headerFile}&gt;
+                            </code>
+                            <span className={`text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                              v{lib.version}
+                            </span>
                             {lib.cat && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              <span className={`text-[9.5px] font-medium px-1.5 py-0.2 rounded ${
+                                isLight ? 'bg-sky-50 text-sky-700 border border-sky-200/70' : 'bg-sky-500/10 text-sky-300 border border-sky-500/20'
+                              }`}>
                                 {lib.cat}
                               </span>
                             )}
-                            {lib.version && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-slate-500/10 text-slate-400">
-                                v{lib.version}
-                              </span>
-                            )}
                           </div>
-                          <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
+                          <p className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                             {lib.desc}
                           </p>
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <span className="text-[9px] text-slate-500 font-medium">by {lib.author}</span>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                            <span>Maintainer: {lib.author}</span>
                             {lib.githubUrl && (
                               <a
                                 href={lib.githubUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[9px] text-cyan-500 hover:text-cyan-400 underline flex items-center gap-0.5"
                                 onClick={(e) => e.stopPropagation()}
+                                className={`font-semibold hover:underline ${isLight ? 'text-sky-600' : 'text-sky-400'}`}
                               >
-                                GitHub ↗
+                                GitHub Repository ↗
                               </a>
                             )}
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {isLibInstalled ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow-xs">
-                              <Check className="w-3 h-3" /> Terpasang di Blok
-                            </span>
-                            <button className="rounded-lg bg-sky-100 px-2 py-2 text-xs font-bold text-sky-900" onClick={() => openLibraryBlocks(lib.name)}>Lihat blok</button>
-                                  <button
-                              disabled={isUninstalling}
-                              onClick={() => handleToggleLibraryBlock(lib, false)}
-                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/25 transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
-                              title={`Hapus ${lib.name} dari blok kode`}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {matchingExample && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowLibraryManagerModal(false);
+                                handleOpenTemplate(matchingExample.name, 'simulator');
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-semibold border transition cursor-pointer inline-flex items-center gap-1 ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                              }`}
+                              title="Muat contoh program & rangkaian ke Simulator"
                             >
-                              {isUninstalling ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
-                              <span>Hapus</span>
+                              <Cpu className="w-3 h-3" />
+                              <span>Uji Simulasi</span>
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            disabled={isInstalling}
-                            onClick={() => handleToggleLibraryBlock(lib, true)}
-                            className="px-3.5 py-1.5 rounded-xl text-[10px] font-bold text-white shadow-md transition cursor-pointer flex items-center gap-1 disabled:opacity-50 hover:opacity-95"
-                            style={{ background: 'var(--accent-gradient)' }}
-                          >
-                            {isInstalling ? (
-                              <>
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                <span>Menambahkan...</span>
-                              </>
-                            ) : (
-                              <span>+ Tambah ke Blok</span>
-                            )}
-                          </button>
-                        )}
+                          )}
+                          {isLibInstalled ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openLibraryBlocks(lib.name)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-semibold border transition cursor-pointer ${
+                                  isLight
+                                    ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                                    : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
+                                }`}
+                              >
+                                Buka Blok
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isUninstalling}
+                                onClick={() => handleToggleLibraryBlock(lib, false)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-semibold border transition cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 ${
+                                  isLight
+                                    ? 'bg-white hover:bg-rose-50 text-rose-600 border-slate-200'
+                                    : 'bg-slate-900 hover:bg-rose-950/40 text-rose-400 border-slate-800'
+                                }`}
+                              >
+                                {isUninstalling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                <span>Copot</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isInstalling}
+                              onClick={() => handleToggleLibraryBlock(lib, true)}
+                              className={`px-3 py-1.5 rounded-lg text-[10.5px] font-semibold transition cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 ${
+                                isLight ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
+                              }`}
+                            >
+                              {isInstalling ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Memasang...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="w-3 h-3" />
+                                  <span>Pasang</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
+                    );
+                  });
+                })()}
+              </div>
 
-            <div className="flex justify-between items-center pt-3 border-t flex-shrink-0" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <p className="text-[10px] text-slate-400 italic">
-                💡 Tip: Hanya library yang Anda pasang yang akan muncul di menu blok kode agar workspace tetap rapi.
-              </p>
-              <button onClick={() => setShowLibraryManagerModal(false)} className="text-[10px] font-bold text-white-force px-5 py-2 rounded-xl transition cursor-pointer shadow-md" style={{ background: 'var(--accent-gradient)' }}>
-                Selesai
-              </button>
+              {/* Footer */}
+              <div className={`flex justify-between items-center px-5 py-3 border-t shrink-0 ${
+                isLight ? 'bg-slate-50 border-slate-200/80' : 'bg-[#080a11] border-slate-800'
+              }`}>
+                <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Pustaka yang dipasang langsung tersedia sebagai blok visual di panel kiri Blockly.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowLibraryManagerModal(false)}
+                  className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition cursor-pointer ${
+                    isLight ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-100 text-slate-900 hover:bg-white'
+                  }`}
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 13. EXTENSIONS MODAL */}
       {showExtensionsModal && (

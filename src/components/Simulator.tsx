@@ -347,11 +347,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
   onWiresChange,
   onSensorDataChange,
   isExpanded = false,
-  blynkStatus: _blynkStatus = 'offline',
-  blynkVirtualPins: _blynkVirtualPins = {},
-  onBlynkVirtualWrite: _onBlynkVirtualWrite,
+  blynkStatus = 'offline',
+  blynkVirtualPins = {},
+  onBlynkVirtualWrite,
   isWifiConnected: isWifiConnectedProp,
   onWifiConnectedChange,
+  selectedWifi = 'Wokwi-GUEST',
+  onSelectedWifiChange,
+  wifiPassword = '',
+  onWifiPasswordChange,
   themeMode = 'dark',
   simulatorMode: simulatorModeProp,
   onSimulatorModeChange,
@@ -406,6 +410,15 @@ export const Simulator: React.FC<SimulatorProps> = ({
     if (onWifiConnectedChange) onWifiConnectedChange(nextVal);
     else setLocalWifiConnected(nextVal);
   };
+  const [wifiTab, setWifiTab] = useState<'blynk' | 'http' | 'mqtt'>('blynk');
+  const [httpTestUrl, setHttpTestUrl] = useState('https://httpbin.org/get');
+  const [httpTestMethod, setHttpTestMethod] = useState<'GET' | 'POST'>('GET');
+  const [httpTestBody, setHttpTestBody] = useState('{"sensor":"DHT11","temp":28.4}');
+  const [httpTestResult, setHttpTestResult] = useState<{ status?: number; ms?: number; body?: string; loading?: boolean }>({});
+  const [mqttBrokerHost, setMqttBrokerHost] = useState('broker.hivemq.com');
+  const [mqttTopicInput, setMqttTopicInput] = useState('robolab/control');
+  const [mqttPayloadInput, setMqttPayloadInput] = useState('1');
+  const [mqttSendStatus, setMqttSendStatus] = useState('');
 
   // Simulator state
   const [activePopup, setActivePopup] = useState<string | null>(null);
@@ -1408,6 +1421,14 @@ export const Simulator: React.FC<SimulatorProps> = ({
     // Auto-wire all components using smart pin allocation
     runAutoWire(mergedList);
   }, [activeCode, board, programPins]);
+
+  // Ensure template components loaded without wires get auto-wired immediately
+  useEffect(() => {
+    if (activeSimMode === 'robot') return;
+    if (activeComponents.length > 0 && wires.length === 0) {
+      runAutoWire(activeComponents);
+    }
+  }, [activeComponents.join(','), board, activeSimMode]);
 
   // Draggable Component Positions (Optimized for expanded 780px canvas height)
   const [localPositions, setLocalPositions] = useState<{ [key: string]: { x: number; y: number } }>({
@@ -4514,16 +4535,301 @@ export const Simulator: React.FC<SimulatorProps> = ({
           </div>
         </div>
 
-        {/* Wi-Fi uses the active network of the device running the simulator. */}
+        {/* Wi-Fi & Live IoT Gateway (Wokwi-style Virtual AP + Live Blynk Cloud, HTTP REST & MQTT WebSocket) */}
         {(isEsp8266 || board.toLowerCase().includes('esp32')) && (
-          <section className={`space-y-3 rounded-2xl border p-3.5 ${isLight ? 'bg-white border-slate-200' : 'bg-[#0f131f] border-slate-800'}`}>
-            <h3 className="flex items-center gap-2 text-xs font-bold"><Wifi className="h-4 w-4" /> Wi-Fi simulator</h3>
-            <p className="text-xs">Simulator memakai jaringan aktif perangkat. Pilih hotspot lewat pengaturan Wi-Fi perangkat, lalu aktifkan jaringan simulator.</p>
-            <button type="button" disabled={checkingNetwork} onClick={handleWifiConnectToggle}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-60 ${isLight ? 'bg-slate-50 border-slate-300' : 'bg-slate-800 border-slate-700'}`}>
-              {checkingNetwork ? 'Memeriksa koneksi…' : isWifiConnected ? 'Putuskan jaringan simulator' : 'Aktifkan jaringan simulator'}
-            </button>
-            <p role="status" className="text-xs">{networkError || (isWifiConnected ? 'Jaringan simulator aktif. Jalankan program untuk menguji alamat tujuan.' : 'Jaringan simulator belum aktif.')}</p>
+          <section className={`space-y-3 rounded-2xl border p-3.5 ${isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-[#0f131f] border-slate-800'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
+                  isWifiConnected
+                    ? isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    : isLight ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-slate-800 border-slate-700 text-slate-400'
+                }`}>
+                  <Wifi className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <h3 className={`text-[11px] font-bold leading-tight ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                    Wi-Fi &amp; IoT Gateway
+                  </h3>
+                  <p className={`text-[9.5px] font-mono ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {isWifiConnected ? `${selectedWifi || 'Wokwi-GUEST'} • 10.13.37.2` : 'Virtual NIC Disconnected'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={checkingNetwork}
+                onClick={handleWifiConnectToggle}
+                className={`rounded-lg border px-2.5 py-1 text-[10px] font-bold transition cursor-pointer disabled:opacity-60 ${
+                  isWifiConnected
+                    ? isLight
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700'
+                      : 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300'
+                    : isLight
+                      ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'
+                      : 'bg-sky-600 border-sky-500 text-white hover:bg-sky-500'
+                }`}
+              >
+                {checkingNetwork ? 'Connecting…' : isWifiConnected ? '● Connected' : 'Connect Wi-Fi'}
+              </button>
+            </div>
+
+            {/* Virtual Access Point Config */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <label className={`block text-[9px] font-semibold uppercase tracking-wider mb-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Virtual SSID
+                </label>
+                <input
+                  type="text"
+                  value={selectedWifi || 'Wokwi-GUEST'}
+                  onChange={(e) => onSelectedWifiChange?.(e.target.value)}
+                  placeholder="Wokwi-GUEST"
+                  className={`w-full rounded-lg border px-2 py-1 text-[10.5px] font-mono outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-sky-500' : 'bg-[#090c14] border-slate-800 text-slate-200 focus:border-sky-500'
+                  }`}
+                />
+              </div>
+              <div>
+                <label className={`block text-[9px] font-semibold uppercase tracking-wider mb-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Password
+                </label>
+                <input
+                  type="text"
+                  value={wifiPassword}
+                  onChange={(e) => onWifiPasswordChange?.(e.target.value)}
+                  placeholder="(Open / Wokwi-GUEST)"
+                  className={`w-full rounded-lg border px-2 py-1 text-[10.5px] font-mono outline-none ${
+                    isLight ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-sky-500' : 'bg-[#090c14] border-slate-800 text-slate-200 focus:border-sky-500'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {networkError && (
+              <p role="status" className="text-[10px] text-rose-500 font-medium">{networkError}</p>
+            )}
+
+            {/* Protocol Inspector Tabs: Blynk Cloud | HTTP REST | MQTT Broker */}
+            <div className={`rounded-xl border overflow-hidden ${isLight ? 'bg-slate-50/70 border-slate-200/80' : 'bg-[#090c14] border-slate-800/90'}`}>
+              <div className={`grid grid-cols-3 border-b text-[10px] font-bold ${isLight ? 'border-slate-200 bg-slate-100/80' : 'border-slate-800 bg-[#0d111c]'}`}>
+                {(['blynk', 'http', 'mqtt'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setWifiTab(tab)}
+                    className={`py-1.5 text-center transition cursor-pointer border-b-2 ${
+                      wifiTab === tab
+                        ? isLight
+                          ? 'border-sky-600 text-sky-700 bg-white'
+                          : 'border-sky-400 text-sky-300 bg-[#090c14]'
+                        : isLight
+                          ? 'border-transparent text-slate-500 hover:text-slate-800'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab === 'blynk' ? 'Blynk Cloud' : tab === 'http' ? 'HTTP Client' : 'MQTT Live'}
+                  </button>
+                ))}
+              </div>
+
+              {/* TAB 1: BLYNK CLOUD VIRTUAL PINS */}
+              {wifiTab === 'blynk' && (
+                <div className="p-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[9.5px] font-semibold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                      blynk.cloud API
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                      blynkStatus === 'online'
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                        : blynkStatus === 'connecting'
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : isLight ? 'bg-slate-200 text-slate-600' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${blynkStatus === 'online' ? 'bg-emerald-400' : blynkStatus === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-slate-400'}`} />
+                      {blynkStatus.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(['V0', 'V1', 'V2', 'V3'] as const).map((vpin) => {
+                      const val = Number(blynkVirtualPins[vpin] ?? 0);
+                      const isOn = val > 0;
+                      return (
+                        <button
+                          key={vpin}
+                          type="button"
+                          onClick={() => onBlynkVirtualWrite?.(vpin, isOn ? 0 : 1)}
+                          title={`Toggle ${vpin} (memicu BLYNK_WRITE(${vpin}) & sync ke blynk.cloud jika token diisi)`}
+                          className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-lg border text-[10px] font-mono font-bold transition cursor-pointer ${
+                            isOn
+                              ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-xs'
+                              : isLight
+                                ? 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                : 'bg-[#111624] border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <span>{vpin}</span>
+                          <span className="text-[9px] opacity-80">{val}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className={`text-[9px] leading-snug ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Klik V0–V3 untuk uji <code>BLYNK_WRITE</code> secara langsung atau masukkan <code>BLYNK_AUTH_TOKEN</code> asli untuk sinkronisasi 2-arah dengan aplikasi Blynk.
+                  </p>
+                </div>
+              )}
+
+              {/* TAB 2: REAL HTTP GET / POST TESTER */}
+              {wifiTab === 'http' && (
+                <div className="p-2.5 space-y-2">
+                  <div className="flex gap-1">
+                    <select
+                      value={httpTestMethod}
+                      onChange={(e) => setHttpTestMethod(e.target.value as 'GET' | 'POST')}
+                      className={`rounded-lg border px-1.5 py-1 text-[10px] font-mono font-bold outline-none ${
+                        isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-sky-400'
+                      }`}
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={httpTestUrl}
+                      onChange={(e) => setHttpTestUrl(e.target.value)}
+                      placeholder="https://httpbin.org/get"
+                      className={`flex-1 min-w-0 rounded-lg border px-2 py-1 text-[10px] font-mono outline-none ${
+                        isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-slate-200'
+                      }`}
+                    />
+                  </div>
+                  {httpTestMethod === 'POST' && (
+                    <input
+                      type="text"
+                      value={httpTestBody}
+                      onChange={(e) => setHttpTestBody(e.target.value)}
+                      placeholder='{"temp": 28.4}'
+                      className={`w-full rounded-lg border px-2 py-1 text-[10px] font-mono outline-none ${
+                        isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-slate-200'
+                      }`}
+                    />
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={httpTestResult.loading}
+                      onClick={async () => {
+                        if (!isWifiConnected) setIsWifiConnected(true);
+                        const t0 = performance.now();
+                        setHttpTestResult({ loading: true });
+                        try {
+                          const target = httpTestUrl.trim();
+                          const res = await fetch(target, {
+                            method: httpTestMethod,
+                            ...(httpTestMethod === 'POST'
+                              ? { headers: { 'Content-Type': 'application/json' }, body: httpTestBody }
+                              : {}),
+                          });
+                          const text = await res.text();
+                          setHttpTestResult({
+                            status: res.status,
+                            ms: Math.round(performance.now() - t0),
+                            body: text.slice(0, 220),
+                          });
+                        } catch (err: any) {
+                          setHttpTestResult({
+                            status: 0,
+                            ms: Math.round(performance.now() - t0),
+                            body: `Error: ${err?.message || 'Request failed'}`,
+                          });
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        isLight ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-sky-600 text-white hover:bg-sky-500'
+                      }`}
+                    >
+                      {httpTestResult.loading ? 'Sending…' : `Send ${httpTestMethod}`}
+                    </button>
+                    {httpTestResult.status !== undefined && (
+                      <span className={`text-[9.5px] font-mono font-bold ${
+                        httpTestResult.status >= 200 && httpTestResult.status < 300 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        HTTP {httpTestResult.status || 'ERR'} • {httpTestResult.ms}ms
+                      </span>
+                    )}
+                  </div>
+                  {httpTestResult.body && (
+                    <pre className={`p-1.5 rounded-lg border text-[9px] font-mono max-h-20 overflow-auto whitespace-pre-wrap break-all ${
+                      isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-black/40 border-slate-800 text-slate-300'
+                    }`}>
+                      {httpTestResult.body}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: REAL MQTT BROKER OVER WEBSOCKET */}
+              {wifiTab === 'mqtt' && (
+                <div className="p-2.5 space-y-2">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <span className={`block text-[8.5px] font-semibold uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Broker (WSS)</span>
+                      <input
+                        type="text"
+                        value={mqttBrokerHost}
+                        onChange={(e) => setMqttBrokerHost(e.target.value)}
+                        className={`w-full rounded-lg border px-2 py-1 text-[10px] font-mono outline-none ${
+                          isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-slate-200'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <span className={`block text-[8.5px] font-semibold uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Topic</span>
+                      <input
+                        type="text"
+                        value={mqttTopicInput}
+                        onChange={(e) => setMqttTopicInput(e.target.value)}
+                        className={`w-full rounded-lg border px-2 py-1 text-[10px] font-mono outline-none ${
+                          isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-slate-200'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={mqttPayloadInput}
+                      onChange={(e) => setMqttPayloadInput(e.target.value)}
+                      placeholder="Payload (e.g. ON / 1 / JSON)"
+                      className={`flex-1 min-w-0 rounded-lg border px-2 py-1 text-[10px] font-mono outline-none ${
+                        isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#111624] border-slate-800 text-slate-200'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isWifiConnected) setIsWifiConnected(true);
+                        window.dispatchEvent(new CustomEvent('robolab-mqtt-inject', {
+                          detail: { broker: mqttBrokerHost.trim(), topic: mqttTopicInput.trim(), payload: mqttPayloadInput }
+                        }));
+                        setMqttSendStatus(`Published to ${mqttTopicInput.trim()}`);
+                        setTimeout(() => setMqttSendStatus(''), 2500);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer shrink-0 ${
+                        isLight ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-sky-600 text-white hover:bg-sky-500'
+                      }`}
+                    >
+                      Publish
+                    </button>
+                  </div>
+                  <p className={`text-[9px] leading-snug ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {mqttSendStatus ? <span className="text-emerald-400 font-semibold">✓ {mqttSendStatus}</span> : 'Terhubung ke broker MQTT publik via WebSocket (HiveMQ / EMQX / Mosquitto) & memicu callback sketch.'}
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
