@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 interface PythonLogoProps {
   className?: string;
@@ -6,12 +6,16 @@ interface PythonLogoProps {
 }
 
 /**
- * Official two-tone Python Programming Language Logo (Blue & Yellow interlocking icon)
+ * Official two-tone Python Programming Language Logo (PSF Blue & Yellow interlocking icon)
  */
 export const PythonLogo: React.FC<PythonLogoProps> = ({ className = 'w-4 h-4', size }) => {
+  const uid = useId().replace(/:/g, '');
+  const blueGradId = `pyBlue_${uid}`;
+  const yellowGradId = `pyYellow_${uid}`;
+
   return (
     <svg
-      viewBox="0 0 110 110"
+      viewBox="0 0 256 255"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`inline-block flex-shrink-0 ${className}`}
@@ -19,24 +23,24 @@ export const PythonLogo: React.FC<PythonLogoProps> = ({ className = 'w-4 h-4', s
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="pyBlueGrad" x1="15%" y1="12%" x2="78%" y2="78%">
+        <linearGradient id={blueGradId} x1="12.959%" y1="12.039%" x2="79.639%" y2="78.201%">
           <stop offset="0%" stopColor="#387EB8" />
           <stop offset="100%" stopColor="#366994" />
         </linearGradient>
-        <linearGradient id="pyYellowGrad" x1="25%" y1="22%" x2="88%" y2="88%">
+        <linearGradient id={yellowGradId} x1="19.128%" y1="20.579%" x2="90.742%" y2="88.429%">
           <stop offset="0%" stopColor="#FFE052" />
           <stop offset="100%" stopColor="#FFC331" />
         </linearGradient>
       </defs>
-      {/* Top / Left Blue Python Half */}
+      {/* Official Top / Left Blue Python Half */}
       <path
-        d="M54.5 7C39.2 7 40.2 13.6 40.2 13.6L40.22 27.2H54.8V31.3H28.3C28.3 31.3 15.6 29.8 15.6 49.9C15.6 70 26.7 69.3 26.7 69.3H33.3V55.7C33.3 55.7 32.9 44.6 44.2 44.6H63.1C63.1 44.6 73.7 44.8 73.7 34.4V17.1C73.7 17.1 75.3 7 54.5 7ZM44.1 12.9C46 12.9 47.5 14.4 47.5 16.3C47.5 18.2 46 19.7 44.1 19.7C42.2 19.7 40.7 18.2 40.7 16.3C40.7 14.4 42.2 12.9 44.1 12.9Z"
-        fill="url(#pyBlueGrad)"
+        d="M126.916.072c-64.832 0-60.784 28.115-60.784 28.115l.072 29.128h61.868v8.745H41.631S.145 61.355.145 126.77c0 65.417 36.21 63.097 36.21 63.097h21.61v-30.356s-1.165-36.21 35.632-36.21h61.362s34.475.557 34.475-33.319V33.97S194.67.072 126.916.072zM92.802 19.66a11.12 11.12 0 0 1 11.13 11.13 11.12 11.12 0 0 1-11.13 11.13 11.12 11.12 0 0 1-11.13-11.13 11.12 11.12 0 0 1 11.13-11.13z"
+        fill={`url(#${blueGradId})`}
       />
-      {/* Bottom / Right Yellow Python Half */}
+      {/* Official Bottom / Right Yellow Python Half */}
       <path
-        d="M55.5 103C70.8 103 69.8 96.4 69.8 96.4L69.78 82.8H55.2V78.7H81.7C81.7 78.7 94.4 80.2 94.4 60.1C94.4 40 83.3 40.7 83.3 40.7H76.7V54.3C76.7 54.3 77.1 65.4 65.8 65.4H46.9C46.9 65.4 36.3 65.2 36.3 75.6V92.9C36.3 92.9 34.7 103 55.5 103ZM65.9 97.1C64 97.1 62.5 95.6 62.5 93.7C62.5 91.8 64 90.3 65.9 90.3C67.8 90.3 69.3 91.8 69.3 93.7C69.3 95.6 67.8 97.1 65.9 97.1Z"
-        fill="url(#pyYellowGrad)"
+        d="M128.757 254.126c64.832 0 60.784-28.115 60.784-28.115l-.072-29.127H127.6v-8.745h86.441s41.486 4.705 41.486-60.712c0-65.416-36.21-63.096-36.21-63.096h-21.61v30.355s1.165 36.21-35.632 36.21h-61.362s-34.475-.557-34.475 33.32v56.013s-5.235 33.897 62.518 33.897zm34.114-19.586a11.12 11.12 0 0 1-11.13-11.13 11.12 11.12 0 0 1 11.13-11.131 11.12 11.12 0 0 1 11.13 11.13 11.12 11.12 0 0 1-11.13 11.13z"
+        fill={`url(#${yellowGradId})`}
       />
     </svg>
   );

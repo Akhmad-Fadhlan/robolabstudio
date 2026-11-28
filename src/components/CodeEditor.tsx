@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, ChevronRight, Link, FileCode2, Unplug } from 'lucide-react';
 import { fileExtension, isCppSourceFile, isPythonSourceFile } from '../utils/sourceFileTypes';
 import { PythonLogo } from './icons/PythonLogo';
+import { ArduinoLogo } from './icons/ArduinoLogo';
 
 // Self-contained Monaco Editor component that uses direct ES module import
 // This completely bypasses @monaco-editor/react and its AMD loader (which conflicts with Electron)
@@ -351,7 +352,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               >
                 <div className="flex items-center justify-center">
                   {fileExtension(filename) === 'ino' ? (
-                    <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-emerald-500/50'}`} />
+                    <ArduinoLogo className="w-3.5 h-3.5" />
                   ) : isCppSourceFile(filename) ? (
                     <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'bg-sky-400/50'}`} />
                   ) : isPythonSourceFile(filename) ? (

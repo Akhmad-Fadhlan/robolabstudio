@@ -6,7 +6,7 @@ interface MicroPythonLogoProps {
 }
 
 /**
- * Official MicroPython Logo (Stylized circuit M badge with terminal dot)
+ * Official MicroPython Logo (Exact official 24x24 geometric M block mark)
  */
 export const MicroPythonLogo: React.FC<MicroPythonLogoProps> = ({ className = 'w-4 h-4', size }) => {
   return (
@@ -18,18 +18,13 @@ export const MicroPythonLogo: React.FC<MicroPythonLogoProps> = ({ className = 'w
       style={size ? { width: size, height: size } : undefined}
       aria-hidden="true"
     >
-      {/* Official dark graphite chip badge */}
-      <rect width="28" height="28" rx="5.5" fill="#2B2728" />
-      {/* MicroPython stylized M circuit path */}
+      {/* Official MicroPython high-contrast square badge */}
+      <rect x="0.75" y="0.75" width="26.5" height="26.5" rx="4" fill="#222222" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
       <g transform="translate(2, 2)">
+        {/* Official MicroPython M geometric blocks */}
         <path
-          d="M0 0h11.509v18.737h.982V0H24v24h-5.263V5.263h-.983V24H6.246V5.263l-.983.035V24H0z"
+          d="M0 0h11.509v18.737h.982V0H24v24h-5.263V5.263h-.983V24H6.246V5.263l-.983.035V24H0zm22.246 19.509h-1.404v2.386h1.404z"
           fill="#FFFFFF"
-        />
-        {/* Terminal pin indicator */}
-        <path
-          d="M22.246 19.509h-1.404v2.386h1.404z"
-          fill="#E03A3E"
         />
       </g>
     </svg>

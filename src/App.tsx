@@ -25,6 +25,8 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { TerminalPanel } from './components/layout/TerminalPanel';
 import { CompilerBridgeModal } from './components/CompilerBridgeModal';
 import { PythonLogo } from './components/icons/PythonLogo';
+import { ArduinoLogo } from './components/icons/ArduinoLogo';
+import { MicroPythonLogo } from './components/icons/MicroPythonLogo';
 import { BlockFieldGuide } from './components/learning/BlockFieldGuide';
 import { ProjectWorkshop } from './components/learning/ProjectWorkshop';
 import { LessonWiring } from './components/learning/LessonWiring';
@@ -9245,6 +9247,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           onOpenSettings={() => setShowSettingsModal(true)}
           onOpenHelp={() => setShowHelpModal(true)}
           themeMode={themeMode}
+          themeColor={themeColor}
         />
 
         {/* B. MAIN INTERFACE TABS CONTROLLER */}
@@ -9822,6 +9825,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                             >
                                               {ext === 'py' ? (
                                                 <PythonLogo className="w-3.5 h-3.5 flex-shrink-0" />
+                                              ) : ext === 'ino' ? (
+                                                <ArduinoLogo className="w-3.5 h-3.5 flex-shrink-0" />
                                               ) : (
                                                 <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
                                               )}
@@ -9860,6 +9865,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                       >
                                         {ext === 'py' ? (
                                           <PythonLogo className="w-3.5 h-3.5 flex-shrink-0" />
+                                        ) : ext === 'ino' ? (
+                                          <ArduinoLogo className="w-3.5 h-3.5 flex-shrink-0" />
                                         ) : (
                                           <FileIcon className={`w-3 h-3 ${iconColor} flex-shrink-0`} />
                                         )}
@@ -9905,7 +9912,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   {(board === 'BBC micro:bit' ? ['.py'] : ['.ino', '.py']).map(extension => (
                     <button key={extension} type="button"
                       aria-pressed={uiMode === 'pro' && workspaceMode === 'split' && activeFile.endsWith(extension) && !isBlocklyCollapsed && !isEditorCollapsed}
-                      className="lab-control rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="lab-control rounded-lg px-2.5 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5"
                       onClick={() => {
                         const defaultPath = extension === '.py' ? 'python/main.py' : 'firmware/main.ino';
                         const path = activeFile.endsWith(extension) ? activeFile : Object.keys(files).find(name => name.endsWith(extension)) ?? defaultPath;
@@ -9916,7 +9923,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         setIsBlocklyCollapsed(false);
                         setIsEditorCollapsed(false);
                       }}>
-                      {extension === '.ino' ? 'Arduino .ino + Blok' : 'Blok + Python'}
+                      {extension === '.ino' ? (
+                        <>
+                          <ArduinoLogo className="w-3.5 h-3.5" />
+                          <span>Arduino .ino + Blok</span>
+                        </>
+                      ) : (
+                        <>
+                          <PythonLogo className="w-3.5 h-3.5" />
+                          <span>Blok + Python</span>
+                        </>
+                      )}
                     </button>
                   ))}
                   {board === 'BBC micro:bit' && <button type="button" disabled={!canOpenPxtWorkspace}
@@ -10313,7 +10330,10 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                     style={pkgTab === tab ? { background: 'var(--accent-gradient)' } : {}}
                   >
                     {tab === 'arduino' ? (
-                      '⚡ Arduino Library'
+                      <span className="inline-flex items-center gap-1.5">
+                        <ArduinoLogo className="w-4 h-4" />
+                        <span>Arduino Library</span>
+                      </span>
                     ) : tab === 'python' ? (
                       <span className="inline-flex items-center gap-1.5">
                         <PythonLogo className="w-3.5 h-3.5" />
@@ -11171,13 +11191,19 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   <nav aria-label="Jalur belajar" className="grid grid-cols-2 sm:flex gap-1.5 rounded-xl bg-slate-500/10 p-1.5 w-full sm:w-auto">
                     {(['fundamental','micropython','hardware','projects'] as const).map((key,i) => {
                       const active = showLearningProjects ? key === 'projects' : key === learningCategory;
-                      const navLabels = ['🐍 Dasar Python', '⚡ MicroPython IoT', '🤖 Elektronik Arduino', '🛠️ Proyek Seru'];
+                      const navLabels = ['Dasar Python', 'MicroPython IoT', 'Elektronik Arduino', 'Proyek Seru'];
+                      const navIcons = [
+                        <PythonLogo key="py" className="w-4 h-4" />,
+                        <MicroPythonLogo key="mpy" className="w-4 h-4" />,
+                        <ArduinoLogo key="ino" className="w-4 h-4" />,
+                        <span key="proj" className="text-sm leading-none">🛠️</span>,
+                      ];
                       return <button key={key} type="button" aria-pressed={active}
                         onClick={() => {
                           setShowLearningProjects(key === 'projects');
                           if (key !== 'projects' && key !== learningCategory) { setLearningCategory(key); setActiveLessonIndex(0); }
                         }}
-                        className={`min-h-10 rounded-xl px-3.5 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                        className={`min-h-10 rounded-xl px-3.5 text-xs sm:text-sm font-extrabold transition cursor-pointer inline-flex items-center justify-center gap-2 ${
                           active
                             ? 'text-white shadow-sm'
                             : themeMode === 'light'
@@ -11192,7 +11218,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               }
                             : undefined
                         }>
-                        {navLabels[i]}
+                        {navIcons[i]}
+                        <span>{navLabels[i]}</span>
                       </button>;
                     })}
                   </nav>
@@ -11561,7 +11588,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             desc: 'Program utama mikrokontroler C++ (setup & loop)',
             defaultBase: 'main',
             suggestions: ['main', 'sensor', 'motor_control', 'iot_blynk'],
-            icon: <Cpu className="w-4 h-4" />
+            icon: <ArduinoLogo className="w-4 h-4" />
           },
           {
             ext: 'py',
@@ -11570,7 +11597,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             desc: 'Skrip Python untuk robotika, AI Vision & IoT',
             defaultBase: 'main',
             suggestions: ['main', 'robot_ai', 'sensor_node', 'vision'],
-            icon: <PythonLogo className="w-4 h-4" />
+            icon: <span className="inline-flex items-center gap-1"><PythonLogo className="w-4 h-4" /><MicroPythonLogo className="w-3.5 h-3.5" /></span>
           },
           {
             ext: 'h',

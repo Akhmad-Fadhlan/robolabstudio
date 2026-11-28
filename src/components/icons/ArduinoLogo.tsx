@@ -6,7 +6,7 @@ interface ArduinoLogoProps {
 }
 
 /**
- * Official Arduino Logo (Teal infinity loop with minus & plus symbols)
+ * Official Arduino Infinity Logo (Teal #00979C infinity loops with bold minus & plus)
  */
 export const ArduinoLogo: React.FC<ArduinoLogoProps> = ({ className = 'w-4 h-4', size }) => {
   return (

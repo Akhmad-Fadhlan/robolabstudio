@@ -3,16 +3,13 @@ import {
   Play,
   Square,
   RotateCcw,
-  Camera,
   Maximize2,
   Minimize2,
   Upload,
-  Download,
   Settings,
   Sliders,
   Cpu,
   Zap,
-  Trash2,
   Sparkles,
   CheckCircle2,
   OctagonAlert,
@@ -1632,278 +1629,560 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           : (sensorWingWidth - 4.5) * 2;
 
       if (isIchibotStyle) {
-        // ── ICHIBOT ULTIMATE 5 DELTA / V-WING MATTE-BLACK PCB CHASSIS ──
-        // 1. Soft ground shadow matching Ichibot delta wing + crescent sensor bar
-        const ichiShadow: Array<[number, number]> = [
-          [44, 0],
-          [38, -sensorWingWidth * 0.72],
-          [24, -sensorWingWidth],
-          [18, -sensorWingWidth * 0.92],
-          [16, -15],
-          [4, -27],
-          [-26, -32],
-          [-34, -18],
-          [-36, 0],
-          [-34, 18],
-          [-26, 32],
-          [4, 27],
-          [16, 15],
-          [18, sensorWingWidth * 0.92],
-          [24, sensorWingWidth],
-          [38, sensorWingWidth * 0.72],
-        ];
-        const shadow2D = ichiShadow.map(([lx, ly]) => {
-          const wp = localToWorld(lx, ly);
-          return project3D(wp.wx, wp.wy, 0.5);
-        });
-        ctx.fillStyle = 'rgba(2, 6, 23, 0.42)';
-        ctx.beginPath();
-        shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
-        ctx.closePath();
-        ctx.fill();
+        if (cameraMode === '2d_top') {
+          // ── HIGH-PRECISION CURVED BEZIER 2D TOP-DOWN ICHIBOT ULTIMATE 5 RENDERER ──
+          const fitScale = Math.min((cw - 60) / TRACK_W, (ch - 60) / TRACK_H) * camZoom;
+          const robotCenter = project3D(s.x, s.y, 0);
+          ctx.save();
+          ctx.translate(robotCenter.sx, robotCenter.sy);
+          ctx.rotate(s.theta);
+          ctx.scale(fitScale * rScale, fitScale * rScale);
 
-        // 2. Crimson-Red Rear Competition Wheels with Metallic Silver Inner Hubs
-        for (const side of [-1, 1]) {
-          const yInner = side * 20.5;
-          const yOuter = side * 31.5;
+          const sw = sensorWingWidth;
 
-          // Silver metal motor bracket & inner hub
+          // 1. Soft Ambient Ground Drop Shadow
+          ctx.save();
+          ctx.shadowColor = 'rgba(2, 6, 23, 0.55)';
+          ctx.shadowBlur = 14;
+          ctx.shadowOffsetY = 3;
+          ctx.fillStyle = 'rgba(2, 6, 23, 0.32)';
+          ctx.beginPath();
+          ctx.moveTo(43.5, 0);
+          ctx.bezierCurveTo(43.5, -sw * 0.55, 36, -sw * 1.02, 23, -sw * 1.02);
+          ctx.lineTo(19, -sw * 0.85);
+          ctx.quadraticCurveTo(25, -14, 15, -12);
+          ctx.bezierCurveTo(10, -25, -4, -29, -24, -29);
+          ctx.bezierCurveTo(-33, -26, -37, -14, -37, 0);
+          ctx.bezierCurveTo(-37, 14, -33, 26, -24, 29);
+          ctx.bezierCurveTo(-4, 29, 10, 25, 15, 12);
+          ctx.quadraticCurveTo(25, 14, 19, sw * 0.85);
+          ctx.lineTo(23, sw * 1.02);
+          ctx.bezierCurveTo(36, sw * 1.02, 43.5, sw * 0.55, 43.5, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+
+          // 2. Crimson-Red Competition Rear Wheels + Silver Machined Aluminum Hubs + Brass N20 Gearboxes
+          for (const side of [-1, 1]) {
+            const ySign = side;
+            // Brass N20 Gearbox & Silver Motor Bracket
+            ctx.fillStyle = '#eab308';
+            ctx.strokeStyle = '#a16207';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.roundRect(-21.5, ySign > 0 ? 11.5 : -19.5, 17, 8, 1.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.strokeStyle = '#64748b';
+            ctx.beginPath();
+            ctx.roundRect(-18, ySign > 0 ? 17.5 : -21.5, 11, 4, 1);
+            ctx.fill();
+            ctx.stroke();
+
+            // Crimson Competition Rubber Tire with Rounded Shoulders
+            const tireY = ySign > 0 ? 20.5 : -32;
+            const tireGrad = ctx.createLinearGradient(-25, tireY, 4, tireY + 11.5);
+            tireGrad.addColorStop(0, '#991b1b');
+            tireGrad.addColorStop(0.5, '#ef4444');
+            tireGrad.addColorStop(1, '#7f1d1d');
+            ctx.fillStyle = tireGrad;
+            ctx.strokeStyle = '#fca5a5';
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.roundRect(-25, tireY, 29, 11.5, 3.2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Silver Machined Outer Wheel Rim Cap
+            ctx.fillStyle = '#e2e8f0';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.roundRect(-21, ySign > 0 ? 29.2 : -31.7, 21, 2.4, 1);
+            ctx.fill();
+            ctx.stroke();
+
+            // Animated Tire Tread Grooves
+            ctx.strokeStyle = 'rgba(69, 10, 10, 0.78)';
+            ctx.lineWidth = 1.3;
+            const treadPhase = ((s.wheelAngle * 5.5) % 5.5 + 5.5) % 5.5;
+            for (let tx = -22 + treadPhase; tx <= 1.5; tx += 5.5) {
+              ctx.beginPath();
+              ctx.moveTo(tx, tireY + 1.2);
+              ctx.lineTo(tx - 1.2, tireY + 10.3);
+              ctx.stroke();
+            }
+          }
+
+          // 3. Smooth Curved Ichibot Ultimate 5 Matte-Black Carbon PCB Main Chassis
+          const pcbGrad = ctx.createLinearGradient(-36, -26, 28, 26);
+          pcbGrad.addColorStop(0, '#090d16');
+          pcbGrad.addColorStop(0.5, '#151c2c');
+          pcbGrad.addColorStop(1, '#0b101b');
+          ctx.fillStyle = pcbGrad;
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1.35;
+
+          ctx.beginPath();
+          ctx.moveTo(27, -7.2);
+          ctx.lineTo(27, 7.2);
+          // Neck curving smoothly into right tactile button wing
+          ctx.bezierCurveTo(21, 7.8, 17, 10.5, 13.5, 17.5);
+          ctx.bezierCurveTo(10.5, 23.5, 6.5, 26.2, 0, 26.2);
+          ctx.bezierCurveTo(-3.5, 26.2, -4.5, 21.5, -5.5, 19.6);
+          // Right wheel bay cutout
+          ctx.lineTo(-23.5, 19.6);
+          // Rear right bumper lobe
+          ctx.bezierCurveTo(-25, 24.8, -28.5, 25.5, -31.5, 21.5);
+          // Smooth curved rear tail bridge
+          ctx.bezierCurveTo(-35.5, 15, -36.8, 7.5, -36.8, 0);
+          ctx.bezierCurveTo(-36.8, -7.5, -35.5, -15, -31.5, -21.5);
+          // Rear left bumper lobe
+          ctx.bezierCurveTo(-28.5, -25.5, -25, -24.8, -23.5, -19.6);
+          // Left wheel bay cutout
+          ctx.lineTo(-5.5, -19.6);
+          ctx.bezierCurveTo(-4.5, -21.5, -3.5, -26.2, 0, -26.2);
+          // Left tactile button wing curving back to neck
+          ctx.bezierCurveTo(6.5, -26.2, 10.5, -23.5, 13.5, -17.5);
+          ctx.bezierCurveTo(17, -10.5, 21, -7.8, 27, -7.2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Inner cyan/silver PCB silkscreen accent contour
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+          ctx.lineWidth = 0.7;
+          ctx.stroke();
+
+          // 4. Sweeping Crescent Front Sensor Wing with Signature Hook Tips
+          const wingGrad = ctx.createLinearGradient(20, -sw, 44, sw);
+          wingGrad.addColorStop(0, '#0a0e18');
+          wingGrad.addColorStop(0.5, '#172033');
+          wingGrad.addColorStop(1, '#0a0e18');
+          ctx.fillStyle = wingGrad;
+          ctx.strokeStyle = '#f8fafc';
+          ctx.lineWidth = 1.35;
+
+          ctx.beginPath();
+          // Front curved nose tip
+          ctx.moveTo(43.8, 0);
+          ctx.bezierCurveTo(43.8, -sw * 0.44, 39.2, -sw * 0.88, 30.5, -sw * 1.02);
+          // Left hook tip
+          ctx.bezierCurveTo(25.5, -sw * 1.06, 20.5, -sw * 0.98, 19.5, -sw * 0.86);
+          ctx.bezierCurveTo(19.2, -sw * 0.78, 23.5, -sw * 0.76, 26.2, -sw * 0.72);
+          // Inner crescent curve back to neck
+          ctx.bezierCurveTo(29.5, -sw * 0.45, 29.2, -12, 24.5, -7.2);
+          ctx.lineTo(24.5, 7.2);
+          ctx.bezierCurveTo(29.2, 12, 29.5, sw * 0.45, 26.2, sw * 0.72);
+          // Right hook tip
+          ctx.bezierCurveTo(23.5, sw * 0.76, 19.2, sw * 0.78, 19.5, sw * 0.86);
+          ctx.bezierCurveTo(20.5, sw * 0.98, 25.5, sw * 1.06, 30.5, sw * 1.02);
+          ctx.bezierCurveTo(39.2, sw * 0.88, 43.8, sw * 0.44, 43.8, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // 5. Metallic M3 Mounting Standoffs / Screws with Phillips Cross
+          const screws: Array<[number, number]> = [
+            [27.5, -6.5],
+            [27.5, 6.5],
+            [33, -sw * 0.72],
+            [33, sw * 0.72],
+            [-27, -14],
+            [-27, 14],
+          ];
+          for (const [sx, sy] of screws) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 1.85, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 0.45;
+            ctx.beginPath();
+            ctx.moveTo(sx - 1, sy);
+            ctx.lineTo(sx + 1, sy);
+            ctx.moveTo(sx, sy - 1);
+            ctx.lineTo(sx, sy + 1);
+            ctx.stroke();
+          }
+
+          // 6. White ICHIBOT DRIVER HUB Bar + 4-Color Ribbon Wires to Left & Right Motors
+          const ribbonColors = ['#eab308', '#f97316', '#ef4444', '#3b82f6'];
+          for (const side of [-1, 1]) {
+            ribbonColors.forEach((col, wIdx) => {
+              ctx.strokeStyle = col;
+              ctx.lineWidth = 1.15;
+              ctx.beginPath();
+              ctx.moveTo(-12.5 - wIdx * 0.9, side * (12.2 + wIdx * 0.4));
+              ctx.quadraticCurveTo(
+                -18.5 - wIdx * 1.1,
+                side * (16.8 + wIdx * 0.5),
+                -14.5 - wIdx * 1.2,
+                side * 19.8
+              );
+              ctx.stroke();
+            });
+          }
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          ctx.roundRect(-17.5, -13.5, 6.2, 27, 1.8);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.save();
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = '#0f172a';
+          ctx.font = '900 3.1px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('ICHIBOT HUB', 0, -14.4);
+          ctx.restore();
+
+          // 7. Central Blue-Bezel 128x64 OLED Display Module with Crisp Telemetry Text
+          ctx.fillStyle = '#1d4ed8';
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 0.95;
+          ctx.beginPath();
+          ctx.roundRect(-10.2, -10.8, 22.4, 21.6, 2.4);
+          ctx.fill();
+          ctx.stroke();
+
+          // Inner Black OLED Glass Screen
+          ctx.fillStyle = '#020617';
+          ctx.beginPath();
+          ctx.roundRect(-8.4, -9.4, 18.8, 18.8, 1.5);
+          ctx.fill();
+
+          // Readable OLED Screen Telemetry rotated upright along chassis
+          ctx.save();
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#fde047';
+          ctx.font = '900 3.2px monospace';
+          ctx.fillText('ICHIBOT 5S', 0, -4.8);
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = '800 2.9px monospace';
+          ctx.fillText(`P:${currentPlan?.planId ?? 1} IDX:${execStatus.stepIndex ?? chosenStep ?? 0}`, 0, 0.2);
+          ctx.fillStyle = isRunning ? '#4ade80' : '#94a3b8';
+          ctx.font = '800 2.7px monospace';
+          ctx.fillText(isRunning ? `${liveSpeeds.l}/${liveSpeeds.r}` : 'READY', 0, 4.8);
+          ctx.restore();
+
+          // 8. 6 Tactile Push Buttons on Left & Right Wings (UPL/OKL/DWNL green, UPR/OKR/DWNR red)
+          const btnPositions: Array<{ x: number; labelL: string; labelR: string }> = [
+            { x: 7.2, labelL: 'UPL', labelR: 'UPR' },
+            { x: 1.8, labelL: 'OKL', labelR: 'OKR' },
+            { x: -3.6, labelL: 'DWN', labelR: 'DWN' },
+          ];
+          for (const btn of btnPositions) {
+            // Silver SMD switch base Left
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(btn.x - 2.1, -20.1, 4.2, 4.2);
+            // Green Tactile Cap Left
+            ctx.fillStyle = '#10b981';
+            ctx.strokeStyle = '#ecfdf5';
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.arc(btn.x, -18, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Silver SMD switch base Right
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(btn.x - 2.1, 15.9, 4.2, 4.2);
+            // Red Tactile Cap Right
+            ctx.fillStyle = '#ef4444';
+            ctx.strokeStyle = '#fef2f2';
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.arc(btn.x, 18, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // Rear Tail Bridge Glow Badge
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(-30.5, 0, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#bae6fd';
+          ctx.lineWidth = 0.7;
+          ctx.stroke();
+
+          ctx.restore();
+        } else {
+          // ── ICHIBOT ULTIMATE 5 3D EXTRUDED PERSPECTIVE RENDERER ──
+          const ichiShadow: Array<[number, number]> = [
+            [44, 0],
+            [38, -sensorWingWidth * 0.72],
+            [24, -sensorWingWidth],
+            [18, -sensorWingWidth * 0.92],
+            [16, -15],
+            [4, -27],
+            [-26, -32],
+            [-34, -18],
+            [-36, 0],
+            [-34, 18],
+            [-26, 32],
+            [4, 27],
+            [16, 15],
+            [18, sensorWingWidth * 0.92],
+            [24, sensorWingWidth],
+            [38, sensorWingWidth * 0.72],
+          ];
+          const shadow2D = ichiShadow.map(([lx, ly]) => {
+            const wp = localToWorld(lx, ly);
+            return project3D(wp.wx, wp.wy, 0.5);
+          });
+          ctx.fillStyle = 'rgba(2, 6, 23, 0.42)';
+          ctx.beginPath();
+          shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
+          ctx.closePath();
+          ctx.fill();
+
+          for (const side of [-1, 1]) {
+            const yInner = side * 20.5;
+            const yOuter = side * 31.5;
+
+            drawExtrudedLocalPoly(
+              [
+                [-3, side * 12],
+                [-3, yInner],
+                [-22, yInner],
+                [-22, side * 12],
+              ],
+              4,
+              13,
+              '#cbd5e1',
+              '#64748b',
+              '#94a3b8',
+              '#f8fafc',
+              0.9
+            );
+
+            drawExtrudedLocalPoly(
+              [
+                [4, yInner],
+                [4, yOuter],
+                [-25, yOuter],
+                [-25, yInner],
+              ],
+              1,
+              19.5,
+              '#dc2626',
+              '#991b1b',
+              '#b91c1c',
+              '#fca5a5',
+              1.1
+            );
+
+            drawExtrudedLocalPoly(
+              [
+                [-1, yOuter - side * 2.2],
+                [-1, yOuter - side * 0.3],
+                [-20, yOuter - side * 0.3],
+                [-20, yOuter - side * 2.2],
+              ],
+              5,
+              15.5,
+              '#e2e8f0',
+              '#94a3b8',
+              '#cbd5e1',
+              '#475569',
+              0.8
+            );
+
+            ctx.strokeStyle = '#450a0a';
+            ctx.lineWidth = 1.5;
+            const treadPhase = ((s.wheelAngle * 6) % 6 + 6) % 6;
+            for (let tx = -22 + treadPhase; tx <= 2; tx += 6) {
+              const pA = localToWorld(tx, yInner + side * 1.1);
+              const pB = localToWorld(tx, yOuter - side * 1.1);
+              const sA = project3D(pA.wx, pA.wy, 19.9 * rScale);
+              const sB = project3D(pB.wx, pB.wy, 19.9 * rScale);
+              ctx.beginPath();
+              ctx.moveTo(sA.sx, sA.sy);
+              ctx.lineTo(sB.sx, sB.sy);
+              ctx.stroke();
+            }
+          }
+
+          const deltaBodyPts: Array<[number, number]> = [
+            [26, -7.5],
+            [26, 7.5],
+            [18, 9.5],
+            [13, 18],
+            [7, 25],
+            [-2, 26],
+            [-4, 19.5],
+            [-24, 19.5],
+            [-26, 25],
+            [-32, 21],
+            [-35, 11],
+            [-36.5, 0],
+            [-35, -11],
+            [-32, -21],
+            [-26, -25],
+            [-24, -19.5],
+            [-4, -19.5],
+            [-2, -26],
+            [7, -25],
+            [13, -18],
+            [18, -9.5],
+          ];
+          drawExtrudedLocalPoly(
+            deltaBodyPts,
+            5,
+            12.5,
+            '#111622',
+            '#060911',
+            '#1e293b',
+            '#94a3b8',
+            1.5
+          );
+
+          const crescentPts: Array<[number, number]> = [
+            [43.5, 0],
+            [42.2, -sensorWingWidth * 0.28],
+            [39.5, -sensorWingWidth * 0.56],
+            [35.5, -sensorWingWidth * 0.82],
+            [30, -sensorWingWidth],
+            [21, -sensorWingWidth],
+            [19.5, -sensorWingWidth * 0.85],
+            [25.5, -sensorWingWidth * 0.76],
+            [28.5, -sensorWingWidth * 0.45],
+            [28.5, -11.5],
+            [24, -7.5],
+            [24, 7.5],
+            [28.5, 11.5],
+            [28.5, sensorWingWidth * 0.45],
+            [25.5, sensorWingWidth * 0.76],
+            [19.5, sensorWingWidth * 0.85],
+            [21, sensorWingWidth],
+            [30, sensorWingWidth],
+            [35.5, sensorWingWidth * 0.82],
+            [39.5, sensorWingWidth * 0.56],
+            [42.2, sensorWingWidth * 0.28],
+          ];
+          drawExtrudedLocalPoly(
+            crescentPts,
+            3.5,
+            11.2,
+            '#0c101a',
+            '#020617',
+            '#1e293b',
+            '#e2e8f0',
+            1.4
+          );
+
           drawExtrudedLocalPoly(
             [
-              [-3, side * 12],
-              [-3, yInner],
-              [-22, yInner],
-              [-22, side * 12],
+              [-11, -13],
+              [-11, 13],
+              [-16.5, 13],
+              [-16.5, -13],
             ],
-            4,
-            13,
-            '#cbd5e1',
-            '#64748b',
-            '#94a3b8',
+            12.6,
+            15.5,
             '#f8fafc',
+            '#cbd5e1',
+            '#94a3b8',
+            '#475569',
             0.9
           );
 
-          // Crimson-Red Competition Tire
+          const ribbonColors = ['#eab308', '#f97316', '#ef4444', '#3b82f6'];
+          for (const side of [-1, 1]) {
+            ribbonColors.forEach((col, wIdx) => {
+              const startW = localToWorld(-13 - wIdx * 0.8, side * (11 + wIdx * 0.5));
+              const midW = localToWorld(-18 - wIdx * 1.1, side * (16.5 + wIdx * 0.6));
+              const endW = localToWorld(-14 - wIdx * 1.3, side * 19.5);
+              const p0 = project3D(startW.wx, startW.wy, 13.8 * rScale);
+              const p1 = project3D(midW.wx, midW.wy, 14.2 * rScale);
+              const p2 = project3D(endW.wx, endW.wy, 13.2 * rScale);
+              ctx.strokeStyle = col;
+              ctx.lineWidth = 1.35;
+              ctx.beginPath();
+              ctx.moveTo(p0.sx, p0.sy);
+              ctx.quadraticCurveTo(p1.sx, p1.sy, p2.sx, p2.sy);
+              ctx.stroke();
+            });
+          }
+
           drawExtrudedLocalPoly(
             [
-              [4, yInner],
-              [4, yOuter],
-              [-25, yOuter],
-              [-25, yInner],
+              [11, -9.5],
+              [11, 9.5],
+              [-9.5, 9.5],
+              [-9.5, -9.5],
             ],
-            1,
-            19.5,
-            '#dc2626',
-            '#991b1b',
-            '#b91c1c',
-            '#fca5a5',
-            1.1
+            12.6,
+            16.5,
+            '#050811',
+            '#0f172a',
+            '#1e293b',
+            '#38bdf8',
+            1.2
           );
 
-          // Silver Outer Rim Cap
-          drawExtrudedLocalPoly(
-            [
-              [-1, yOuter - side * 2.2],
-              [-1, yOuter - side * 0.3],
-              [-20, yOuter - side * 0.3],
-              [-20, yOuter - side * 2.2],
-            ],
-            5,
-            15.5,
-            '#e2e8f0',
-            '#94a3b8',
-            '#cbd5e1',
-            '#475569',
-            0.8
-          );
+          const oledTop = localToWorld(4.5, 0);
+          const oledMid = localToWorld(0.5, 0);
+          const oledBot = localToWorld(-4.5, 0);
+          const pOledTop = project3D(oledTop.wx, oledTop.wy, 17 * rScale);
+          const pOledMid = project3D(oledMid.wx, oledMid.wy, 17 * rScale);
+          const pOledBot = project3D(oledBot.wx, oledBot.wy, 17 * rScale);
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(pOledTop.sx, pOledTop.sy, Math.max(1.8, 2.5 * pOledTop.scale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#f8fafc';
+          ctx.beginPath();
+          ctx.arc(pOledMid.sx, pOledMid.sy, Math.max(1.5, 2.1 * pOledMid.scale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(pOledBot.sx, pOledBot.sy, Math.max(1.5, 2.0 * pOledBot.scale), 0, Math.PI * 2);
+          ctx.fill();
 
-          // Rotating Dark Crimson Tread Grooves
-          ctx.strokeStyle = '#450a0a';
-          ctx.lineWidth = 1.5;
-          const treadPhase = ((s.wheelAngle * 6) % 6 + 6) % 6;
-          for (let tx = -22 + treadPhase; tx <= 2; tx += 6) {
-            const pA = localToWorld(tx, yInner + side * 1.1);
-            const pB = localToWorld(tx, yOuter - side * 1.1);
-            const sA = project3D(pA.wx, pA.wy, 19.9 * rScale);
-            const sB = project3D(pB.wx, pB.wy, 19.9 * rScale);
+          const btnOffsets = [6.5, 1.5, -3.5];
+          for (const bx of btnOffsets) {
+            const bLeft = localToWorld(bx, -17.5);
+            const pLeft = project3D(bLeft.wx, bLeft.wy, 13.8 * rScale);
+            ctx.fillStyle = '#10b981';
+            ctx.strokeStyle = '#ecfdf5';
+            ctx.lineWidth = 0.9;
             ctx.beginPath();
-            ctx.moveTo(sA.sx, sA.sy);
-            ctx.lineTo(sB.sx, sB.sy);
+            ctx.arc(pLeft.sx, pLeft.sy, Math.max(2, 2.8 * pLeft.scale * rScale), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            const bRight = localToWorld(bx, 17.5);
+            const pRight = project3D(bRight.wx, bRight.wy, 13.8 * rScale);
+            ctx.fillStyle = '#ef4444';
+            ctx.strokeStyle = '#fef2f2';
+            ctx.lineWidth = 0.9;
+            ctx.beginPath();
+            ctx.arc(pRight.sx, pRight.sy, Math.max(2, 2.8 * pRight.scale * rScale), 0, Math.PI * 2);
+            ctx.fill();
             ctx.stroke();
           }
-        }
 
-        // 3. Delta / Arrowhead Matte-Black Ichibot PCB Body with Side Wing Lobes & Rear Curved Bridge
-        const deltaBodyPts: Array<[number, number]> = [
-          [26, -7.5],
-          [26, 7.5],
-          [15, 11],
-          [7, 25],
-          [-2, 26],
-          [-4, 19.5],
-          [-24, 19.5],
-          [-26, 26],
-          [-32, 21],
-          [-35, 10],
-          [-36, 0],
-          [-35, -10],
-          [-32, -21],
-          [-26, -26],
-          [-24, -19.5],
-          [-4, -19.5],
-          [-2, -26],
-          [7, -25],
-          [15, -11],
-        ];
-        drawExtrudedLocalPoly(
-          deltaBodyPts,
-          5,
-          12.5,
-          '#111622',
-          '#060911',
-          '#1e293b',
-          '#94a3b8',
-          1.5
-        );
-
-        // 4. Sweeping Crescent Front Sensor Wing with Hook Tips (Ichibot Ultimate 5 Signature Nose)
-        const crescentPts: Array<[number, number]> = [
-          [43, 0],
-          [41.5, -sensorWingWidth * 0.35],
-          [37.5, -sensorWingWidth * 0.72],
-          [31, -sensorWingWidth],
-          [21, -sensorWingWidth],
-          [20, -sensorWingWidth * 0.84],
-          [26, -sensorWingWidth * 0.78],
-          [29, -12],
-          [24, -7.5],
-          [24, 7.5],
-          [29, 12],
-          [26, sensorWingWidth * 0.78],
-          [20, sensorWingWidth * 0.84],
-          [21, sensorWingWidth],
-          [31, sensorWingWidth],
-          [37.5, sensorWingWidth * 0.72],
-          [41.5, sensorWingWidth * 0.35],
-        ];
-        drawExtrudedLocalPoly(
-          crescentPts,
-          3.5,
-          11.2,
-          '#0c101a',
-          '#020617',
-          '#1e293b',
-          '#e2e8f0',
-          1.4
-        );
-
-        // 5. White ICHIBOT DRIVER HUB Bar + 4-Color Ribbon Wires to Left & Right Motors
-        drawExtrudedLocalPoly(
-          [
-            [-11, -13],
-            [-11, 13],
-            [-16.5, 13],
-            [-16.5, -13],
-          ],
-          12.6,
-          15.5,
-          '#f8fafc',
-          '#cbd5e1',
-          '#94a3b8',
-          '#475569',
-          0.9
-        );
-
-        // 4-Color Ribbon Wires (Yellow, Orange, Red, Blue) curving from Driver Hub to Left & Right Motor Terminals
-        const ribbonColors = ['#eab308', '#f97316', '#ef4444', '#3b82f6'];
-        for (const side of [-1, 1]) {
-          ribbonColors.forEach((col, wIdx) => {
-            const startW = localToWorld(-13 - wIdx * 0.8, side * (11 + wIdx * 0.5));
-            const midW = localToWorld(-18 - wIdx * 1.1, side * (16.5 + wIdx * 0.6));
-            const endW = localToWorld(-14 - wIdx * 1.3, side * 19.5);
-            const p0 = project3D(startW.wx, startW.wy, 13.8 * rScale);
-            const p1 = project3D(midW.wx, midW.wy, 14.2 * rScale);
-            const p2 = project3D(endW.wx, endW.wy, 13.2 * rScale);
-            ctx.strokeStyle = col;
-            ctx.lineWidth = 1.35;
-            ctx.beginPath();
-            ctx.moveTo(p0.sx, p0.sy);
-            ctx.quadraticCurveTo(p1.sx, p1.sy, p2.sx, p2.sy);
-            ctx.stroke();
-          });
-        }
-
-        // 6. Central On-Chassis Ichibot OLED Display Module
-        drawExtrudedLocalPoly(
-          [
-            [11, -9.5],
-            [11, 9.5],
-            [-9.5, 9.5],
-            [-9.5, -9.5],
-          ],
-          12.6,
-          16.5,
-          '#050811',
-          '#0f172a',
-          '#1e293b',
-          '#38bdf8',
-          1.2
-        );
-
-        // Glowing Cyan/White OLED Screen Text & Telemetry Dot
-        const oledTop = localToWorld(4.5, 0);
-        const oledMid = localToWorld(0.5, 0);
-        const oledBot = localToWorld(-4.5, 0);
-        const pOledTop = project3D(oledTop.wx, oledTop.wy, 17 * rScale);
-        const pOledMid = project3D(oledMid.wx, oledMid.wy, 17 * rScale);
-        const pOledBot = project3D(oledBot.wx, oledBot.wy, 17 * rScale);
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(pOledTop.sx, pOledTop.sy, Math.max(1.8, 2.5 * pOledTop.scale), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#f8fafc';
-        ctx.beginPath();
-        ctx.arc(pOledMid.sx, pOledMid.sy, Math.max(1.5, 2.1 * pOledMid.scale), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(pOledBot.sx, pOledBot.sy, Math.max(1.5, 2.0 * pOledBot.scale), 0, Math.PI * 2);
-        ctx.fill();
-
-        // 7. 6 Tactile Push Buttons on Left & Right Wings (UPL/OKL/DWNL green, UPR/OKR/DWNR red)
-        const btnOffsets = [6.5, 1.5, -3.5];
-        for (const bx of btnOffsets) {
-          // Left Wing Button (Green Cap)
-          const bLeft = localToWorld(bx, -17.5);
-          const pLeft = project3D(bLeft.wx, bLeft.wy, 13.8 * rScale);
-          ctx.fillStyle = '#10b981';
-          ctx.strokeStyle = '#ecfdf5';
-          ctx.lineWidth = 0.9;
+          const rearLogo = localToWorld(-30.5, 0);
+          const pRearLogo = project3D(rearLogo.wx, rearLogo.wy, 13.2 * rScale);
+          ctx.fillStyle = '#38bdf8';
           ctx.beginPath();
-          ctx.arc(pLeft.sx, pLeft.sy, Math.max(2, 2.8 * pLeft.scale * rScale), 0, Math.PI * 2);
+          ctx.arc(pRearLogo.sx, pRearLogo.sy, Math.max(1.8, 2.6 * pRearLogo.scale), 0, Math.PI * 2);
           ctx.fill();
-          ctx.stroke();
-
-          // Right Wing Button (Red Cap)
-          const bRight = localToWorld(bx, 17.5);
-          const pRight = project3D(bRight.wx, bRight.wy, 13.8 * rScale);
-          ctx.fillStyle = '#ef4444';
-          ctx.strokeStyle = '#fef2f2';
-          ctx.lineWidth = 0.9;
-          ctx.beginPath();
-          ctx.arc(pRight.sx, pRight.sy, Math.max(2, 2.8 * pRight.scale * rScale), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
         }
-
-        // Rear Bridge Silkscreen Accent & Status LEDs
-        const rearLogo = localToWorld(-30.5, 0);
-        const pRearLogo = project3D(rearLogo.wx, rearLogo.wy, 13.2 * rScale);
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(pRearLogo.sx, pRearLogo.sy, Math.max(1.8, 2.6 * pRearLogo.scale), 0, Math.PI * 2);
-        ctx.fill();
       } else {
         // ── CLASSIC T-HAMMERHEAD COMPETITION CHASSIS ──
         const shadowOutline: Array<[number, number]> = [
@@ -2244,105 +2523,228 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         className="hidden"
       />
 
-      <header className={`shrink-0 border-b px-3 py-2.5 ${isLight ? 'border-sky-100 bg-white' : 'border-slate-700 bg-slate-900'}`}>
+      {/* ── UNIFIED SLEEK TOP BAR (User-Friendly, Responsive, Elegant) ── */}
+      <header
+        className={`shrink-0 border-b px-3 py-2 transition-colors ${
+          isLight ? 'border-slate-200 bg-white/95' : 'border-slate-800 bg-[#080f1d]/95'
+        }`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-black tracking-tight">Arena Line Follower</h2>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-              isLight ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-            }`}>
-              Ichibot Ultimate 5 Edition
-            </span>
+          {/* Left: Track Selector + Upload PDF + Plan + Start Index */}
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <select
+              value={selectedTrackId}
+              disabled={isRunning}
+              aria-label="Lintasan"
+              onChange={(event) => handleSelectTrack(event.target.value)}
+              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none ${
+                isLight
+                  ? 'border-slate-300 bg-slate-50 text-slate-900 hover:border-slate-400'
+                  : 'border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-600'
+              }`}
+            >
+              {tracks.map((track) => (
+                <option key={track.id} value={track.id}>
+                  🏁 {track.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={() => pdfInputRef.current?.click()}
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition cursor-pointer disabled:opacity-50 ${
+                isLight
+                  ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
+                  : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
+              }`}
+              title="Upload file PDF atau gambar lintasan"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Upload PDF</span>
+            </button>
+
+            <select
+              value={currentPlan?.planId ?? ''}
+              disabled={isRunning || !plans.length}
+              aria-label="Plan"
+              onChange={(event) => {
+                setStartStep(null);
+                onChangePlans(plans, Number(event.target.value));
+              }}
+              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none ${
+                isLight
+                  ? 'border-slate-300 bg-slate-50 text-slate-800'
+                  : 'border-slate-700 bg-slate-900 text-slate-100'
+              }`}
+            >
+              {!currentPlan && <option value="">Belum ada Plan</option>}
+              {(plans.length ? plans : currentPlan ? [currentPlan] : []).map((plan) => (
+                <option key={plan.planId} value={plan.planId}>
+                  📋 Plan {plan.planId}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={chosenStep ?? ''}
+              disabled={isRunning || !steps.length}
+              aria-label="Mulai dari langkah"
+              onChange={(event) =>
+                setStartStep(event.target.value === '' ? null : Number(event.target.value))
+              }
+              title="Pilih langkah index awal saat simulasi dijalankan"
+              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-bold cursor-pointer outline-none ${
+                isLight
+                  ? 'border-slate-300 bg-slate-50 text-slate-700'
+                  : 'border-slate-700 bg-slate-900 text-slate-200'
+              }`}
+            >
+              <option value="">Mulai: Awal (#0)</option>
+              {steps.map((step, index) => (
+                <option key={index} value={step.index}>
+                  Mulai: Index #{step.index}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {/* Right: Primary Actions (Run/Stop, Reset, OLED, Setup Robot, PID, Arena Tools, Sync) */}
           <div className="flex flex-wrap items-center gap-1.5">
+            {onToggleRun && (
+              <button
+                type="button"
+                disabled={!isRunning && !steps.length}
+                onClick={onToggleRun}
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-xl px-3.5 py-1 text-xs font-extrabold text-white shadow-sm transition cursor-pointer disabled:opacity-50 ${
+                  isRunning
+                    ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
+                }`}
+              >
+                {isRunning ? <Square className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+                <span>{isRunning ? 'Berhenti' : 'Jalankan'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => resetRobotToStart()}
+              disabled={isRunning}
+              title="Kembalikan robot ke posisi Start"
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer disabled:opacity-50 ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+            >
+              <RotateCcw className="size-3.5" />
+              <span className="hidden sm:inline">Reset</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveDrawer(activeDrawer === 'oled' ? 'none' : 'oled')}
               aria-expanded={activeDrawer === 'oled'}
-              className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
                 activeDrawer === 'oled'
                   ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
                   : isLight
                   ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border-cyan-300'
                   : 'bg-cyan-950/60 hover:bg-cyan-900/70 text-cyan-300 border-cyan-500/40'
               }`}
-              title="Buka Layar OLED Robot & Tombol UPL/OKL/DWNL - UPR/OKR/DWNR"
+              title="Tampilkan Layar OLED Ichibot & Tombol UPL/OKL/DWNL - UPR/OKR/DWNR"
             >
-              📟 Layar OLED
+              <span>📟 OLED</span>
             </button>
-            <button type="button" onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
-              aria-expanded={activeDrawer === 'plan'} className={controlStyle}>
-              Langkah Plan
+
+            <button
+              type="button"
+              onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
+              aria-expanded={activeDrawer === 'hardware'}
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                activeDrawer === 'hardware'
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                  : isLight
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+              }`}
+              title="Konfigurasi Sasis Robot, Jumlah Sensor, Motor RPM & Pinout"
+            >
+              <Cpu className="size-3.5" />
+              <span>Robot ({hardwareConfig.sensorCount}S)</span>
             </button>
-            <button type="button" onClick={() => resetRobotToStart()} disabled={isRunning}
-              title="Kembalikan robot ke titik Start" className={`inline-flex items-center gap-1 ${controlStyle}`}>
-              <RotateCcw className="size-3.5" /> Ulang posisi
+
+            <button
+              type="button"
+              onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
+              aria-expanded={activeDrawer === 'pid'}
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                activeDrawer === 'pid'
+                  ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-sm'
+                  : isLight
+                  ? 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300'
+                  : 'bg-fuchsia-500/15 hover:bg-fuchsia-500/25 text-fuchsia-300 border-fuchsia-500/30'
+              }`}
+              title="Tuning Kombinasi PID 1 - 5"
+            >
+              <Sliders className="size-3.5" />
+              <span>PID</span>
             </button>
-            {onToggleRun && (
-              <button type="button" disabled={!isRunning && !steps.length} onClick={onToggleRun}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white disabled:opacity-50 cursor-pointer ${isRunning ? 'bg-rose-700 hover:bg-rose-800' : 'bg-blue-700 hover:bg-blue-800'}`}>
-                {isRunning ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
-                {isRunning ? 'Berhenti' : 'Jalankan'}
-              </button>
-            )}
+
+            <button
+              type="button"
+              onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
+              aria-expanded={activeDrawer === 'plan'}
+              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                activeDrawer === 'plan'
+                  ? 'bg-sky-500 text-white border-sky-400 shadow-sm'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+              title="Daftar Langkah Plan"
+            >
+              <span>Langkah ({steps.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
+              className="inline-flex min-h-8 items-center gap-1 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 px-2.5 py-1 text-xs font-extrabold shadow-sm cursor-pointer transition"
+              title="Sinkronkan konfigurasi robot, pinout, dan Plan ke Blok & Kode Arduino (.ino)"
+            >
+              <Sparkles className="size-3.5" />
+              <span className="hidden xl:inline">Sync Kode</span>
+            </button>
           </div>
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-          <label className="grid min-w-0 gap-1 font-semibold">Lintasan
-            <select value={selectedTrackId} disabled={isRunning} onChange={event => handleSelectTrack(event.target.value)} className={controlStyle}>
-              {tracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
-            </select>
-          </label>
-          <label className="grid min-w-0 gap-1 font-semibold">Plan
-            <select value={currentPlan?.planId ?? ''} disabled={isRunning || !plans.length} onChange={event => {
-              setStartStep(null);
-              onChangePlans(plans, Number(event.target.value));
-            }} className={controlStyle}>
-              {!currentPlan && <option value="">Belum ada Plan</option>}
-              {(plans.length ? plans : currentPlan ? [currentPlan] : []).map(plan => <option key={plan.planId} value={plan.planId}>Plan {plan.planId}</option>)}
-            </select>
-          </label>
-          <label className="grid min-w-0 gap-1 font-semibold">Mulai dari langkah
-            <select value={chosenStep ?? ''} disabled={isRunning || !steps.length} onChange={event => setStartStep(event.target.value === '' ? null : Number(event.target.value))}
-              title="Pilih langkah index awal saat simulasi dijalankan." className={controlStyle}>
-              <option value="">Awal Plan</option>
-              {steps.map((step, index) => <option key={index} value={step.index}>Langkah {step.index}</option>)}
-            </select>
-          </label>
-          <label className="grid min-w-0 gap-1 font-semibold">Laju simulasi
-            <select value={playbackRate} onChange={event => setPlaybackRate(Number(event.target.value))} className={controlStyle}>
-              <option value={0.1}>0,1× · Ultra Slow</option>
-              <option value={0.25}>0,25× · Amati sensor</option>
-              <option value={0.5}>0,5× · Pelan</option>
-              <option value={1}>1× · Normal</option>
-              <option value={2}>2× · Cepat</option>
-            </select>
-          </label>
-        </div>
 
-        {/* ── ICHIBOT QUICK CONTROL BAR: Checkpoints (ST, CP1-CP9), Free Move, Geleng & Trail ── */}
-        <div className={`mt-2 pt-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${isLight ? 'border-slate-200/80' : 'border-slate-800'}`}>
-          {/* Checkpoints Bar */}
+        {/* ── SUB-BAR: Checkpoints (ST, CP1-CP6), Free Move, Geleng, Camera & Track Tools ── */}
+        <div
+          className={`mt-1.5 pt-1.5 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${
+            isLight ? 'border-slate-200/80' : 'border-slate-800/90'
+          }`}
+        >
+          {/* Left: Checkpoints + Free Move + Geleng */}
           <div className="flex flex-wrap items-center gap-1">
-            <span className={`font-bold text-[10px] uppercase tracking-wider mr-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Checkpoint:
-            </span>
             <button
               type="button"
               disabled={isRunning}
               onClick={() => handleJumpToCheckpoint(0)}
-              className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+              className={`px-2 py-0.5 rounded-lg font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
                 activeCheckpoint === 0
-                  ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                  ? 'bg-purple-600 text-white border-purple-500 shadow-xs'
                   : isLight
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
-              title="Posisi Start Utama (ST)"
+              title="Kembali ke Titik Start Utama (ST)"
             >
               ST
             </button>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((cpId) => {
+            {[1, 2, 3, 4, 5, 6].map((cpId) => {
               const cp = checkpoints[cpId];
               const isSelected = activeCheckpoint === cpId;
               return (
@@ -2351,9 +2753,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   type="button"
                   disabled={isRunning}
                   onClick={() => handleJumpToCheckpoint(cpId)}
-                  className={`px-1.5 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                  className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
                     isSelected
-                      ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-sm font-extrabold'
+                      ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-xs font-extrabold'
                       : cp?.saved
                       ? isLight
                         ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
@@ -2364,8 +2766,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   }`}
                   title={
                     cp?.saved
-                      ? `CP${cpId}: (${cp.x}, ${cp.y}, ${cp.deg}°)${cp.stepIndex !== null ? ` • Index #${cp.stepIndex}` : ''}`
-                      : `Klik untuk menyimpan posisi robot saat ini ke CP${cpId}`
+                      ? `Lompat ke CP${cpId}: (${cp.x}, ${cp.y}, ${cp.deg}°)`
+                      : `Simpan posisi ke CP${cpId}`
                   }
                 >
                   CP{cpId}
@@ -2376,55 +2778,146 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               type="button"
               disabled={isRunning}
               onClick={handleSaveCurrentToCheckpoint}
-              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
                 isLight
                   ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
                   : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
               }`}
-              title="Simpan posisi & arah robot saat ini ke slot CP yang dipilih"
+              title="Simpan posisi & sudut robot saat ini ke slot Checkpoint aktif"
             >
-              💾 Simpan CP
+              +Simpan CP
             </button>
-          </div>
 
-          {/* Right side: Free Move, Geleng Sensor Test, Trail Toggle & Chassis Style */}
-          <div className="flex flex-wrap items-center gap-1">
+            <span className={`mx-0.5 h-3.5 w-px ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
+
             <button
               type="button"
               disabled={isRunning}
               onClick={() => setFreeMoveMode((v) => !v)}
-              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
                 freeMoveMode
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-sm'
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-xs'
                   : isLight
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
-              title="Free Move: Gerakkan robot dengan tombol panah keyboard (↑↓←→ + Shift) atau klik langsung di lintasan"
+              title="Geser posisi robot dengan klik langsung di arena atau tombol panah keyboard (↑↓←→)"
             >
-              🕹️ Free Move {freeMoveMode ? 'ON (↑↓←→)' : 'OFF'}
+              🕹️ Free Move {freeMoveMode ? 'ON' : ''}
             </button>
 
             <button
               type="button"
               disabled={isRunning}
               onClick={() => setIsGelengActive((v) => !v)}
-              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
                 isGelengActive
                   ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
                   : isLight
                   ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
                   : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30'
               }`}
-              title="Goyangkan kepala robot ke kiri-kanan untuk menguji pembacaan sensor garis"
+              title="Goyangkan robot kiri-kanan untuk menguji sensor garis"
             >
-              〰️ Geleng (Cek Sensor)
+              〰️ Geleng
+            </button>
+          </div>
+
+          {/* Right: Speed, Camera View, Placement Tools & Fullscreen */}
+          <div className="flex flex-wrap items-center gap-1">
+            {/* Speed Selector */}
+            <select
+              value={playbackRate}
+              aria-label="Laju simulasi"
+              onChange={(event) => setPlaybackRate(Number(event.target.value))}
+              className={`rounded-lg border px-1.5 py-0.5 text-[10px] font-bold cursor-pointer outline-none ${
+                isLight
+                  ? 'bg-slate-100 border-slate-300 text-slate-700'
+                  : 'bg-slate-800 border-slate-700 text-slate-200'
+              }`}
+              title="Kecepatan jalannya simulasi"
+            >
+              <option value={0.1}>0.1× Slow</option>
+              <option value={0.25}>0.25× Sensor</option>
+              <option value={0.5}>0.5× Pelan</option>
+              <option value={1}>1× Normal</option>
+              <option value={2}>2× Cepat</option>
+            </select>
+
+            {/* Camera View Selector */}
+            <select
+              value={cameraMode}
+              aria-label="Kamera"
+              onChange={(e) => setCameraMode(e.target.value as CameraViewMode)}
+              className={`rounded-lg border px-1.5 py-0.5 text-[10px] font-bold cursor-pointer outline-none ${
+                isLight
+                  ? 'bg-slate-100 border-slate-300 text-sky-700'
+                  : 'bg-slate-800 border-slate-700 text-sky-300'
+              }`}
+            >
+              <option value="2d_top">📐 2D Atas</option>
+              <option value="3d_persp">🎥 3D Perspektif</option>
+              <option value="chase_cam">🏎️ Chase Cam</option>
+              <option value="pov_cam">👁️ Kamera Robot</option>
+            </select>
+
+            {/* Quick Placement & Heading Popover / Controls */}
+            <button
+              type="button"
+              onClick={() => setPlacementTool(placementTool === 'start' ? 'none' : 'start')}
+              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] cursor-pointer ${
+                placementTool === 'start'
+                  ? 'bg-purple-600 text-white border-purple-400'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-purple-50 border-slate-300 text-purple-700'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-purple-300'
+              }`}
+              title="Klik di lintasan untuk memindahkan titik START"
+            >
+              📍 Start
             </button>
 
             <button
               type="button"
+              onClick={() => setPlacementTool(placementTool === 'finish' ? 'none' : 'finish')}
+              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] cursor-pointer ${
+                placementTool === 'finish'
+                  ? 'bg-emerald-600 text-white border-emerald-400'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-emerald-50 border-slate-300 text-emerald-700'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-emerald-300'
+              }`}
+              title="Klik di lintasan untuk memindahkan titik FINIS"
+            >
+              🏁 Finis
+            </button>
+
+            <div
+              className={`inline-flex items-center gap-0.5 border rounded-lg px-1.5 py-0.5 text-[10px] ${
+                isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-800 border-slate-700'
+              }`}
+              title="Sudut hadap awal robot (derajat)"
+            >
+              <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>∠</span>
+              <input
+                type="number"
+                value={initialHeadingDeg}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10) || 0;
+                  setInitialHeadingDeg(val);
+                  resetRobotToStart(startPos.x, startPos.y, val);
+                }}
+                className={`w-9 bg-transparent font-mono font-bold text-center outline-none ${
+                  isLight ? 'text-amber-700' : 'text-amber-300'
+                }`}
+              />
+              <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>°</span>
+            </div>
+
+            <button
+              type="button"
               onClick={() => setShowTrail((v) => !v)}
-              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer ${
+              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer ${
                 showTrail
                   ? isLight
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
@@ -2433,332 +2926,22 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   ? 'bg-slate-100 text-slate-500 border-slate-300'
                   : 'bg-slate-800 text-slate-400 border-slate-700'
               }`}
-              title="Tampilkan/Sembunyikan garis jejak lintasan hijau & titik perpindahan index"
+              title="Tampilkan/Sembunyikan garis jejak hijau"
             >
-              🟢 Jejak: {showTrail ? 'ON' : 'OFF'}
+              🟢 Jejak
             </button>
 
             <button
               type="button"
-              onClick={() => setRobotChassisStyle((s) => (s === 'ichibot' ? 'classic' : 'ichibot'))}
-              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer ${
-                robotChassisStyle === 'ichibot'
-                  ? isLight
-                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
-                    : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                  : isLight
-                  ? 'bg-slate-100 text-slate-700 border-slate-300'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-              title="Ganti desain sasis robot antara Ichibot Ultimate 5 (Delta V-Wing) dan Classic T-Chassis"
+              onClick={() => setIsFullscreen((f) => !f)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[10px] cursor-pointer"
+              title={isFullscreen ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             >
-              🏎️ Sasis: {robotChassisStyle === 'ichibot' ? 'Ichibot Ultimate 5' : 'Classic'}
+              {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             </button>
           </div>
         </div>
       </header>
-
-      <details className={`shrink-0 border-b ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
-        <summary className="cursor-pointer px-3 py-2 text-xs font-semibold">Pengaturan arena</summary>
-      {/* ── COMPACT KIDS-FRIENDLY TOP TOOLBAR (Row 1: Track + Robot Setup + PID + Sync) ── */}
-      <div
-        className={`flex flex-wrap items-center justify-between gap-1 px-2.5 py-1 border-b text-xs shrink-0 transition-colors ${
-          isLight
-            ? 'bg-white border-slate-200 text-slate-700'
-            : 'bg-[#0b1526] border-slate-800/90 text-slate-100'
-        }`}
-      >
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => pdfInputRef.current?.click()}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
-              isLight
-                ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
-                : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border-sky-500/40'
-            }`}
-            title="Upload file PDF lintasan untuk dijadikan track simulasi"
-          >
-            <Upload className="w-3 h-3" /> Upload PDF
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveDrawer(activeDrawer === 'pdf_samples' ? 'none' : 'pdf_samples')}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
-              activeDrawer === 'pdf_samples'
-                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                : isLight
-                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
-                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
-            }`}
-          >
-            <Download className="w-3 h-3" /> Contoh PDF
-          </button>
-
-          {selectedTrackId.startsWith('pdf_') && (
-            <button
-              type="button"
-              onClick={() => {
-                setTracks((prev) => prev.filter((t) => t.id !== selectedTrackId));
-                handleSelectTrack('maze');
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer ${
-                isLight
-                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-300'
-                  : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/30'
-              }`}
-            >
-              <Trash2 className="w-3 h-3" /> Hapus
-            </button>
-          )}
-        </div>
-
-        {/* Right side: Kids-Friendly Hardware, Pinout & Multi-PID Popover Triggers */}
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
-              activeDrawer === 'hardware'
-                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                : isLight
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                  : 'bg-[#132238] hover:bg-[#1a2e4a] text-amber-300 border-amber-500/30'
-            }`}
-          >
-            <Cpu className="w-3 h-3" /> Robot ({hardwareConfig.sensorCount} Sensor • {hardwareConfig.motorRpm} RPM)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-bold text-[11px] cursor-pointer transition-all ${
-              activeDrawer === 'pid'
-                ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-sm'
-                : isLight
-                  ? 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300'
-                  : 'bg-[#132238] hover:bg-[#1a2e4a] text-fuchsia-300 border-fuchsia-500/30'
-            }`}
-          >
-            <Sliders className="w-3 h-3" /> PID 1–5
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-extrabold text-[11px] shadow-sm cursor-pointer transition-all"
-            title="Sinkronkan konfigurasi robot, pinout PWM/Mux/Encoder, dan PID ke Block & Kode (.ino / .py)"
-          >
-            <Sparkles className="w-3 h-3" /> Sync ke Blok & Kode
-          </button>
-        </div>
-      </div>
-
-      {/* ── COMPACT ROW 2: Camera View, Start/Finish & Robot Pose Controls + Fullscreen ── */}
-      <div
-        className={`flex flex-wrap items-center justify-between gap-1 px-2.5 py-1 border-b text-[11px] shrink-0 transition-colors ${
-          isLight
-            ? 'bg-slate-100/90 border-slate-200 text-slate-700'
-            : 'bg-[#091220] border-slate-800/80 text-slate-200'
-        }`}
-      >
-        <div className="flex flex-wrap items-center gap-1">
-          {/* 3D Camera Perspective Selector */}
-          <select
-            value={cameraMode}
-            onChange={(e) => setCameraMode(e.target.value as CameraViewMode)}
-            className={`rounded-lg px-2 py-0.5 font-bold outline-none cursor-pointer border ${
-              isLight
-                ? 'bg-white text-sky-700 border-slate-300'
-                : 'bg-[#111e34] text-sky-200 border-slate-700'
-            }`}
-          >
-            <option value="3d_persp">3D perspektif</option>
-            <option value="2d_top">Tampak atas</option>
-            <option value="chase_cam">Ikuti dari belakang</option>
-            <option value="pov_cam">Kamera robot</option>
-          </select>
-
-          <button
-            type="button"
-            onClick={() => setCamYaw((y) => y + 0.35)}
-            className={`px-2 py-0.5 rounded-lg border font-semibold cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-slate-200'
-            }`}
-            title="Putar sudut pandang 3D"
-          >
-            ↻ Putar
-          </button>
-
-          <label className="inline-flex min-h-8 items-center gap-2 px-2 font-semibold">
-            Zoom
-            <input type="range" min={0.55} max={2.2} step={0.05} value={camZoom}
-              onChange={event => setCamZoom(Number(event.target.value))} className="w-20 accent-sky-600" />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setCamYaw(-0.32);
-              setCamPitch(0.78);
-              setCamZoom(1.0);
-            }}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border font-semibold cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-slate-50 border-slate-300 text-slate-700'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-slate-200'
-            }`}
-            title="Reset Kamera"
-          >
-            <Camera className="w-3 h-3" /> Reset View
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const scales = [0.85, 1.0, 1.25, 1.45];
-              const nextScale = scales[(scales.indexOf(hardwareConfig.robotScale) + 1) % scales.length] || 1.0;
-              updateHardware({ robotScale: nextScale });
-            }}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-slate-50 border-slate-300 text-amber-700'
-                : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-amber-300'
-            }`}
-          >
-            🔍 Robot {hardwareConfig.robotScale}x
-          </button>
-
-          <div className={`h-3.5 w-px mx-0.5 ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
-
-          <button
-            type="button"
-            onClick={() => setPlacementTool(placementTool === 'start' ? 'none' : 'start')}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              placementTool === 'start'
-                ? 'bg-purple-600 text-white border-purple-400'
-                : isLight
-                  ? 'bg-white hover:bg-purple-50 border-slate-300 text-purple-700'
-                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-purple-300'
-            }`}
-          >
-            Titik mulai
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPlacementTool(placementTool === 'finish' ? 'none' : 'finish')}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              placementTool === 'finish'
-                ? 'bg-emerald-600 text-white border-emerald-400'
-                : isLight
-                  ? 'bg-white hover:bg-emerald-50 border-slate-300 text-emerald-700'
-                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-emerald-300'
-            }`}
-          >
-            Titik finis
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPlacementTool(placementTool === 'robot' ? 'none' : 'robot')}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              placementTool === 'robot'
-                ? 'bg-orange-500 text-slate-950 border-orange-300'
-                : isLight
-                  ? 'bg-white hover:bg-orange-50 border-slate-300 text-orange-700'
-                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-orange-300'
-            }`}
-          >
-            Pindah robot
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedTrackId('empty');
-              setLastDrawPoint(null);
-              setPlacementTool(placementTool === 'draw_line' ? 'none' : 'draw_line');
-            }}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              placementTool === 'draw_line'
-                ? 'bg-sky-600 text-white border-sky-400'
-                : isLight
-                  ? 'bg-white hover:bg-sky-50 border-slate-300 text-sky-700'
-                  : 'bg-[#111e34] hover:bg-slate-800 border-slate-700 text-sky-300'
-            }`}
-          >
-            Gambar jalur
-          </button>
-
-          <div
-            className={`flex items-center gap-1 border rounded-lg px-2 py-0.5 ${
-              isLight ? 'bg-white border-slate-300' : 'bg-[#111e34] border-slate-700'
-            }`}
-          >
-            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>Arah:</span>
-            <input
-              type="number"
-              value={initialHeadingDeg}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10) || 0;
-                setInitialHeadingDeg(val);
-                resetRobotToStart(startPos.x, startPos.y, val);
-              }}
-              className={`w-10 bg-transparent font-mono font-bold text-center outline-none ${
-                isLight ? 'text-amber-700' : 'text-amber-300'
-              }`}
-            />
-            <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>°</span>
-          </div>
-
-          {selectedTrackId === 'empty' && customSegments.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setCustomSegments([])}
-              className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-                isLight
-                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-300'
-                  : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/30'
-              }`}
-            >
-              Hapus Jalur
-            </button>
-          )}
-        </div>
-
-        {/* Right: Auto-Finish & Fullscreen Button (Now in toolbar so it never covers the track!) */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setAutoFinish((v) => !v)}
-            className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
-              autoFinish
-                ? isLight
-                  ? 'bg-teal-50 text-teal-700 border-teal-300'
-                  : 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                : isLight
-                  ? 'bg-white text-slate-500 border-slate-300'
-                  : 'bg-[#111e34] text-slate-400 border-slate-700'
-            }`}
-          >
-            Finis Otomatis: {autoFinish ? 'ON' : 'OFF'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsFullscreen((f) => !f)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold cursor-pointer transition-transform active:scale-95"
-          >
-            {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-            {isFullscreen ? 'Perkecil' : 'Perbesar'}
-          </button>
-        </div>
-      </div>
-
-      </details>
 
       {/* ── MAIN 3D ARENA VIEWPORT (100% Unobstructed Track!) ── */}
       <div className="relative flex-1 w-full min-h-[220px] overflow-hidden">
@@ -3357,6 +3540,78 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   <option value="front">1 Ultrasonic (Depan)</option>
                   <option value="three">3 Ultrasonic (Depan, Kiri, Kanan)</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Desain Sasis, Skala Robot, Gambar Jalur & Finis Otomatis */}
+            <div className={`flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-[11px] ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setRobotChassisStyle((s) => (s === 'ichibot' ? 'classic' : 'ichibot'))}
+                  className={`px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                    robotChassisStyle === 'ichibot'
+                      ? isLight
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                        : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                      : isLight
+                      ? 'bg-slate-100 text-slate-700 border-slate-300'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  🏎️ Sasis: {robotChassisStyle === 'ichibot' ? 'Ichibot Ultimate 5' : 'Classic T-Chassis'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const scales = [0.85, 1.0, 1.25, 1.45];
+                    const nextScale = scales[(scales.indexOf(hardwareConfig.robotScale) + 1) % scales.length] || 1.0;
+                    updateHardware({ robotScale: nextScale });
+                  }}
+                  className={`px-2.5 py-1 rounded-lg border font-bold cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-amber-800'
+                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-amber-300'
+                  }`}
+                >
+                  🔍 Ukuran Robot: {hardwareConfig.robotScale}×
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTrackId('empty');
+                    setLastDrawPoint(null);
+                    setPlacementTool(placementTool === 'draw_line' ? 'none' : 'draw_line');
+                    setActiveDrawer('none');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg border font-bold cursor-pointer ${
+                    placementTool === 'draw_line'
+                      ? 'bg-sky-600 text-white border-sky-400'
+                      : isLight
+                      ? 'bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-700'
+                      : 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-500/30 text-sky-300'
+                  }`}
+                >
+                  ✏️ Gambar Jalur Sendiri
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAutoFinish((v) => !v)}
+                  className={`px-2.5 py-1 rounded-lg border font-bold cursor-pointer ${
+                    autoFinish
+                      ? isLight
+                        ? 'bg-teal-50 text-teal-700 border-teal-300'
+                        : 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                      : isLight
+                      ? 'bg-slate-100 text-slate-500 border-slate-300'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  🏁 Finis Otomatis: {autoFinish ? 'ON' : 'OFF'}
+                </button>
               </div>
             </div>
 

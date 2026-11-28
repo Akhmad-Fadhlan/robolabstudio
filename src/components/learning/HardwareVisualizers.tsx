@@ -1,4 +1,3 @@
-import unoImage from '../../assets/lessons/uno.svg';
 // src/components/learning/HardwareVisualizers.tsx
 // Visualizer interaktif untuk materi pembelajaran hardware Arduino
 
@@ -133,16 +132,93 @@ export const DigitalOutputVisualizer: React.FC = () => {
 
       {/* Virtual Circuit Animation */}
       <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col items-center gap-3 relative shadow-inner">
-        <figure className="w-full rounded-xl bg-slate-50 p-3 text-slate-800">
-          <figcaption className="font-bold text-sm">Ikuti arus di satu cabang LED</figcaption>
-          <img src={unoImage} alt="Board Arduino Uno" className="h-24 mx-auto my-2" />
-          <svg viewBox="0 0 280 78" role="img" aria-label={`Pin D8 menuju resistor ${resistance} ohm, LED merah lalu GND. Arus ${currentMa} miliampere.`}>
-            <path d="M18 39 H74 M114 39 H171 M194 39 H260" fill="none" stroke={pinState==='HIGH'?'#d97706':'#64748b'} strokeWidth="4" />
-            <rect x="74" y="30" width="40" height="18" rx="4" fill="#d8b079" stroke="#855b35"/>
-            <circle cx="182" cy="39" r="13" fill={pinState==='HIGH'?'#fb4444':'#793640'} stroke="#6a2535"/>
-            <g fontSize="12" textAnchor="middle" fill="#173453"><text x="18" y="65">D8</text><text x="94" y="20">{resistance} Ω</text><text x="182" y="67">LED</text><text x="253" y="65">GND</text></g>
+        <figure className="w-full rounded-xl bg-slate-900 border border-slate-800 p-2.5 text-slate-100">
+          <figcaption className="font-bold text-[10.5px] text-amber-400 mb-1.5 flex items-center justify-between">
+            <span>⚡ Aliran Arus Rangkaian Pin D8 → Resistor → LED → GND</span>
+            <span className="font-mono text-[9.5px] text-emerald-400">{currentMa} mA</span>
+          </figcaption>
+          <svg
+            viewBox="0 0 300 112"
+            className="w-full h-auto"
+            role="img"
+            aria-label={`Pin D8 Arduino Uno terhubung ke resistor ${resistance} ohm, LED merah lalu kembali ke pin GND. Arus ${currentMa} miliampere.`}
+          >
+            {/* Arduino Uno Mini Board on Left */}
+            <rect x="8" y="14" width="76" height="84" rx="7" fill="#008184" stroke="#2dd4bf" strokeWidth="1.5" />
+            <rect x="4" y="26" width="12" height="18" rx="2" fill="#cbd5e1" />
+            <text x="46" y="34" textAnchor="middle" fontSize="8" fontWeight="900" fill="#ffffff">ARDUINO</text>
+            <text x="46" y="45" textAnchor="middle" fontSize="7" fontWeight="800" fill="#a7f3d0" fontFamily="monospace">UNO R3</text>
+            {/* Pin D8 & Pin GND on Uno Right Header */}
+            <rect x="52" y="54" width="30" height="13" rx="2.5" fill="#042f2e" stroke="#f59e0b" strokeWidth="1" />
+            <text x="67" y="63" textAnchor="middle" fontSize="7.5" fontWeight="900" fill="#ffffff" fontFamily="monospace">D8</text>
+            <circle cx="84" cy="60.5" r="3.5" fill={pinState === 'HIGH' ? '#f59e0b' : '#475569'} stroke="#ffffff" strokeWidth="1" />
+            <rect x="52" y="76" width="30" height="13" rx="2.5" fill="#042f2e" stroke="#64748b" strokeWidth="1" />
+            <text x="67" y="85" textAnchor="middle" fontSize="7.5" fontWeight="900" fill="#ffffff" fontFamily="monospace">GND</text>
+            <circle cx="84" cy="82.5" r="3.5" fill="#64748b" stroke="#ffffff" strokeWidth="1" />
+
+            {/* Top Wire: Pin D8 -> Resistor -> LED Anode (+) */}
+            <path
+              d="M 84 60.5 H 124 M 176 60.5 H 236 V 54"
+              fill="none"
+              stroke={pinState === 'HIGH' ? '#f59e0b' : '#475569'}
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            {pinState === 'HIGH' && (
+              <path
+                d="M 84 60.5 H 124 M 176 60.5 H 236"
+                fill="none"
+                stroke="#fde047"
+                strokeWidth="2"
+                strokeDasharray="4 4"
+              />
+            )}
+
+            {/* Axial Resistor Component */}
+            <rect x="124" y="53" width="52" height="15" rx="4" fill="#e6c28b" stroke="#855b35" strokeWidth="1.3" />
+            <rect x="133" y="53.5" width="3.5" height="14" fill="#ef4444" />
+            <rect x="142" y="53.5" width="3.5" height="14" fill="#ef4444" />
+            <rect x="151" y="53.5" width="3.5" height="14" fill="#78350f" />
+            <rect x="163" y="53.5" width="3" height="14" fill="#eab308" />
+            <text x="150" y="47" textAnchor="middle" fontSize="8.5" fontWeight="900" fill="#fbbf24" fontFamily="monospace">
+              R = {resistance} Ω
+            </text>
+
+            {/* Bottom Return Wire: LED Cathode (-) -> Pin GND */}
+            <path
+              d="M 252 54 V 82.5 H 84"
+              fill="none"
+              stroke="#64748b"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Realistic Red LED Component */}
+            {pinState === 'HIGH' && (
+              <circle cx="244" cy="30" r="22" fill="rgba(239,68,68,0.35)" />
+            )}
+            <line x1="236" y1="42" x2="236" y2="54" stroke="#cbd5e1" strokeWidth="2.5" />
+            <line x1="252" y1="42" x2="252" y2="54" stroke="#94a3b8" strokeWidth="2.5" />
+            <circle cx="236" cy="54" r="3" fill="#f59e0b" stroke="#ffffff" strokeWidth="1" />
+            <circle cx="252" cy="54" r="3" fill="#64748b" stroke="#ffffff" strokeWidth="1" />
+            <path
+              d="M 232 42 L 232 26 A 12 12 0 0 1 256 26 L 256 42 Z"
+              fill={pinState === 'HIGH' ? '#ef4444' : '#7f1d1d'}
+              stroke="#ffffff"
+              strokeOpacity="0.6"
+              strokeWidth="1.2"
+            />
+            <rect x="230" y="39" width="28" height="3.5" rx="1.5" fill={pinState === 'HIGH' ? '#ef4444' : '#7f1d1d'} />
+            <text x="227" y="54" textAnchor="end" fontSize="7.5" fontWeight="900" fill="#f59e0b" fontFamily="monospace">+</text>
+            <text x="260" y="54" textAnchor="start" fontSize="7.5" fontWeight="900" fill="#94a3b8" fontFamily="monospace">−</text>
+            <text x="244" y="12" textAnchor="middle" fontSize="8" fontWeight="900" fill={pinState === 'HIGH' ? '#f87171' : '#94a3b8'}>
+              {pinState === 'HIGH' ? 'LED MENYALA' : 'LED PADAM'}
+            </text>
           </svg>
-          <p className="text-xs">Model LED merah, Vf ≈ 2 V. Arus perkiraan <b>{currentMa} mA</b>.</p>
+          <p className="text-[10px] text-slate-300 mt-1">
+            Tegangan maju LED merah (Vf ≈ 2.0V). Arus seri: <b>{currentMa} mA</b>.
+          </p>
         </figure>
         {/* Resistor Control Slider */}
         <div className="w-full space-y-1 mt-1">
