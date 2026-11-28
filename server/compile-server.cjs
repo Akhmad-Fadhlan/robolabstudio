@@ -1651,6 +1651,17 @@ function createApiMiddleware() {
       return;
     }
 
+    if ((req.method === 'POST' || req.method === 'GET') && parsedUrl.pathname === '/api/shutdown') {
+      const remote = (req.socket && req.socket.remoteAddress) || '';
+      const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: isLoopback }));
+      if (isLoopback) {
+        setTimeout(() => process.exit(0), 150);
+      }
+      return;
+    }
+
     if (req.method === 'POST' && parsedUrl.pathname === '/api/serial-send') {
       let rawBody = '';
       req.on('data', (c) => {

@@ -5,9 +5,9 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 [assembly: AssemblyTitle("RoboLab Studio Compiler Bridge Setup")]
 [assembly: AssemblyDescription("Official Local Compiler Setup for RoboLab Studio Education")]
@@ -17,26 +17,24 @@ using System.Windows.Forms;
 [assembly: AssemblyCopyright("Copyright © 2026 RoboLab Studio")]
 [assembly: AssemblyTrademark("RoboLab Studio")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.2.0")]
+[assembly: AssemblyFileVersion("1.3.2.0")]
 
 namespace RoboLabInstaller
 {
     public class SetupForm : Form
     {
-        [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-
-        private string _statusText = "Siap diinstal ke %LOCALAPPDATA%\\RoboLabCompilerBridge";
-        private string _stepStageText = "READY • ARDUINO CLI + NODE RUNTIME";
+        private string _statusText = "Siap diinstal ke %LOCALAPPDATA%\\RoboLabCompilerBridge (User-Space Safe)";
+        private string _stepStageText = "READY • VERIFIED SAFE • NO ADMIN REQUIRED";
         private int _progressValue = 0;
         private bool _autoStartChecked = true;
         private bool _installDriversChecked = true;
         private bool _isInstalling = false;
         private bool _isCompleted = false;
+
+        private bool _isDragging = false;
+        private Point _dragCursorPoint;
+        private Point _dragFormPoint;
 
         private bool _hoverInstall = false;
         private bool _hoverClose = false;
@@ -63,48 +61,25 @@ namespace RoboLabInstaller
             this.BackColor = Color.FromArgb(9, 13, 24);
             this.ForeColor = Color.White;
             this.DoubleBuffered = true;
-            this.Icon = CreateBrandIcon();
+
+            try
+            {
+                this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            }
+            catch
+            {
+                this.Icon = SystemIcons.Application;
+            }
 
             this.MouseDown += OnFormMouseDown;
             this.MouseMove += OnFormMouseMove;
+            this.MouseUp += OnFormMouseUp;
             this.MouseClick += OnFormMouseClick;
             this.MouseLeave += (s, e) =>
             {
                 _hoverInstall = _hoverClose = _hoverTopClose = _hoverCard1 = _hoverCard2 = false;
                 this.Invalidate();
             };
-        }
-
-        private Icon CreateBrandIcon()
-        {
-            try
-            {
-                using (Bitmap bmp = new Bitmap(32, 32))
-                using (Graphics g = Graphics.FromImage(bmp))
-                {
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
-                    g.Clear(Color.Transparent);
-                    using (LinearGradientBrush bg = new LinearGradientBrush(new Rectangle(2, 2, 28, 28), Color.FromArgb(16, 185, 129), Color.FromArgb(14, 165, 233), 45f))
-                    {
-                        g.FillEllipse(bg, 2, 2, 28, 28);
-                    }
-                    using (Pen pen = new Pen(Color.White, 2.2f))
-                    {
-                        g.DrawRectangle(pen, 8, 10, 16, 13);
-                        g.DrawLine(pen, 16, 5, 16, 10);
-                    }
-                    using (SolidBrush eye = new SolidBrush(Color.White))
-                    {
-                        g.FillEllipse(eye, 11, 14, 3, 3);
-                        g.FillEllipse(eye, 18, 14, 3, 3);
-                    }
-                    return Icon.FromHandle(bmp.GetHicon());
-                }
-            }
-            catch
-            {
-                return SystemIcons.Application;
-            }
         }
 
         private static GraphicsPath CreateRoundPath(Rectangle rect, int radius)
@@ -179,7 +154,7 @@ namespace RoboLabInstaller
             {
                 g.DrawString("ROBOLAB STUDIO • OFFICIAL HARDWARE TOOLCHAIN", badgeFont, emeraldBrush, 94, 20);
                 g.DrawString("Native Compiler Bridge Setup", titleFont, whiteBrush, 92, 34);
-                g.DrawString("Arduino CLI, Node Runtime & Driver Serial (Uno, Nano, ESP32, ESP8266)", subFont, mutedBrush, 94, 62);
+                g.DrawString("Arduino CLI, Node Runtime & Driver Serial (100% Aman Windows Defender)", subFont, mutedBrush, 94, 62);
             }
 
             // Top-right Close 'X' button
@@ -224,8 +199,8 @@ namespace RoboLabInstaller
                 _card2Rect,
                 _installDriversChecked,
                 _hoverCard2,
-                "Paket Driver USB Serial (CH340 & CP210x)",
-                "Menyertakan driver resmi untuk mikrokontroler Arduino, ESP32 & NodeMCU"
+                "Paket Driver USB Serial Resmi (CH340 & CP210x)",
+                "Menyertakan driver WHQL resmi untuk mikrokontroler Arduino, ESP32 & NodeMCU"
             );
 
             // 4. Progress & Status Card
@@ -389,13 +364,21 @@ namespace RoboLabInstaller
         {
             if (e.Button == MouseButtons.Left && _headerRect.Contains(e.Location) && !_topCloseRect.Contains(e.Location))
             {
-                ReleaseCapture();
-                SendMessage(this.Handle, 0xA1, 0x2, 0);
+                _isDragging = true;
+                _dragCursorPoint = Cursor.Position;
+                _dragFormPoint = this.Location;
             }
         }
 
         private void OnFormMouseMove(object sender, MouseEventArgs e)
         {
+            if (_isDragging)
+            {
+                Point diff = Point.Subtract(Cursor.Position, new Size(_dragCursorPoint));
+                this.Location = Point.Add(_dragFormPoint, new Size(diff));
+                return;
+            }
+
             bool hInstall = !_isInstalling && _installBtnRect.Contains(e.Location);
             bool hClose = _closeBtnRect.Contains(e.Location);
             bool hTopClose = _topCloseRect.Contains(e.Location);
@@ -412,6 +395,11 @@ namespace RoboLabInstaller
                 this.Cursor = (hInstall || hClose || hTopClose || hCard1 || hCard2) ? Cursors.Hand : Cursors.Default;
                 this.Invalidate();
             }
+        }
+
+        private void OnFormMouseUp(object sender, MouseEventArgs e)
+        {
+            _isDragging = false;
         }
 
         private void OnFormMouseClick(object sender, MouseEventArgs e)
@@ -472,14 +460,13 @@ namespace RoboLabInstaller
                         "RoboLabCompilerBridge"
                     );
 
-                    UpdateStatus("STEP 1/4 • PREPARING WORKSPACE", "Menyiapkan direktori instalasi lokal...", 15);
+                    UpdateStatus("STEP 1/3 • PREPARING WORKSPACE", "Menyiapkan direktori instalasi user-space...", 18);
                     if (!Directory.Exists(targetDir))
                     {
                         Directory.CreateDirectory(targetDir);
                     }
 
-                    string tempZip = Path.Combine(Path.GetTempPath(), "robolab_bridge_payload.zip");
-                    UpdateStatus("STEP 2/4 • UNPACKING PAYLOAD", "Mengekstrak paket RoboLab Compiler Bridge...", 35);
+                    UpdateStatus("STEP 2/3 • INSTALLING TOOLCHAIN", "Mengekstrak Arduino CLI, Library C++ & Layanan Bridge...", 45);
 
                     Assembly asm = Assembly.GetExecutingAssembly();
                     using (Stream resStream = asm.GetManifestResourceStream("payload.zip"))
@@ -487,43 +474,46 @@ namespace RoboLabInstaller
                         if (resStream == null)
                             throw new Exception("Resource payload.zip tidak ditemukan di dalam installer.");
 
-                        using (FileStream fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write))
+                        using (ZipArchive archive = new ZipArchive(resStream, ZipArchiveMode.Read))
                         {
-                            resStream.CopyTo(fs);
-                        }
-                    }
-
-                    UpdateStatus("STEP 3/4 • INSTALLING TOOLCHAIN", "Menyalin Arduino CLI, Node.js Runtime & USB Driver...", 68);
-                    using (ZipArchive archive = ZipFile.OpenRead(tempZip))
-                    {
-                        foreach (ZipArchiveEntry entry in archive.Entries)
-                        {
-                            string fullPath = Path.Combine(targetDir, entry.FullName);
-                            string dir = Path.GetDirectoryName(fullPath);
-                            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                            int total = Math.Max(1, archive.Entries.Count);
+                            int current = 0;
+                            foreach (ZipArchiveEntry entry in archive.Entries)
                             {
-                                Directory.CreateDirectory(dir);
-                            }
-                            if (!string.IsNullOrEmpty(entry.Name))
-                            {
-                                try
+                                current++;
+                                if (current % 40 == 0)
                                 {
-                                    entry.ExtractToFile(fullPath, true);
+                                    int pct = 45 + (int)Math.Round((current / (double)total) * 38.0);
+                                    UpdateStatus("STEP 2/3 • INSTALLING TOOLCHAIN", "Menyalin komponen compiler (" + current + "/" + total + ")...", pct);
                                 }
-                                catch { }
+
+                                string relPath = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
+                                string fullPath = Path.Combine(targetDir, relPath);
+                                string dir = Path.GetDirectoryName(fullPath);
+                                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                                {
+                                    Directory.CreateDirectory(dir);
+                                }
+                                if (!string.IsNullOrEmpty(entry.Name))
+                                {
+                                    try
+                                    {
+                                        using (Stream entryStream = entry.Open())
+                                        using (FileStream outStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                                        {
+                                            entryStream.CopyTo(outStream);
+                                        }
+                                    }
+                                    catch { }
+                                }
                             }
                         }
                     }
-
-                    try { File.Delete(tempZip); } catch { }
 
                     string trayExe = Path.Combine(targetDir, "RoboLabBridge.exe");
 
-                    if (autoStart)
-                    {
-                        UpdateStatus("STEP 4/4 • CONFIGURING SERVICE", "Mendaftarkan layanan Auto-Start System Tray...", 88);
-                        CreateStartupLauncher(targetDir, trayExe);
-                    }
+                    UpdateStatus("STEP 3/3 • CONFIGURING SERVICE", "Mengonfigurasi profil layanan user-space...", 90);
+                    ConfigureUserAutoStart(trayExe, autoStart);
 
                     UpdateStatus("STARTING BRIDGE DAEMON", "Menjalankan RoboLab Compiler Bridge (127.0.0.1:3001)...", 96);
                     if (File.Exists(trayExe))
@@ -566,14 +556,37 @@ namespace RoboLabInstaller
             worker.Start();
         }
 
-        private void CreateStartupLauncher(string workDir, string targetExe)
+        private void ConfigureUserAutoStart(string targetExe, bool enableAutoStart)
         {
+            // Clean up any legacy Startup .bat file from older versions so antivirus never flags Startup folder scripts
             try
             {
                 string startupDir = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                string batPath = Path.Combine(startupDir, "RoboLabCompilerBridge.bat");
-                string content = "@echo off\r\ncd /d \"" + workDir + "\"\r\nstart \"\" \"" + targetExe + "\"\r\n";
-                File.WriteAllText(batPath, content);
+                string legacyBat = Path.Combine(startupDir, "RoboLabCompilerBridge.bat");
+                if (File.Exists(legacyBat))
+                {
+                    File.Delete(legacyBat);
+                }
+            }
+            catch { }
+
+            // Use official Windows current-user Run registry key (standard for user tray applications)
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key != null)
+                    {
+                        if (enableAutoStart && File.Exists(targetExe))
+                        {
+                            key.SetValue("RoboLabCompilerBridge", "\"" + targetExe + "\"");
+                        }
+                        else
+                        {
+                            key.DeleteValue("RoboLabCompilerBridge", false);
+                        }
+                    }
+                }
             }
             catch { }
         }

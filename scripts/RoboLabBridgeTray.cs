@@ -5,7 +5,6 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Net;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -17,19 +16,13 @@ using System.Windows.Forms;
 [assembly: AssemblyCopyright("Copyright © 2026 RoboLab Studio")]
 [assembly: AssemblyTrademark("RoboLab Studio")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.2.0")]
+[assembly: AssemblyFileVersion("1.3.2.0")]
 
 namespace RoboLabBridge
 {
     public class BridgeDashboardForm : Form
     {
-        [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-
         private readonly TrayApp _controller;
         private readonly Rectangle _headerRect = new Rectangle(0, 0, 500, 92);
         private readonly Rectangle _topCloseRect = new Rectangle(456, 16, 28, 28);
@@ -40,6 +33,9 @@ namespace RoboLabBridge
         private readonly Rectangle _btnFolderRect = new Rectangle(178, 274, 144, 42);
         private readonly Rectangle _btnHideRect = new Rectangle(334, 274, 142, 42);
 
+        private bool _isDragging = false;
+        private Point _dragCursorPoint;
+        private Point _dragFormPoint;
         private int _hoverBtn = 0; // 1=topClose, 2=restart, 3=folder, 4=hide
 
         public BridgeDashboardForm(TrayApp controller, Icon appIcon)
@@ -58,13 +54,21 @@ namespace RoboLabBridge
             {
                 if (e.Button == MouseButtons.Left && _headerRect.Contains(e.Location) && !_topCloseRect.Contains(e.Location))
                 {
-                    ReleaseCapture();
-                    SendMessage(this.Handle, 0xA1, 0x2, 0);
+                    _isDragging = true;
+                    _dragCursorPoint = Cursor.Position;
+                    _dragFormPoint = this.Location;
                 }
             };
 
             this.MouseMove += (s, e) =>
             {
+                if (_isDragging)
+                {
+                    Point diff = Point.Subtract(Cursor.Position, new Size(_dragCursorPoint));
+                    this.Location = Point.Add(_dragFormPoint, new Size(diff));
+                    return;
+                }
+
                 int nextHover = 0;
                 if (_topCloseRect.Contains(e.Location)) nextHover = 1;
                 else if (_btnRestartRect.Contains(e.Location)) nextHover = 2;
@@ -77,6 +81,11 @@ namespace RoboLabBridge
                     this.Cursor = nextHover != 0 ? Cursors.Hand : Cursors.Default;
                     this.Invalidate();
                 }
+            };
+
+            this.MouseUp += (s, e) =>
+            {
+                _isDragging = false;
             };
 
             this.MouseLeave += (s, e) =>
@@ -283,7 +292,14 @@ namespace RoboLabBridge
         public TrayApp()
         {
             _appDir = AppDomain.CurrentDomain.BaseDirectory;
-            _appIcon = CreateRobotIcon();
+            try
+            {
+                _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            }
+            catch
+            {
+                _appIcon = SystemIcons.Application;
+            }
             StatusMessage = "Status: Starting (Port 3001)...";
 
             _statusItem = new ToolStripMenuItem(StatusMessage);
@@ -322,38 +338,6 @@ namespace RoboLabBridge
             );
         }
 
-        private Icon CreateRobotIcon()
-        {
-            try
-            {
-                using (Bitmap bmp = new Bitmap(32, 32))
-                using (Graphics g = Graphics.FromImage(bmp))
-                {
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
-                    g.Clear(Color.Transparent);
-                    using (LinearGradientBrush bg = new LinearGradientBrush(new Rectangle(2, 2, 28, 28), Color.FromArgb(16, 185, 129), Color.FromArgb(14, 165, 233), 45f))
-                    {
-                        g.FillEllipse(bg, 2, 2, 28, 28);
-                    }
-                    using (Pen pen = new Pen(Color.White, 2.5f))
-                    {
-                        g.DrawRectangle(pen, 8, 10, 16, 13);
-                        g.DrawLine(pen, 16, 5, 16, 10);
-                    }
-                    using (SolidBrush eye = new SolidBrush(Color.White))
-                    {
-                        g.FillEllipse(eye, 11, 14, 3, 3);
-                        g.FillEllipse(eye, 18, 14, 3, 3);
-                    }
-                    return Icon.FromHandle(bmp.GetHicon());
-                }
-            }
-            catch
-            {
-                return SystemIcons.Application;
-            }
-        }
-
         private bool IsLocalBridgeAlreadyHealthy()
         {
             try
@@ -372,6 +356,19 @@ namespace RoboLabBridge
             }
         }
 
+        private void RequestGracefulShutdown()
+        {
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:3001/api/shutdown");
+                req.Method = "POST";
+                req.Timeout = 1000;
+                req.ContentLength = 0;
+                using (HttpWebResponse res = (HttpWebResponse)req.GetResponse()) { }
+            }
+            catch { }
+        }
+
         private void UpdateState(bool online, string msg)
         {
             IsBridgeOnline = online;
@@ -383,18 +380,33 @@ namespace RoboLabBridge
             }
         }
 
+        private string ResolveNodeExecutable()
+        {
+            string bundledNode = Path.Combine(_appDir, "node", "node.exe");
+            if (File.Exists(bundledNode)) return bundledNode;
+
+            string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string pfNode = Path.Combine(progFiles, "nodejs", "node.exe");
+            if (File.Exists(pfNode)) return pfNode;
+
+            string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string laNode = Path.Combine(localApp, "Programs", "nodejs", "node.exe");
+            if (File.Exists(laNode)) return laNode;
+
+            if (File.Exists(@"C:\nvm4w\nodejs\node.exe")) return @"C:\nvm4w\nodejs\node.exe";
+
+            return "node";
+        }
+
         private void StartCompilerServer()
         {
-            StopCompilerServer();
-
             if (IsLocalBridgeAlreadyHealthy())
             {
                 UpdateState(true, "Status: Online (Port 3001 Ready)");
                 return;
             }
 
-            string bundledNode = Path.Combine(_appDir, "node", "node.exe");
-            string nodeExe = File.Exists(bundledNode) ? bundledNode : "node";
+            string nodeExe = ResolveNodeExecutable();
             string scriptPath = Path.Combine(_appDir, "compile-server.cjs");
 
             if (!File.Exists(scriptPath))
@@ -444,12 +456,15 @@ namespace RoboLabBridge
 
         private void StopCompilerServer()
         {
+            RequestGracefulShutdown();
             try
             {
                 if (_nodeProcess != null && !_nodeProcess.HasExited)
                 {
-                    _nodeProcess.Kill();
-                    _nodeProcess.WaitForExit(1500);
+                    if (!_nodeProcess.WaitForExit(1200))
+                    {
+                        _nodeProcess.CloseMainWindow();
+                    }
                 }
             }
             catch { }
@@ -458,6 +473,8 @@ namespace RoboLabBridge
 
         public void RestartBridge()
         {
+            StopCompilerServer();
+            Thread.Sleep(400);
             StartCompilerServer();
         }
 
@@ -484,7 +501,7 @@ namespace RoboLabBridge
 
         private void OnRestart(object sender, EventArgs e)
         {
-            StartCompilerServer();
+            RestartBridge();
         }
 
         private void OnOpenFolder(object sender, EventArgs e)

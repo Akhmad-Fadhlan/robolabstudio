@@ -1,9 +1,6 @@
 @echo off
 title Hentikan RoboLab Compiler Bridge
-echo Menghentikan proses RoboLab Compiler Bridge pada port 3001...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3001" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-    echo [OK] Menghentikan PID %%a
-)
+echo Mengirim sinyal berhenti ke RoboLab Compiler Bridge pada port 3001...
+curl -s -X POST http://127.0.0.1:3001/api/shutdown >nul 2>&1
 echo Selesai.
 timeout /t 2 >nul

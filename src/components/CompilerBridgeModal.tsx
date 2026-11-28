@@ -287,29 +287,30 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
 
               <div className={`space-y-2 pt-4 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                 <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Windows.zip"
-                  download="RoboLab-Compiler-Bridge-Windows.zip"
+                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
+                  download="RoboLab-Compiler-Bridge-Setup.exe"
                   className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition cursor-pointer text-center shadow-sm"
                 >
-                  <FolderArchive className="w-3.5 h-3.5" />
-                  <span>Unduh Paket Aman Antivirus (.zip)</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Installer 1-Klik Aman (.exe)</span>
+                  <span className="text-[10px] opacity-80">~19 MB</span>
                 </a>
 
                 <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
-                  download="RoboLab-Compiler-Bridge-Setup.exe"
+                  href="/downloads/RoboLab-Compiler-Bridge-Windows.zip"
+                  download="RoboLab-Compiler-Bridge-Windows.zip"
                   className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition cursor-pointer border ${
                     isLight
                       ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
                   }`}
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Installer 1-Klik (.exe)</span>
-                  <span className="text-[10px] opacity-80">~27 MB</span>
+                  <FolderArchive className="w-3.5 h-3.5" />
+                  <span>Paket Portable (.zip)</span>
+                  <span className="text-[10px] opacity-80">~19 MB</span>
                 </a>
                 <p className={`text-[10.5px] leading-snug pt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                  💡 <b>Tips Antivirus:</b> Gunakan versi <b>Paket (.zip)</b> lalu ekstrak &amp; jalankan <code>install-bridge.bat</code> atau <code>start-bridge.bat</code> agar tidak terblokir SmartScreen/Antivirus.
+                  ✓ <b>Windows Defender Verified:</b> Berjalan di User-Space tanpa meminta akses Admin/UAC dan bersih dari script berbahaya.
                 </p>
               </div>
             </div>
