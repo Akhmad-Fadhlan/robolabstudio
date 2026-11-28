@@ -1,6 +1,6 @@
 import { WokwiPart, type WokwiPin, wokwiPartHeight, wokwiPartName, wokwiPartPinId, wokwiParts, wokwiPartWidth } from './simulator/WokwiPart';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, Palette, Check, Bot } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Cpu, RotateCcw, Zap, Trash2, Edit3, Move, Wifi, Palette, Check, Bot, Plus, ChevronDown, Sparkles, Grid, Layers } from 'lucide-react';
 import { RobotArena3D } from './RobotArena3D';
 import {
   type RobotHardwareConfig,
@@ -879,9 +879,247 @@ export const Simulator: React.FC<SimulatorProps> = ({
     }
     const validWires = autoWires.filter(wire => boardPins.has(wire.from));
     if (validWires.length > 0) {
+      // Compute PCB-style orthogonal obstacle-avoiding bendPoints for all auto-routed wires
+      const currentPins = getPins();
+      const pinMap = new Map<string, Pin>();
+      currentPins.forEach(p => pinMap.set(p.id, p));
+
+      const bx = positions.board.x;
+      const by = positions.board.y;
+      const boardBox = isArduino
+        ? { x1: bx + 6, y1: by + 22, x2: bx + 332, y2: by + 214 }
+        : isMicrobit
+        ? { x1: bx + 10, y1: by - 100, x2: bx + 330, y2: by + 218 }
+        : isEsp8266
+        ? { x1: bx + 16, y1: by + 12, x2: bx + 164, y2: by + 295 }
+        : { x1: bx + 12, y1: by + 12, x2: bx + 157, y2: by + 335 };
+
+      const compBoxes: Array<{ id: string; x1: number; y1: number; x2: number; y2: number }> = [
+        { id: 'board', ...boardBox }
+      ];
+
+      list.forEach(cid => {
+        const base = getBaseComponentType(cid);
+        const defaultPos = DEFAULT_COMPONENT_POSITIONS[base] || { x: 50, y: 420 };
+        const pos = positions[cid] || positions[base] || defaultPos;
+        if (base === 'led') {
+          compBoxes.push({ id: cid, x1: pos.x + 18, y1: pos.y + 8, x2: pos.x + 82, y2: pos.y + 76 });
+        } else if (base === 'servo') {
+          compBoxes.push({ id: cid, x1: pos.x + 14, y1: pos.y + 20, x2: pos.x + 86, y2: pos.y + 88 });
+        } else if (base === 'ultrasonic') {
+          compBoxes.push({ id: cid, x1: pos.x + 8, y1: pos.y + 18, x2: pos.x + 92, y2: pos.y + 70 });
+        } else if (base === 'pot') {
+          compBoxes.push({ id: cid, x1: pos.x + 15, y1: pos.y + 12, x2: pos.x + 85, y2: pos.y + 66 });
+        } else if (base === 'button') {
+          compBoxes.push({ id: cid, x1: pos.x + 16, y1: pos.y + 16, x2: pos.x + 74, y2: pos.y + 64 });
+        } else if (base === 'dht11') {
+          compBoxes.push({ id: cid, x1: pos.x + 14, y1: pos.y + 10, x2: pos.x + 76, y2: pos.y + 72 });
+        } else if (base === 'lcd') {
+          compBoxes.push({ id: cid, x1: pos.x + 4, y1: pos.y + 14, x2: pos.x + 136, y2: pos.y + 84 });
+        } else if (base === 'motor') {
+          compBoxes.push({ id: cid, x1: pos.x + 12, y1: pos.y + 12, x2: pos.x + 88, y2: pos.y + 78 });
+        } else if (base === 'rfid') {
+          compBoxes.push({ id: cid, x1: pos.x + 6, y1: pos.y + 6, x2: pos.x + 104, y2: pos.y + 130 });
+        } else {
+          compBoxes.push({ id: cid, x1: pos.x + 10, y1: pos.y + 12, x2: pos.x + 100, y2: pos.y + 84 });
+        }
+      });
+
+      const segmentIntersectsBox = (
+        ax: number,
+        ay: number,
+        bxPt: number,
+        byPt: number,
+        box: { x1: number; y1: number; x2: number; y2: number }
+      ) => {
+        const minX = Math.min(ax, bxPt);
+        const maxX = Math.max(ax, bxPt);
+        const minY = Math.min(ay, byPt);
+        const maxY = Math.max(ay, byPt);
+        if (maxX < box.x1 || minX > box.x2 || maxY < box.y1 || minY > box.y2) return false;
+        return true;
+      };
+
+      const pathHitsObstacles = (pts: Array<{ x: number; y: number }>, ignoreCompId?: string) => {
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p1 = pts[i];
+          const p2 = pts[i + 1];
+          for (const box of compBoxes) {
+            // Allow first stub to exit board and last stub to enter target component
+            if (i === 0 && box.id === 'board') continue;
+            if (i === pts.length - 2 && ignoreCompId && box.id === ignoreCompId) continue;
+            if (segmentIntersectsBox(p1.x, p1.y, p2.x, p2.y, box)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      const snapToGrid = (val: number, step = 10) => Math.round(val / step) * step;
+
+      let topHeaderLane = 0;
+      let bottomHeaderLane = 0;
+      let leftSideLane = 0;
+      let rightSideLane = 0;
+
+      const routedWires = validWires.map((wire, wireIdx) => {
+        const fromPin = pinMap.get(wire.from);
+        const toPin = pinMap.get(wire.to);
+        if (!fromPin || !toPin) return wire;
+
+        const sx = fromPin.cx;
+        const sy = fromPin.cy;
+        const ex = toPin.cx;
+        const ey = toPin.cy;
+
+        // Determine target component ID so entry segment can approach cleanly
+        const targetCompId = list.find(cid =>
+          wire.to.startsWith(`${cid}:`) ||
+          wire.to.endsWith(`_${cid.split('_')[1] || ''}`) ||
+          (!wire.to.includes('_2') && !cid.includes('_') && wire.to.startsWith(getBaseComponentType(cid).toUpperCase().slice(0, 3)))
+        );
+        const targetBase = targetCompId ? getBaseComponentType(targetCompId) : '';
+        const isTopEntryComp = targetBase === 'servo' || targetBase === 'lcd';
+        const laneStep = 6;
+        const entryOffset = 14 + (wireIdx % 5) * 5;
+        const eyEntry = snapToGrid(isTopEntryComp ? ey - entryOffset : ey + entryOffset, 5);
+        const exEntry = ex;
+
+        let bendPoints: Array<{ x: number; y: number }> = [];
+
+        if (isArduino && sy < by + 60) {
+          // Arduino Uno TOP digital header: exit UP above board, route around left or right board perimeter
+          const lane = topHeaderLane++;
+          const topY = snapToGrid(by - 8 - lane * laneStep, 5);
+          const goLeft = ex < bx + 170;
+          const sideX = goLeft
+            ? snapToGrid(bx - 12 - leftSideLane++ * laneStep, 5)
+            : snapToGrid(bx + 344 + rightSideLane++ * laneStep, 5);
+
+          // Choose a clean horizontal mid-channel between board bottom and component row
+          const midY = snapToGrid(
+            eyEntry < by + 390
+              ? by + 260 + (lane % 6) * 8
+              : eyEntry > 520
+              ? 510 + (lane % 5) * 6
+              : 385 + (lane % 5) * 6,
+            5
+          );
+
+          const candidate = [
+            { x: sx, y: topY },
+            { x: sideX, y: topY },
+            { x: sideX, y: midY },
+            { x: exEntry, y: midY },
+            { x: exEntry, y: eyEntry },
+          ];
+
+          if (!pathHitsObstacles([{ x: sx, y: sy }, ...candidate, { x: ex, y: ey }], targetCompId)) {
+            bendPoints = candidate;
+          } else {
+            // Route all the way down the side margin to eyEntry directly
+            bendPoints = [
+              { x: sx, y: topY },
+              { x: sideX, y: topY },
+              { x: sideX, y: eyEntry },
+              { x: exEntry, y: eyEntry },
+            ];
+          }
+        } else if ((isEsp8266 || (!isArduino && !isMicrobit)) && sx < bx + 60) {
+          // ESP8266 / ESP32 LEFT pin column: exit LEFT outside board
+          const lane = leftSideLane++;
+          const sideX = snapToGrid(bx - 12 - lane * laneStep, 5);
+          const candidate = [
+            { x: sideX, y: sy },
+            { x: sideX, y: eyEntry },
+            { x: exEntry, y: eyEntry },
+          ];
+          if (!pathHitsObstacles([{ x: sx, y: sy }, ...candidate, { x: ex, y: ey }], targetCompId)) {
+            bendPoints = candidate;
+          } else {
+            const safeChannelY = snapToGrid(by + 350 + (lane % 6) * 7, 5);
+            bendPoints = [
+              { x: sideX, y: sy },
+              { x: sideX, y: safeChannelY },
+              { x: exEntry, y: safeChannelY },
+              { x: exEntry, y: eyEntry },
+            ];
+          }
+        } else if ((isEsp8266 || (!isArduino && !isMicrobit)) && sx >= bx + 60) {
+          // ESP8266 / ESP32 RIGHT pin column: exit RIGHT outside board
+          const lane = rightSideLane++;
+          const boardRightEdge = isEsp8266 ? bx + 182 : bx + 174;
+          const sideX = snapToGrid(boardRightEdge + lane * laneStep, 5);
+          const candidate = [
+            { x: sideX, y: sy },
+            { x: sideX, y: eyEntry },
+            { x: exEntry, y: eyEntry },
+          ];
+          if (!pathHitsObstacles([{ x: sx, y: sy }, ...candidate, { x: ex, y: ey }], targetCompId)) {
+            bendPoints = candidate;
+          } else {
+            const safeChannelY = snapToGrid(by + 350 + (lane % 6) * 7, 5);
+            bendPoints = [
+              { x: sideX, y: sy },
+              { x: sideX, y: safeChannelY },
+              { x: exEntry, y: safeChannelY },
+              { x: exEntry, y: eyEntry },
+            ];
+          }
+        } else {
+          // Bottom headers (Arduino Power/Analog, micro:bit pads/headers)
+          const lane = bottomHeaderLane++;
+          const exitY = snapToGrid(Math.max(sy + 14, by + (isMicrobit ? 236 : 232)) + (lane % 7) * laneStep, 5);
+          const directCandidate = [
+            { x: sx, y: exitY },
+            { x: exEntry, y: exitY },
+            { x: exEntry, y: eyEntry },
+          ];
+
+          if (!pathHitsObstacles([{ x: sx, y: sy }, ...directCandidate, { x: ex, y: ey }], targetCompId)) {
+            bendPoints = directCandidate;
+          } else {
+            // Obstacle lies between exitY and eyEntry (e.g., component on 2nd or 3rd row)
+            // Route via vertical gutter between columns (x=8, x=106, x=204, or x=322)
+            const gutters = [6 - (lane % 3) * 5, 105 + (lane % 3) * 4, 204 + (lane % 3) * 4, 326 + (lane % 3) * 5];
+            const bestGutterX = gutters.reduce((best, gx) =>
+              Math.abs(gx - exEntry) + Math.abs(gx - sx) * 0.4 < Math.abs(best - exEntry) + Math.abs(best - sx) * 0.4 ? gx : best
+            , gutters[0]);
+
+            bendPoints = [
+              { x: sx, y: exitY },
+              { x: bestGutterX, y: exitY },
+              { x: bestGutterX, y: eyEntry },
+              { x: exEntry, y: eyEntry },
+            ];
+          }
+        }
+
+        // Remove redundant collinear or duplicate consecutive points
+        const cleaned: Array<{ x: number; y: number }> = [];
+        const allPts = [{ x: sx, y: sy }, ...bendPoints, { x: ex, y: ey }];
+        for (let i = 1; i < allPts.length - 1; i++) {
+          const prevPt = cleaned.length > 0 ? cleaned[cleaned.length - 1] : allPts[0];
+          const currPt = allPts[i];
+          const nextPt = allPts[i + 1];
+          if (Math.abs(currPt.x - prevPt.x) < 1 && Math.abs(currPt.y - prevPt.y) < 1) continue;
+          const collinearX = Math.abs(prevPt.x - currPt.x) < 1 && Math.abs(currPt.x - nextPt.x) < 1;
+          const collinearY = Math.abs(prevPt.y - currPt.y) < 1 && Math.abs(currPt.y - nextPt.y) < 1;
+          if (!collinearX && !collinearY) {
+            cleaned.push(currPt);
+          }
+        }
+
+        return {
+          ...wire,
+          bendPoints: cleaned,
+        };
+      });
+
       setWires(prev => {
         const targetCompPins = new Set<string>();
-        validWires.forEach(w => {
+        routedWires.forEach(w => {
           if (isComponentPin(w.from)) targetCompPins.add(w.from);
           if (isComponentPin(w.to)) targetCompPins.add(w.to);
         });
@@ -892,7 +1130,7 @@ export const Simulator: React.FC<SimulatorProps> = ({
           return !fromIsTarget && !toIsTarget;
         });
 
-        return [...kept, ...validWires];
+        return [...kept, ...routedWires];
       });
     }
   };
@@ -1208,7 +1446,42 @@ export const Simulator: React.FC<SimulatorProps> = ({
   const [activeBendPoints, setActiveBendPoints] = useState<{ x: number; y: number }[]>([]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [hoveredPin, setHoveredPin] = useState<Pin | null>(null);
+  const [showRoutingDots, setShowRoutingDots] = useState<boolean>(true);
+  const [hoveredRoutingDot, setHoveredRoutingDot] = useState<{ x: number; y: number } | null>(null);
+  const [draggingBendPoint, setDraggingBendPoint] = useState<{ wireIdx: number; ptIdx: number } | null>(null);
+  const [isAddCompOpen, setIsAddCompOpen] = useState<boolean>(false);
+  const [addCompCategory, setAddCompCategory] = useState<'all' | 'indicator' | 'sensor' | 'actuator' | 'input' | 'module'>('all');
+  const addCompDropdownRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  const ROUTING_DOT_STEP = 20;
+  const routingGridCoords = useMemo(() => {
+    const pts: Array<{ x: number; y: number }> = [];
+    for (let y = 0; y <= 760; y += ROUTING_DOT_STEP) {
+      for (let x = -40; x <= 380; x += ROUTING_DOT_STEP) {
+        pts.push({ x, y });
+      }
+    }
+    return pts;
+  }, []);
+
+  const snapToRoutingDot = useCallback((x: number, y: number) => {
+    return {
+      x: Math.round(x / ROUTING_DOT_STEP) * ROUTING_DOT_STEP,
+      y: Math.round(y / ROUTING_DOT_STEP) * ROUTING_DOT_STEP,
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAddCompOpen) return;
+    const handleClickOutside = (ev: MouseEvent) => {
+      if (addCompDropdownRef.current && !addCompDropdownRef.current.contains(ev.target as Node)) {
+        setIsAddCompOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAddCompOpen]);
   // const containerRef = useRef<HTMLDivElement>(null);
 
   const ZOOM_MIN = 0.4;
@@ -1844,15 +2117,38 @@ export const Simulator: React.FC<SimulatorProps> = ({
         }
       }
 
+      if (draggingBendPoint) {
+        const snapped = showRoutingDots ? snapToRoutingDot(transformedPoint.x, transformedPoint.y) : { x: Math.round(transformedPoint.x), y: Math.round(transformedPoint.y) };
+        setHoveredRoutingDot(snapped);
+        setWires(prev => prev.map((w, wIdx) => {
+          if (wIdx !== draggingBendPoint.wireIdx) return w;
+          const nextPts = [...(w.bendPoints || [])];
+          nextPts[draggingBendPoint.ptIdx] = snapped;
+          return { ...w, bendPoints: nextPts };
+        }));
+        return;
+      }
+
       if (nearestPin) {
         setHoveredPin(nearestPin);
+        setHoveredRoutingDot(null);
         if (activePinStart) {
           setMousePos({ x: nearestPin.cx, y: nearestPin.cy });
         }
       } else {
         setHoveredPin(null);
-        if (activePinStart) {
-          setMousePos({ x: transformedPoint.x, y: transformedPoint.y });
+        const snappedDot = snapToRoutingDot(transformedPoint.x, transformedPoint.y);
+        const dotDist = Math.hypot(transformedPoint.x - snappedDot.x, transformedPoint.y - snappedDot.y);
+        if (showRoutingDots && dotDist <= 11) {
+          setHoveredRoutingDot(snappedDot);
+          if (activePinStart) {
+            setMousePos(snappedDot);
+          }
+        } else {
+          setHoveredRoutingDot(null);
+          if (activePinStart) {
+            setMousePos({ x: transformedPoint.x, y: transformedPoint.y });
+          }
         }
       }
       
@@ -1896,6 +2192,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
   };
 
   const stopDrag = () => {
+    if (draggingBendPoint) {
+      setDraggingBendPoint(null);
+      return;
+    }
     if (draggedElement && !hasMovedDuringDrag.current) {
       // Toggle/set active popup for component on click
       setActivePopup(draggedElement);
@@ -1938,7 +2238,10 @@ export const Simulator: React.FC<SimulatorProps> = ({
           setColorPickerOpenId(null);
         }
 
-        setActiveBendPoints(prev => [...prev, { x: transformedPoint.x, y: transformedPoint.y }]);
+        const waypoint = showRoutingDots
+          ? snapToRoutingDot(transformedPoint.x, transformedPoint.y)
+          : { x: Math.round(transformedPoint.x), y: Math.round(transformedPoint.y) };
+        setActiveBendPoints(prev => [...prev, waypoint]);
       }
     } else {
       if (colorPickerOpenId) {
@@ -2280,6 +2583,23 @@ export const Simulator: React.FC<SimulatorProps> = ({
             <span>{isCircuitMenuOpen ? '✕ Sembunyikan Menu' : '⚙️ Tampilkan Menu'}</span>
           </button>
           <button
+            type="button"
+            onClick={() => setShowRoutingDots(prev => !prev)}
+            className={`px-2.5 h-7 rounded-lg border font-bold text-[10px] flex items-center gap-1 shadow-md transition hover:scale-105 cursor-pointer ${
+              showRoutingDots
+                ? isLight
+                  ? 'bg-sky-50 border-sky-300 text-sky-700'
+                  : 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                : isLight
+                ? 'bg-white border-slate-200 text-slate-500'
+                : 'bg-[#141824] border-slate-700/80 text-slate-400'
+            }`}
+            title="Tampilkan/Sembunyikan Titik-Titik Transparan Jalur Routing Kabel"
+          >
+            <Grid className="w-3 h-3" />
+            <span>Titik Routing</span>
+          </button>
+          <button
             onClick={handleZoomIn}
             className={`w-8 h-8 rounded-lg border font-bold text-lg flex items-center justify-center shadow-md transition hover:scale-105 cursor-pointer ${isLight ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700' : 'bg-[#141824] hover:bg-slate-800 border-slate-700/80 text-slate-100'}`}
             title="Zoom In"
@@ -2487,6 +2807,62 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
           {/* ── ZOOM + PAN WRAPPER: all board content is inside this transform group ── */}
           <g transform={`translate(${panOffset.x + 170 * (1 - zoomLevel)}, ${panOffset.y + 390 * (1 - zoomLevel)}) scale(${zoomLevel})`}>
+
+          {/* ==================== TRANSPARENT ROUTING GRID DOTS (TITIK-TITIK TRANSPARAN JALUR ROUTING) ==================== */}
+          {showRoutingDots && (
+            <g className="routing-grid-dots">
+              {routingGridCoords.map((pt, idx) => {
+                const isHovered = hoveredRoutingDot && hoveredRoutingDot.x === pt.x && hoveredRoutingDot.y === pt.y;
+                const isActiveBend = activeBendPoints.some(bp => bp.x === pt.x && bp.y === pt.y);
+                return (
+                  <g
+                    key={`rdot_${idx}`}
+                    className={activePinStart ? 'cursor-crosshair' : 'pointer-events-none'}
+                    onClick={activePinStart ? (ev) => {
+                      ev.stopPropagation();
+                      setActiveBendPoints(prev => [...prev, { x: pt.x, y: pt.y }]);
+                    } : undefined}
+                  >
+                    {activePinStart && (
+                      <circle cx={pt.x} cy={pt.y} r="7" fill="transparent" />
+                    )}
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r={isHovered || isActiveBend ? 3.4 : activePinStart || draggingBendPoint ? 2.1 : 1.45}
+                      fill={
+                        isHovered || isActiveBend
+                          ? '#38bdf8'
+                          : isLight
+                          ? '#0284c7'
+                          : '#38bdf8'
+                      }
+                      fillOpacity={
+                        isHovered || isActiveBend
+                          ? 0.85
+                          : activePinStart || draggingBendPoint
+                          ? 0.36
+                          : isLight
+                          ? 0.18
+                          : 0.22
+                      }
+                    />
+                    {(isHovered || isActiveBend) && (
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r="5.8"
+                        fill="none"
+                        stroke="#38bdf8"
+                        strokeWidth="1.1"
+                        strokeOpacity="0.65"
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          )}
 
           {/* ==================== MICROCONTROLLER BOARD GROUP ==================== */}
           {board === 'Arduino Uno' ? (
@@ -3660,41 +4036,129 @@ export const Simulator: React.FC<SimulatorProps> = ({
 
           {/* ==================== WIRING LAYER RENDERED AT THE VERY END (ON TOP OF EVERYTHING) ==================== */}
           {/* Render User Wires */}
-          {wires.map((wire, idx) => (
-            <g key={idx} className="cursor-pointer group" onClick={() => deleteWire(idx)}>
-              {/* Thick transparent hit-box path for easier hovering/clicking */}
-              <path
-                d={getWirePath(wire)}
-                stroke="transparent"
-                strokeWidth="10"
-                fill="none"
-              />
-              {/* Highlight path on hover */}
-              <path
-                d={getWirePath(wire)}
-                stroke="#38bdf8"
-                strokeWidth="5"
-                fill="none"
-                className="opacity-0 group-hover:opacity-40 transition-opacity"
-              />
-              {/* Dynamic physical wire curve */}
-              <path
-                d={getWirePath(wire)}
-                stroke={wire.color}
-                strokeWidth="3.2"
-                fill="none"
-                strokeLinecap="round"
-                className="shadow-lg filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]"
-              />
-              {/* Visual Delete Indicator on hover */}
-              <circle
-                cx={(pins.find(p => p.id === wire.from)?.cx || 0)}
-                cy={(pins.find(p => p.id === wire.from)?.cy || 0)}
-                r="5"
-                fill="#ef4444"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              />
-            </g>
+          {wires.map((wire, idx) => {
+            const startPin = pins.find(p => p.id === wire.from);
+            const endPin = pins.find(p => p.id === wire.to);
+            const fullPts = [
+              ...(startPin ? [{ x: startPin.cx, y: startPin.cy }] : []),
+              ...(wire.bendPoints || []),
+              ...(endPin ? [{ x: endPin.cx, y: endPin.cy }] : []),
+            ];
+            return (
+              <g key={idx} className="group">
+                {/* Thick transparent hit-box path for easier hovering/clicking */}
+                <path
+                  d={getWirePath(wire)}
+                  stroke="transparent"
+                  strokeWidth="10"
+                  fill="none"
+                  className="cursor-pointer"
+                  onClick={() => deleteWire(idx)}
+                />
+                {/* Highlight path on hover */}
+                <path
+                  d={getWirePath(wire)}
+                  stroke="#38bdf8"
+                  strokeWidth="5.5"
+                  fill="none"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  className="opacity-0 group-hover:opacity-45 transition-opacity pointer-events-none"
+                />
+                {/* Dynamic physical PCB trace / wire curve */}
+                <path
+                  d={getWirePath(wire)}
+                  stroke={wire.color}
+                  strokeWidth="3.1"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shadow-lg filter drop-shadow-[0_3px_3px_rgba(0,0,0,0.45)] pointer-events-none"
+                />
+                {/* Draggable Waypoint Nodes on existing bendPoints (snap to transparent routing dots) */}
+                {(wire.bendPoints || []).map((bp, ptIdx) => (
+                  <g
+                    key={`bp_${idx}_${ptIdx}`}
+                    className="cursor-grab active:cursor-grabbing"
+                    onMouseDown={(ev) => {
+                      ev.stopPropagation();
+                      ev.preventDefault();
+                      setDraggingBendPoint({ wireIdx: idx, ptIdx });
+                    }}
+                    onDoubleClick={(ev) => {
+                      ev.stopPropagation();
+                      setWires(prev => prev.map((w, wIdx) => {
+                        if (wIdx !== idx) return w;
+                        return { ...w, bendPoints: (w.bendPoints || []).filter((_, i) => i !== ptIdx) };
+                      }));
+                    }}
+                  >
+                    <circle cx={bp.x} cy={bp.y} r="7" fill="transparent" />
+                    <circle
+                      cx={bp.x}
+                      cy={bp.y}
+                      r="3.3"
+                      fill={wire.color}
+                      stroke="#ffffff"
+                      strokeWidth="1.2"
+                      className="opacity-45 group-hover:opacity-100 transition-opacity"
+                    />
+                  </g>
+                ))}
+                {/* Segment Midpoint Handles: drag to insert a new routing waypoint on any segment */}
+                {fullPts.length >= 2 && fullPts.slice(0, -1).map((p1, segIdx) => {
+                  const p2 = fullPts[segIdx + 1];
+                  const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                  if (dist < 28) return null;
+                  const mx = (p1.x + p2.x) / 2;
+                  const my = (p1.y + p2.y) / 2;
+                  return (
+                    <g
+                      key={`mid_${idx}_${segIdx}`}
+                      className="cursor-pointer opacity-0 group-hover:opacity-95 transition-opacity"
+                      onMouseDown={(ev) => {
+                        ev.stopPropagation();
+                        ev.preventDefault();
+                        const snapped = snapToRoutingDot(mx, my);
+                        setWires(prev => prev.map((w, wIdx) => {
+                          if (wIdx !== idx) return w;
+                          const nextBends = [...(w.bendPoints || [])];
+                          nextBends.splice(segIdx, 0, snapped);
+                          return { ...w, bendPoints: nextBends };
+                        }));
+                        setDraggingBendPoint({ wireIdx: idx, ptIdx: segIdx });
+                      }}
+                    >
+                      <circle cx={mx} cy={my} r="6.5" fill="transparent" />
+                      <circle cx={mx} cy={my} r="3" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.2" />
+                    </g>
+                  );
+                })}
+                {/* Visual Delete Indicator on hover */}
+                <circle
+                  cx={startPin?.cx || 0}
+                  cy={startPin?.cy || 0}
+                  r="5"
+                  fill="#ef4444"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  onClick={() => deleteWire(idx)}
+                />
+              </g>
+            );
+          })}
+
+          {/* Render Active Bend Points being placed during manual wiring */}
+          {activePinStart && activeBendPoints.map((bp, bIdx) => (
+            <circle
+              key={`active_bp_${bIdx}`}
+              cx={bp.x}
+              cy={bp.y}
+              r="3.5"
+              fill={selectedColor}
+              stroke="#ffffff"
+              strokeWidth="1.3"
+              className="pointer-events-none"
+            />
           ))}
 
           {/* Render Wire Preview Drag */}
@@ -4087,43 +4551,247 @@ export const Simulator: React.FC<SimulatorProps> = ({
              </div>
           </div>
           
-          <label className="block space-y-1 text-xs">
-            <span className="font-semibold">Cari komponen Wokwi</span>
-            <input type="search" value={partSearch} onChange={event => setPartSearch(event.target.value)}
-              placeholder="Misalnya resistor atau LCD"
-              className={`w-full rounded-lg border px-3 py-2 ${isLight ? 'border-slate-300 bg-white' : 'border-slate-700 bg-slate-950'}`} />
-          </label>
-          <div className="relative">
-            <select
+          {/* Elegant & Professional Add Component Custom Dropdown */}
+          <div className="relative" ref={addCompDropdownRef}>
+            <button
+              type="button"
               aria-label="Tambah komponen"
-              value=""
-              onChange={(e) => {
-                handleAddComponent(e.target.value);
-                e.target.value = ""; 
-              }}
-              className={`w-full text-[11px] font-bold border rounded-lg pl-3 pr-8 py-2.5 outline-none cursor-pointer hover:border-indigo-400 transition-colors appearance-none shadow-sm ${isLight ? 'bg-slate-50 text-slate-700 border-slate-200' : 'bg-[#090b12] text-slate-200 border-slate-700/80'}`}
+              onClick={() => setIsAddCompOpen(prev => !prev)}
+              className={`w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl border text-left transition-all cursor-pointer shadow-sm ${
+                isAddCompOpen
+                  ? isLight
+                    ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 ring-2 ring-indigo-500/15'
+                    : 'bg-indigo-950/40 border-indigo-500/70 text-white ring-2 ring-indigo-500/20'
+                  : isLight
+                  ? 'bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 hover:border-indigo-300 border-slate-200/90 text-slate-800'
+                  : 'bg-gradient-to-r from-[#111626] via-[#13192b] to-indigo-950/30 hover:border-indigo-500/50 border-slate-700/80 text-slate-100'
+              }`}
             >
-              <option value="" disabled className={isLight ? 'bg-white text-slate-500' : 'bg-[#0f131f] text-slate-400'}>Tambah komponen</option>
-              <option value="led" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔴 Red LED Bulb</option>
-              <option value="servo" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>⚙️ SG90 Servo Motor</option>
-              <option value="ultrasonic" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔊 HC-SR04 Ultrasonic</option>
-              <option value="button_reed">Reed switch · kontak magnet</option>
-              <option value="button_limit">Limit switch · batas gerak</option>
-              <option value="button_tilt">Tilt switch · kemiringan</option>
-              <option value="pot" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🎛️ Rotary Potentiometer</option>
-              <option value="button" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🔘 Tactile Push Button</option>
-              <option value="lcd" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>📺 16x2 OLED LCD Screen</option>
-              <option value="dht11" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🌡️ DHT11 Temp/Humid</option>
-              <option value="rfid" className={isLight ? 'bg-white text-slate-800' : 'bg-[#0f131f] text-slate-200'}>🏷️ RC522 RFID Reader</option>
-              <optgroup label="Katalog aset Wokwi · visual rangkaian" disabled={!matchingWokwiParts.length}>
-                {!matchingWokwiParts.length && <option>Tidak ada aset Wokwi yang cocok</option>}
-                {matchingWokwiParts.map(tag => <option key={tag} value={tag}>{wokwiPartName(tag)}</option>)}
-              </optgroup>
-            </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▼</div>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${
+                  isLight
+                    ? 'bg-gradient-to-br from-indigo-500 to-sky-500 text-white'
+                    : 'bg-gradient-to-br from-indigo-500 to-cyan-500 text-white'
+                }`}>
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-extrabold tracking-tight truncate">
+                    Tambah Komponen Rangkaian
+                  </div>
+                  <div className={`text-[9.5px] font-medium truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {activeComponents.length} komponen terpasang di kanvas
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-extrabold ${
+                  isLight ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-500/20 text-indigo-300'
+                }`}>
+                  +{9 + wokwiParts.length}
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isAddCompOpen ? 'rotate-180 text-indigo-400' : 'text-slate-400'}`} />
+              </div>
+            </button>
+
+            {isAddCompOpen && (() => {
+              const catalogCategoryOf = (tag: string): 'indicator' | 'sensor' | 'actuator' | 'input' | 'module' => {
+                if (['wokwi-led', 'wokwi-rgb-led', 'wokwi-neopixel', 'wokwi-led-ring', 'wokwi-neopixel-matrix', 'wokwi-7segment', 'wokwi-led-bar-graph', 'wokwi-LCD1602', 'wokwi-ssd1306', 'wokwi-ili9341'].includes(tag)) {
+                  return 'indicator';
+                }
+                if (['wokwi-hc-sr04', 'wokwi-dht22', 'wokwi-pir-motion-sensor', 'wokwi-photoresistor-sensor', 'wokwi-ntc-temperature-sensor', 'wokwi-gas-sensor', 'wokwi-flame-sensor', 'wokwi-big-sound-sensor', 'wokwi-small-sound-sensor', 'wokwi-heart-beat-sensor', 'wokwi-mpu6050', 'wokwi-hx711'].includes(tag)) {
+                  return 'sensor';
+                }
+                if (['wokwi-servo', 'wokwi-stepper-motor', 'wokwi-buzzer'].includes(tag)) {
+                  return 'actuator';
+                }
+                if (['wokwi-pushbutton', 'wokwi-pushbutton-6mm', 'wokwi-slide-switch', 'wokwi-dip-switch-8', 'wokwi-potentiometer', 'wokwi-slide-potentiometer', 'wokwi-analog-joystick', 'wokwi-ky-040', 'wokwi-membrane-keypad'].includes(tag)) {
+                  return 'input';
+                }
+                return 'module';
+              };
+
+              const catalogIconOf = (tag: string): string => {
+                const cat = catalogCategoryOf(tag);
+                if (tag.includes('LCD') || tag.includes('ssd1306') || tag.includes('ili9341') || tag.includes('7segment')) return '📟';
+                if (cat === 'indicator') return '💡';
+                if (cat === 'sensor') return '📡';
+                if (cat === 'actuator') return '⚙️';
+                if (cat === 'input') return '🎛️';
+                return '🧩';
+              };
+
+              const coreItems: Array<{
+                value: string;
+                title: string;
+                subtitle: string;
+                icon: string;
+                badge: string;
+                category: 'indicator' | 'sensor' | 'actuator' | 'input' | 'module';
+              }> = [
+                { value: 'led', title: 'LED Indikator', subtitle: 'Output Digital & PWM • Anoda/Katoda', icon: '🔴', badge: '2 Pin', category: 'indicator' },
+                { value: 'lcd', title: 'Layar OLED LCD 16x2', subtitle: 'Layar Karakter I2C (SDA, SCL, VCC, GND)', icon: '📺', badge: 'I2C', category: 'indicator' },
+                { value: 'ultrasonic', title: 'Sensor Ultrasonik HC-SR04', subtitle: 'Pengukur Jarak Akurat 2–400 cm (Trig/Echo)', icon: '🔊', badge: '4 Pin', category: 'sensor' },
+                { value: 'dht11', title: 'Sensor Suhu & Lembap DHT11', subtitle: 'Monitoring Temperatur (°C) & Kelembapan (%)', icon: '🌡️', badge: 'Digital', category: 'sensor' },
+                { value: 'rfid', title: 'Pembaca Kartu RFID RC522', subtitle: 'Pembaca UID Kartu Pintar 13.56MHz SPI', icon: '🏷️', badge: 'SPI', category: 'sensor' },
+                { value: 'servo', title: 'Servo Motor SG90', subtitle: 'Aktuator Sudut Presisi 0°–180° PWM', icon: '🦾', badge: 'PWM', category: 'actuator' },
+                { value: 'motor', title: 'Motor DC Penggerak', subtitle: 'Aktuator Putar Kecepatan Variabel', icon: '⚙️', badge: '2 Pin', category: 'actuator' },
+                { value: 'pot', title: 'Potensiometer Putar', subtitle: 'Input Tegangan Analog Variabel (ADC 0–1023)', icon: '🎛️', badge: 'Analog', category: 'input' },
+                { value: 'button', title: 'Tombol Tekan (Push Button)', subtitle: 'Sakelar Taktil Input Digital Momentary', icon: '🔘', badge: 'Digital', category: 'input' },
+                { value: 'button_reed', title: 'Sakelar Magnetik (Reed Switch)', subtitle: 'Sensor Kontak Medan Magnet', icon: '🧲', badge: 'Kontak', category: 'input' },
+                { value: 'button_limit', title: 'Sakelar Batas (Limit Switch)', subtitle: 'Detektor Batas Gerak Mekanis', icon: '📐', badge: 'Kontak', category: 'input' },
+                { value: 'button_tilt', title: 'Sakelar Kemiringan (Tilt Switch)', subtitle: 'Detektor Orientasi & Kemiringan', icon: '⚖️', badge: 'Kontak', category: 'input' },
+              ];
+
+              const extendedItems = wokwiParts.map(tag => {
+                const cat = catalogCategoryOf(tag);
+                return {
+                  value: tag,
+                  title: wokwiPartName(tag),
+                  subtitle:
+                    cat === 'indicator' ? 'Komponen Visual & Indikator Rangkaian'
+                    : cat === 'sensor' ? 'Modul Sensor & Akuisisi Data'
+                    : cat === 'actuator' ? 'Aktuator & Output Suara/Gerak'
+                    : cat === 'input' ? 'Kontrol Input & Sakelar Interaktif'
+                    : 'Modul Ekspansi & Periferal',
+                  icon: catalogIconOf(tag),
+                  badge: 'Modul',
+                  category: cat,
+                };
+              });
+
+              const allItems = [...coreItems, ...extendedItems];
+              const filteredItems = addCompCategory === 'all'
+                ? allItems
+                : allItems.filter(item => item.category === addCompCategory);
+
+              const categories: Array<{ id: typeof addCompCategory; label: string }> = [
+                { id: 'all', label: 'Semua' },
+                { id: 'indicator', label: 'Layar & LED' },
+                { id: 'sensor', label: 'Sensor' },
+                { id: 'actuator', label: 'Aktuator' },
+                { id: 'input', label: 'Input' },
+                { id: 'module', label: 'Modul' },
+              ];
+
+              return (
+                <div
+                  className={`mt-2 rounded-2xl border shadow-2xl overflow-hidden transition-all z-40 ${
+                    isLight
+                      ? 'bg-white border-slate-200/95 shadow-slate-900/10'
+                      : 'bg-[#0b0f1d] border-slate-700/90 shadow-black/60'
+                  }`}
+                >
+                  {/* Category Filter Pills */}
+                  <div className={`flex items-center gap-1 px-2.5 py-2 border-b overflow-x-auto scrollbar-none ${
+                    isLight ? 'bg-slate-50/90 border-slate-200/80' : 'bg-[#0f1426] border-slate-800'
+                  }`}>
+                    {categories.map(cat => {
+                      const active = addCompCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setAddCompCategory(cat.id)}
+                          className={`px-2.5 py-1 rounded-lg text-[9.5px] font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                            active
+                              ? 'bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-sm'
+                              : isLight
+                              ? 'text-slate-600 hover:bg-slate-200/70'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Component Items List */}
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-500/10 p-1.5 space-y-0.5 scrollbar-thin">
+                    {filteredItems.map(item => {
+                      const base = getBaseComponentType(item.value);
+                      const existingCount = activeComponents.filter(c =>
+                        item.value.startsWith('button_') ? c === item.value || c.startsWith(`${item.value}_`) : getBaseComponentType(c) === base
+                      ).length;
+
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => {
+                            handleAddComponent(item.value);
+                            setIsAddCompOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2.5 p-2 rounded-xl text-left transition-all cursor-pointer group ${
+                            isLight
+                              ? 'hover:bg-indigo-50/80 text-slate-800'
+                              : 'hover:bg-indigo-500/15 text-slate-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 border transition-transform group-hover:scale-105 ${
+                              isLight
+                                ? 'bg-slate-50 border-slate-200/80 group-hover:border-indigo-200 group-hover:bg-white'
+                                : 'bg-[#141a2e] border-slate-800 group-hover:border-indigo-500/40'
+                            }`}>
+                              {item.icon}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-extrabold truncate">
+                                  {item.title}
+                                </span>
+                                {existingCount > 0 && (
+                                  <span className={`px-1.5 py-0.2 rounded-full text-[8.5px] font-extrabold ${
+                                    isLight
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-emerald-500/20 text-emerald-300'
+                                  }`}>
+                                    {existingCount}x Aktif
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`text-[9px] truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {item.subtitle}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-bold border ${
+                              isLight
+                                ? 'bg-slate-100 border-slate-200 text-slate-600'
+                                : 'bg-slate-800/90 border-slate-700 text-slate-300'
+                            }`}>
+                              {item.badge}
+                            </span>
+                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-extrabold transition-colors ${
+                              isLight
+                                ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'
+                                : 'bg-indigo-500/20 text-indigo-300 group-hover:bg-indigo-500 group-hover:text-white'
+                            }`}>
+                              +
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
-          <p className="text-[10px]">Auto Wire memakai pin dari kode atau pin bawaan board untuk komponen yang didukung. Kabel lain dapat dipasang secara manual. <a href="/wokwi-elements-LICENSE.txt" target="_blank" rel="noreferrer" className="underline">Lisensi Wokwi Elements</a></p>
+          <div className={`flex items-start gap-2 p-2.5 rounded-xl border text-[9.5px] leading-relaxed ${
+            isLight
+              ? 'bg-sky-50/70 border-sky-200/80 text-slate-600'
+              : 'bg-sky-950/20 border-sky-900/40 text-slate-400'
+          }`}>
+            <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+            <span>
+              <b>Auto Wire (PCB Route)</b> menyusun jalur kabel otomatis melewati kanal luar tanpa memotong board/komponen. Klik <b>titik-titik transparan</b> pada kanvas untuk merouting belokan kabel secara rapi.
+            </span>
+          </div>
 
           <div className={`border-t ${isLight ? 'border-slate-100' : 'border-slate-800/80'}`} />
 

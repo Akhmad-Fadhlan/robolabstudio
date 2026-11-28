@@ -9385,11 +9385,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           }}
                         />
 
-                        {/* Accent top glow */}
+                        {/* Accent top glow (GPU-lightweight radial gradient instead of heavy blur filter) */}
                         {diff === 0 && (
                           <div 
-                            className="absolute -top-24 left-1/2 -translate-x-1/2 w-52 h-52 rounded-full blur-[65px] pointer-events-none"
-                            style={{ background: accentColor, opacity: themeMode === 'light' ? 0.11 : 0.18 }}
+                            className="absolute -top-20 left-1/2 -translate-x-1/2 w-56 h-56 rounded-full pointer-events-none"
+                            style={{
+                              background: `radial-gradient(circle, ${accentColor} 0%, transparent 70%)`,
+                              opacity: themeMode === 'light' ? 0.14 : 0.22,
+                            }}
                           />
                         )}
 
@@ -9557,12 +9560,14 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   </div>
                 </div>
 
-                {/* Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-                  {allProjectsList.filter(p => {
-                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      ((p as any).libraryName || '').toLowerCase().includes(searchQuery.toLowerCase());
+                {/* Grid — Optimized with content-visibility and lightweight radial glow for smooth 60fps scrolling */}
+                {(() => {
+                  const qLower = searchQuery.trim().toLowerCase();
+                  const filteredHomeProjects = allProjectsList.filter(p => {
+                    const matchesSearch = !qLower ||
+                      (p.name || '').toLowerCase().includes(qLower) || 
+                      (p.description || '').toLowerCase().includes(qLower) ||
+                      ((p as any).libraryName || '').toLowerCase().includes(qLower);
                     const matchesCategory = categoryFilter === 'Semua'
                       ? true
                       : categoryFilter === 'Library Examples'
@@ -9571,147 +9576,145 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           ? (p.isCustom || (p as any).isGitHubLib)
                           : p.board === categoryFilter;
                     return matchesSearch && matchesCategory;
-                  }).map((proj, idx) => {
-                    let IconComponent = Bot;
-                    let accentColor = "#10b981"; // Emerald
-                    
-                    if (proj.board === 'Arduino Uno') {
-                      IconComponent = Bot;
-                      accentColor = "#10b981";
-                    } else if (proj.board === 'BBC micro:bit') {
-                      IconComponent = Activity;
-                      accentColor = "#f59e0b";
-                    } else {
-                      IconComponent = Compass;
-                      accentColor = "#a855f7";
-                    }
+                  });
 
-                    return (
-                      <div
-                        key={`grid-${proj.name}-${idx}`}
-                        onClick={() => handleOpenTemplate(proj.name || "")}
-                        className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 cursor-pointer transition-all duration-300 transform hover:-translate-y-1.5 border flex flex-col justify-between group min-h-[240px] ${
-                          themeMode === 'light'
-                            ? 'bg-white/95 border-slate-200/90 hover:border-slate-300 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.08)] hover:shadow-[0_20px_40px_-12px_rgba(15,23,42,0.16)]'
-                            : 'bg-[#10131e]/90 border-white/[0.08] hover:border-white/20 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] hover:shadow-[0_22px_45px_-12px_rgba(0,0,0,0.85)]'
-                        }`}
-                      >
-                        {/* Top Accent Strip */}
-                        <div
-                          className="absolute top-0 inset-x-0 h-1 opacity-75 group-hover:opacity-100 transition-opacity"
-                          style={{ background: `linear-gradient(90deg, ${accentColor}, var(--accent-primary))` }}
-                        />
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+                      {filteredHomeProjects.map((proj, idx) => {
+                        let IconComponent = Bot;
+                        let accentColor = "#10b981"; // Emerald
+                        
+                        if (proj.board === 'Arduino Uno') {
+                          IconComponent = Bot;
+                          accentColor = "#10b981";
+                        } else if (proj.board === 'BBC micro:bit') {
+                          IconComponent = Activity;
+                          accentColor = "#f59e0b";
+                        } else {
+                          IconComponent = Compass;
+                          accentColor = "#a855f7";
+                        }
 
-                        {/* Subtle Corner Glow on Hover */}
-                        <div
-                          className="absolute -top-16 -right-16 w-36 h-36 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity pointer-events-none"
-                          style={{ backgroundColor: accentColor }}
-                        />
+                        return (
+                          <div
+                            key={`grid-${proj.name}-${idx}`}
+                            onClick={() => handleOpenTemplate(proj.name || "")}
+                            style={{
+                              contentVisibility: 'auto',
+                              containIntrinsicSize: '0 244px',
+                            }}
+                            className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 cursor-pointer transition-[transform,border-color] duration-200 hover:-translate-y-1 border flex flex-col justify-between group min-h-[240px] ${
+                              themeMode === 'light'
+                                ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-[0_8px_22px_-10px_rgba(15,23,42,0.08)]'
+                                : 'bg-[#10131e] border-white/[0.08] hover:border-white/20 shadow-[0_10px_24px_-10px_rgba(0,0,0,0.55)]'
+                            }`}
+                          >
+                            {/* Top Accent Strip */}
+                            <div
+                              className="absolute top-0 inset-x-0 h-1 opacity-80 group-hover:opacity-100 transition-opacity"
+                              style={{ background: `linear-gradient(90deg, ${accentColor}, var(--accent-primary))` }}
+                            />
 
-                        <div>
-                          <div className="flex items-start justify-between gap-2 mb-3.5">
-                            <div 
-                              className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 border shadow-xs"
-                              style={{ 
-                                color: accentColor, 
-                                backgroundColor: `${accentColor}14`,
-                                borderColor: `${accentColor}30`,
-                              }}
-                            >
-                              <IconComponent className="w-5 h-5" />
+                            {/* Subtle Corner Glow on Hover (Zero-blur radial gradient for fast scrolling) */}
+                            <div
+                              className="absolute -top-16 -right-16 w-44 h-44 rounded-full opacity-0 group-hover:opacity-25 transition-opacity pointer-events-none"
+                              style={{ background: `radial-gradient(circle, ${accentColor} 0%, transparent 70%)` }}
+                            />
+
+                            <div>
+                              <div className="flex items-start justify-between gap-2 mb-3.5">
+                                <div 
+                                  className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform duration-200 group-hover:scale-105 border shadow-xs"
+                                  style={{ 
+                                    color: accentColor, 
+                                    backgroundColor: `${accentColor}14`,
+                                    borderColor: `${accentColor}30`,
+                                  }}
+                                >
+                                  <IconComponent className="w-5 h-5" />
+                                </div>
+                                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                  {(proj as any).libraryName && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                                      📚 {(proj as any).libraryName}
+                                    </span>
+                                  )}
+                                  {(proj as any).isCustom && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                      🐙 GitHub
+                                    </span>
+                                  )}
+                                  <span
+                                    className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border"
+                                    style={{
+                                      color: accentColor,
+                                      backgroundColor: `${accentColor}12`,
+                                      borderColor: `${accentColor}28`,
+                                    }}
+                                  >
+                                    {proj.board}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <h4 className={`font-extrabold text-base sm:text-lg mb-1.5 line-clamp-1 tracking-tight transition-colors ${
+                                themeMode === 'light' ? 'text-slate-900 group-hover:text-slate-950' : 'text-white'
+                              }`}>
+                                {proj.name}
+                              </h4>
+                              <p className={`text-xs line-clamp-2 sm:line-clamp-3 leading-relaxed ${
+                                themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'
+                              }`}>
+                                {proj.description}
+                              </p>
                             </div>
-                            <div className="flex flex-wrap items-center justify-end gap-1.5">
-                              {(proj as any).libraryName && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                                  📚 {(proj as any).libraryName}
-                                </span>
-                              )}
-                              {(proj as any).isCustom && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                  🐙 GitHub
-                                </span>
-                              )}
+
+                            <div className="pt-4 mt-3 border-t flex items-center justify-between gap-2" style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}>
+                              <div className="flex flex-wrap items-center gap-1 min-w-0">
+                                {proj.components && proj.components.length > 0 ? (
+                                  proj.components.slice(0, 3).map((comp: string) => (
+                                    <span
+                                      key={comp}
+                                      className={`text-[8.5px] font-bold px-2 py-0.5 rounded-md border uppercase ${
+                                        themeMode === 'light'
+                                          ? 'bg-slate-100 border-slate-200 text-slate-600'
+                                          : 'bg-white/5 border-white/10 text-slate-300'
+                                      }`}
+                                    >
+                                      {comp}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className={`text-[10px] font-semibold ${themeMode === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    Template Siap Pakai
+                                  </span>
+                                )}
+                              </div>
+
                               <span
-                                className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border"
+                                className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold px-3 py-1.5 rounded-full transition-transform group-hover:translate-x-0.5 shrink-0"
                                 style={{
                                   color: accentColor,
-                                  backgroundColor: `${accentColor}12`,
-                                  borderColor: `${accentColor}28`,
+                                  backgroundColor: `${accentColor}14`,
                                 }}
                               >
-                                {proj.board}
+                                <span>{t(language, 'home', 'openProject')}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
                               </span>
                             </div>
                           </div>
-
-                          <h4 className={`font-extrabold text-base sm:text-lg mb-1.5 line-clamp-1 tracking-tight transition-colors ${
-                            themeMode === 'light' ? 'text-slate-900 group-hover:text-slate-950' : 'text-white'
-                          }`}>
-                            {proj.name}
-                          </h4>
-                          <p className={`text-xs line-clamp-2 sm:line-clamp-3 leading-relaxed ${
-                            themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'
-                          }`}>
-                            {proj.description}
-                          </p>
+                        );
+                      })}
+                      
+                      {filteredHomeProjects.length === 0 && (
+                        <div className={`col-span-full text-center py-12 rounded-2xl border border-dashed ${themeMode === 'light' ? 'border-slate-300 text-slate-500' : 'border-slate-800 text-slate-400'}`}>
+                          <Search className="w-8 h-8 mx-auto mb-3 opacity-20" />
+                          <p>{t(language, 'home', 'noResults')}</p>
                         </div>
-
-                        <div className="pt-4 mt-3 border-t flex items-center justify-between gap-2" style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}>
-                          <div className="flex flex-wrap items-center gap-1 min-w-0">
-                            {proj.components && proj.components.length > 0 ? (
-                              proj.components.slice(0, 3).map((comp: string) => (
-                                <span
-                                  key={comp}
-                                  className={`text-[8.5px] font-bold px-2 py-0.5 rounded-md border uppercase ${
-                                    themeMode === 'light'
-                                      ? 'bg-slate-100 border-slate-200 text-slate-600'
-                                      : 'bg-white/5 border-white/10 text-slate-300'
-                                  }`}
-                                >
-                                  {comp}
-                                </span>
-                              ))
-                            ) : (
-                              <span className={`text-[10px] font-semibold ${themeMode === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>
-                                Template Siap Pakai
-                              </span>
-                            )}
-                          </div>
-
-                          <span
-                            className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold px-3 py-1.5 rounded-full transition-all group-hover:translate-x-0.5 shrink-0"
-                            style={{
-                              color: accentColor,
-                              backgroundColor: `${accentColor}14`,
-                            }}
-                          >
-                            <span>{t(language, 'home', 'openProject')}</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  
-                  {allProjectsList.filter(p => {
-                    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      ((p as any).libraryName || '').toLowerCase().includes(searchQuery.toLowerCase());
-                    const matchesCategory = categoryFilter === 'Semua'
-                      ? true
-                      : categoryFilter === 'Library Examples'
-                        ? (p.isLibraryExample || (p as any).category === 'Library Example')
-                        : categoryFilter === 'GitHub Libraries'
-                          ? (p.isCustom || (p as any).isGitHubLib)
-                          : p.board === categoryFilter;
-                    return matchesSearch && matchesCategory;
-                  }).length === 0 && (
-                    <div className={`col-span-full text-center py-12 rounded-2xl border border-dashed ${themeMode === 'light' ? 'border-slate-300 text-slate-500' : 'border-slate-800 text-slate-400'}`}>
-                      <Search className="w-8 h-8 mx-auto mb-3 opacity-20" />
-                      <p>{t(language, 'home', 'noResults')}</p>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -10167,7 +10170,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                               files={files}
                               activeFile={activeFile}
                               onSaveFile={handleSaveFile}
-                              isSyncWithBlocks={canSyncActiveSource && syncStatuses[activeFile] === true}
+                              isSyncWithBlocks={canSyncActiveSource && (syncStatuses[activeFile] ?? true)}
                               onSyncToggle={(sync) => {
                                 if (sync && !canSyncActiveSource) {
                                   setIsTerminalCollapsed(false);
@@ -10208,6 +10211,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                 }
                                 setSyncStatuses(prev => ({
                                   ...prev,
+                                  [activeFile]: sync,
                                   [inoFile]: sync,
                                   [pyFile]: sync
                                 }));
@@ -10218,9 +10222,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                                   ...prev,
                                   [filename]: content
                                 }));
-                                if (!isMicrobitModulePath(filename) && isBlockSourceFile(filename) && syncStatuses[filename] !== true) {
-                                  const xml = sourceFileToBlockly(filename, content);
-                                  setWorkspaceXmls(prev => ({ ...prev, [filename]: xml }));
+                                if (!isMicrobitModulePath(filename) && isBlockSourceFile(filename)) {
+                                  if ((syncStatuses[filename] ?? true) === true) {
+                                    try {
+                                      const xml = fileExtension(filename) === 'ino'
+                                        ? arduinoToBlocklyXml(content)
+                                        : isPythonSourceFile(filename)
+                                        ? pythonToBlocklyXml(content)
+                                        : '';
+                                      if (xml && xml.includes('<block')) {
+                                        setWorkspaceXmls(prev => ({ ...prev, [filename]: xml }));
+                                      }
+                                    } catch (_) {}
+                                  } else {
+                                    const xml = sourceFileToBlockly(filename, content);
+                                    setWorkspaceXmls(prev => ({ ...prev, [filename]: xml }));
+                                  }
                                 }
                               }}
                               onTabChange={(filename) => {
@@ -11679,9 +11696,34 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           }
 
           openLocalFile(targetName, defaultContent, savedDiskPath);
+          if (newFileType === 'ino' || newFileType === 'py') {
+            const defaultSyncedXml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="arduino_setup" x="20" y="20"></block><block type="arduino_loop" x="280" y="20"></block></xml>';
+            const parsedXml = newFileType === 'ino'
+              ? arduinoToBlocklyXml(defaultContent)
+              : pythonToBlocklyXml(defaultContent);
+            const cleanXml = (parsedXml && parsedXml.includes('<block') && !parsedXml.includes('imported_source_preview'))
+              ? parsedXml
+              : defaultSyncedXml;
+            const pyPartner = (targetName === 'firmware/main.ino' || targetName === 'python/main.py')
+              ? 'python/main.py'
+              : targetName.replace(/\.(ino|py)$/i, '.py');
+            const inoPartner = (targetName === 'firmware/main.ino' || targetName === 'python/main.py')
+              ? 'firmware/main.ino'
+              : targetName.replace(/\.(ino|py)$/i, '.ino');
+            setWorkspaceXmls(prev => ({
+              ...prev,
+              [targetName]: cleanXml,
+            }));
+            setSyncStatuses(prev => ({
+              ...prev,
+              [targetName]: true,
+              [inoPartner]: true,
+              [pyPartner]: true,
+            }));
+          }
           setTerminalLogs(prev => [
             ...prev,
-            { text: `✓ Berkas baru '${targetName}' (${activeOption.title}) berhasil dibuat.`, type: 'success' }
+            { text: `✓ Berkas baru '${targetName}' (${activeOption.title}) berhasil dibuat (Auto-Sync Blok Aktif).`, type: 'success' }
           ]);
           setNewFileName('');
           setShowNewFileModal(false);
@@ -12052,83 +12094,243 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         </div>
       )}
 
-      {/* 7. SETTINGS MODAL */}
+      {/* 7. SETTINGS MODAL (Redesigned: User-Friendly, Stylish & Elegant Studio Preferences) */}
       {showSettingsModal && (
-        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
-          <div className="glass-panel rounded-2xl p-6 w-[400px] shadow-2xl relative" style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>Pengaturan Sistem</h3>
-              <button onClick={() => setShowSettingsModal(false)} className={`transition cursor-pointer ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-600' : 'text-slate-500 hover:text-slate-350'}`}><X className="w-4 h-4" /></button>
+        <div
+          className={`fixed inset-0 flex items-center justify-center z-[99999] select-none p-4 ${
+            themeMode === 'light' ? 'bg-slate-900/35 backdrop-blur-md' : 'bg-black/70 backdrop-blur-md'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowSettingsModal(false);
+          }}
+        >
+          <div
+            className="glass-panel rounded-3xl w-full max-w-[560px] shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]"
+            style={
+              themeMode === 'light'
+                ? {
+                    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                    border: '1px solid rgba(var(--accent-rgb), 0.22)',
+                    boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(255,255,255,0.9) inset',
+                  }
+                : {
+                    background: 'linear-gradient(180deg, #0d1220 0%, #090c16 100%)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: '0 25px 70px -15px rgba(0, 0, 0, 0.85)',
+                  }
+            }
+          >
+            {/* Top Accent Strip */}
+            <div className="h-1.5 w-full" style={{ background: 'var(--accent-gradient)' }} />
+
+            {/* Modal Header */}
+            <div
+              className="flex items-center justify-between px-6 py-4 border-b shrink-0"
+              style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.07)' : 'rgba(255,255,255,0.07)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm border"
+                  style={{
+                    background: 'rgba(var(--accent-rgb), 0.12)',
+                    borderColor: 'rgba(var(--accent-rgb), 0.28)',
+                    color: 'var(--accent-primary)',
+                  }}
+                >
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-extrabold tracking-tight ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                    Pengaturan Sistem
+                  </h3>
+                  <p className={`text-[11px] ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Personalisasi tema tampilan, editor kode, dan koneksi perangkat keras
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            
-            <div className="p-5 space-y-6">
-              {/* Theme Settings */}
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Mode Tampilan</label>
-                  <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#94a3b8' }}>Ubah tema interface aplikasi</span>
-                </div>
-                <div className={`flex gap-1.5 p-1 rounded-xl transition ${themeMode === 'light' ? 'bg-slate-200/60' : 'bg-slate-900/40'}`}>
-                  <button 
-                    onClick={() => setThemeMode('light')}
-                    className={`px-3 py-1.5 text-[10px] font-semibold rounded-lg transition duration-200 cursor-pointer ${themeMode === 'light' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    Light
-                  </button>
-                  <button 
-                    onClick={() => setThemeMode('dark')}
-                    className={`px-3 py-1.5 text-[10px] font-semibold rounded-lg transition duration-200 cursor-pointer ${themeMode === 'dark' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    Dark
-                  </button>
-                </div>
-              </div>
 
-              {/* Theme Colors */}
-              <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-                <div className="space-y-0.5">
-                  <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Warna Aksen</label>
-                  <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#94a3b8' }}>Sesuaikan warna aksen &amp; kartu sistem</span>
-                </div>
-                <div className="flex gap-1.5">
-                  {[
-                    { id: 'red', bg: 'bg-[#ef4444]', title: 'Merah (Red)' },
-                    { id: 'sky', bg: 'bg-[#0ea5e9]', title: 'Biru Langit (Sky)' },
-                    { id: 'cyan', bg: 'bg-[#06b6d4]', title: 'Sian (Cyan)' },
-                    { id: 'emerald', bg: 'bg-[#10b981]', title: 'Hijau (Emerald)' },
-                    { id: 'pink', bg: 'bg-[#ec4899]', title: 'Merah Muda (Pink)' },
-                    { id: 'purple', bg: 'bg-[#a855f7]', title: 'Ungu (Purple)' },
-                    { id: 'amber', bg: 'bg-[#f59e0b]', title: 'Kuning Jingga (Amber)' }
-                  ].map((item) => {
-                    const isSelected = themeColor === item.id;
-                    return (
-                      <button 
-                        key={item.id}
-                        onClick={() => setThemeColor(item.id as any)}
-                        className={`w-6 h-6 rounded-full ${item.bg} flex items-center justify-center transition cursor-pointer relative shadow-md hover:scale-110`}
-                        title={item.title}
-                      >
-                        {isSelected && <Check className="w-3 h-3 text-white stroke-[3px]" />}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Extra System Settings */}
-              <div className="pt-4 border-t space-y-4" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-                <div className="flex items-center justify-between">
+            {/* Scrollable Settings Body */}
+            <div className="p-6 space-y-5 overflow-y-auto scrollbar-thin">
+              {/* Section 1: Appearance & Theme */}
+              <div
+                className={`p-4 rounded-2xl border space-y-4 ${
+                  themeMode === 'light'
+                    ? 'bg-white border-slate-200/80 shadow-2xs'
+                    : 'bg-[#121728]/70 border-white/[0.07]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Baudrate Serial</label>
-                    <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#cbd5e1' }}>Kecepatan data komunikasi serial</span>
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Mode Tampilan
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Pilih suasana antarmuka terang atau gelap
+                    </span>
                   </div>
-                  <select 
-                    className="rounded-lg px-2 py-1 text-xs focus:outline-none cursor-pointer"
-                    style={{
-                      background: themeMode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
-                      color: themeMode === 'light' ? '#1e293b' : '#e2e8f0',
-                      border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.1)'
-                    }}
+                  <div
+                    className={`inline-flex gap-1.5 p-1 rounded-xl border ${
+                      themeMode === 'light'
+                        ? 'bg-slate-100 border-slate-200/80'
+                        : 'bg-[#090c15] border-slate-800'
+                    }`}
+                  >
+                    <button
+                      onClick={() => setThemeMode('light')}
+                      className={`px-3.5 py-1.5 text-xs font-extrabold rounded-lg transition duration-200 cursor-pointer flex items-center gap-1.5 ${
+                        themeMode === 'light'
+                          ? 'bg-white text-slate-900 shadow-sm border border-slate-200/60'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>☀️</span>
+                      <span>Light</span>
+                    </button>
+                    <button
+                      onClick={() => setThemeMode('dark')}
+                      className={`px-3.5 py-1.5 text-xs font-extrabold rounded-lg transition duration-200 cursor-pointer flex items-center gap-1.5 ${
+                        themeMode === 'dark'
+                          ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <span>🌙</span>
+                      <span>Dark</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Theme Colors */}
+                <div
+                  className="pt-3.5 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}
+                >
+                  <div className="space-y-0.5">
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Warna Aksen Studio
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Menyesuaikan warna sorotan tombol, kartu &amp; indikator
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {[
+                      { id: 'red', bg: 'bg-[#ef4444]', ring: 'ring-red-400', title: 'Merah (Red)' },
+                      { id: 'sky', bg: 'bg-[#0ea5e9]', ring: 'ring-sky-400', title: 'Biru Langit (Sky)' },
+                      { id: 'cyan', bg: 'bg-[#06b6d4]', ring: 'ring-cyan-400', title: 'Sian (Cyan)' },
+                      { id: 'emerald', bg: 'bg-[#10b981]', ring: 'ring-emerald-400', title: 'Hijau (Emerald)' },
+                      { id: 'pink', bg: 'bg-[#ec4899]', ring: 'ring-pink-400', title: 'Merah Muda (Pink)' },
+                      { id: 'purple', bg: 'bg-[#a855f7]', ring: 'ring-purple-400', title: 'Ungu (Purple)' },
+                      { id: 'amber', bg: 'bg-[#f59e0b]', ring: 'ring-amber-400', title: 'Kuning Jingga (Amber)' }
+                    ].map((item) => {
+                      const isSelected = themeColor === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setThemeColor(item.id as any)}
+                          className={`w-7 h-7 rounded-full ${item.bg} flex items-center justify-center transition-all cursor-pointer relative shadow-md hover:scale-110 ${
+                            isSelected ? `ring-2 ${item.ring} ring-offset-2 ${themeMode === 'light' ? 'ring-offset-white' : 'ring-offset-slate-900'} scale-110` : 'opacity-85 hover:opacity-100'
+                          }`}
+                          title={item.title}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3px]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Editor & Workspace Preferences */}
+              <div
+                className={`p-4 rounded-2xl border space-y-3.5 ${
+                  themeMode === 'light'
+                    ? 'bg-white border-slate-200/80 shadow-2xs'
+                    : 'bg-[#121728]/70 border-white/[0.07]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Ukuran Font Editor
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Ukuran teks pada editor kode Arduino &amp; Python
+                    </span>
+                  </div>
+                  <select
+                    className={`rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none cursor-pointer border ${
+                      themeMode === 'light'
+                        ? 'bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
+                        : 'bg-[#090c15] text-slate-100 border-slate-700/80 hover:border-slate-600'
+                    }`}
+                    defaultValue="14"
+                  >
+                    <option value="12">12 px (Kompak)</option>
+                    <option value="14">14 px (Standar)</option>
+                    <option value="16">16 px (Nyaman)</option>
+                    <option value="18">18 px (Besar)</option>
+                  </select>
+                </div>
+
+                <div
+                  className="pt-3 border-t flex items-center justify-between gap-4"
+                  style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}
+                >
+                  <div className="space-y-0.5">
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Simpan &amp; Sinkronisasi Otomatis
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Simpan berkas &amp; aktifkan Auto-Sync blok pada proyek baru
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" defaultChecked />
+                    <div
+                      className="w-10 h-5.5 bg-slate-400/30 rounded-full peer peer-checked:after:translate-x-4.5 after:content-[''] after:absolute after:top-0.5 after:left-[3px] after:bg-white after:rounded-full after:h-4.5 after:w-4.5 after:transition-all after:shadow-xs"
+                      style={{
+                        background: 'var(--accent-gradient)'
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Section 3: Hardware & Serial Communication */}
+              <div
+                className={`p-4 rounded-2xl border space-y-3.5 ${
+                  themeMode === 'light'
+                    ? 'bg-white border-slate-200/80 shadow-2xs'
+                    : 'bg-[#121728]/70 border-white/[0.07]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Baudrate Serial Monitor
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Kecepatan komunikasi data port serial USB
+                    </span>
+                  </div>
+                  <select
+                    className={`rounded-xl px-3 py-1.5 text-xs font-mono font-bold focus:outline-none cursor-pointer border ${
+                      themeMode === 'light'
+                        ? 'bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
+                        : 'bg-[#090c15] text-slate-100 border-slate-700/80 hover:border-slate-600'
+                    }`}
                     value={serialBaudrate}
                     onChange={event => setSerialBaudrate(Number(event.target.value))}
                   >
@@ -12136,47 +12338,17 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                   </select>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div
+                  className="pt-3 border-t flex items-center justify-between gap-4"
+                  style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}
+                >
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Ukuran Font Editor</label>
-                    <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#cbd5e1' }}>Ukuran teks di code editor</span>
-                  </div>
-                  <select 
-                    className="rounded-lg px-2 py-1 text-xs focus:outline-none cursor-pointer"
-                    style={{
-                      background: themeMode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
-                      color: themeMode === 'light' ? '#1e293b' : '#e2e8f0',
-                      border: themeMode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.1)'
-                    }}
-                    defaultValue="14"
-                  >
-                    <option value="12">12 px</option>
-                    <option value="14">14 px</option>
-                    <option value="16">16 px</option>
-                    <option value="18">18 px</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Simpan Otomatis</label>
-                    <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#cbd5e1' }}>Simpan berkas setiap terjadi perubahan</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div 
-                      className="w-8 h-4 bg-slate-400/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-500 after:rounded-full after:h-3 after:w-3 after:transition-all"
-                      style={{
-                        background: 'rgba(var(--accent-rgb), 0.2)'
-                      }}
-                    ></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-                  <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider block" style={{ color: themeMode === 'light' ? '#1e293b' : '#f8fafc' }}>Driver USB COM Port</label>
-                    <span className="text-[8px]" style={{ color: themeMode === 'light' ? '#64748b' : '#cbd5e1' }}>Install driver CP2102 &amp; CH340</span>
+                    <label className={`text-xs font-extrabold block ${themeMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                      Driver USB COM Port
+                    </label>
+                    <span className={`text-[11px] block ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Pasang driver chip USB-Serial CP2102 &amp; CH340
+                    </span>
                   </div>
                   <button
                     onClick={async () => {
@@ -12195,7 +12367,11 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         alert('Fitur auto-install driver hanya tersedia di aplikasi RoboLab Desktop (Electron).');
                       }
                     }}
-                    className="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition cursor-pointer border border-cyan-500/30"
+                    className={`px-3.5 py-1.5 text-xs font-extrabold rounded-xl transition cursor-pointer border ${
+                      themeMode === 'light'
+                        ? 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border-cyan-200'
+                        : 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border-cyan-500/30'
+                    }`}
                   >
                     Install Driver
                   </button>
@@ -12204,13 +12380,22 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end pt-4 mt-4 border-t" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <button 
+            <div
+              className="flex items-center justify-between px-6 py-4 border-t shrink-0"
+              style={{
+                borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.07)' : 'rgba(255,255,255,0.07)',
+                background: themeMode === 'light' ? 'rgba(248,250,252,0.8)' : 'rgba(9,12,22,0.6)',
+              }}
+            >
+              <span className={`text-[11px] font-semibold ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                Perubahan tema diterapkan secara langsung
+              </span>
+              <button
                 onClick={() => setShowSettingsModal(false)}
-                className="text-[10px] font-bold text-white-force px-5 py-2.5 rounded-xl transition duration-200 cursor-pointer shadow-md"
+                className="text-xs font-extrabold text-white-force px-6 py-2.5 rounded-xl transition duration-200 cursor-pointer shadow-md hover:opacity-95"
                 style={{
                   background: 'var(--accent-gradient)',
-                  boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.3)'
+                  boxShadow: '0 6px 18px rgba(var(--accent-rgb), 0.32)'
                 }}
               >
                 Simpan &amp; Terapkan
@@ -12220,46 +12405,99 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         </div>
       )}
 
-      {/* 8. HELP MODAL */}
+      {/* 8. HELP MODAL (Redesigned: User-Friendly, Stylish & Elegant Help Center) */}
       {showHelpModal && (
-        <div className={`fixed inset-0 flex items-center justify-center z-[99999] select-none ${themeMode === 'light' ? 'bg-slate-900/25 backdrop-blur-md' : 'bg-black/60 backdrop-blur-sm'}`}>
-          <div className="glass-panel rounded-2xl p-6 w-[450px] h-[380px] flex flex-col justify-between shadow-2xl relative overflow-hidden"
-          style={themeMode === 'light' ? { background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' } : {background: 'var(--glass-bg)', border: '1px solid var(--glass-border)'}}>
+        <div
+          className={`fixed inset-0 flex items-center justify-center z-[99999] select-none p-4 ${
+            themeMode === 'light' ? 'bg-slate-900/35 backdrop-blur-md' : 'bg-black/70 backdrop-blur-md'
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowHelpModal(false);
+          }}
+        >
+          <div
+            className="glass-panel rounded-3xl w-full max-w-[640px] max-h-[88vh] flex flex-col justify-between shadow-2xl relative overflow-hidden"
+            style={
+              themeMode === 'light'
+                ? {
+                    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                    border: '1px solid rgba(var(--accent-rgb), 0.22)',
+                    boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.22)',
+                  }
+                : {
+                    background: 'linear-gradient(180deg, #0d1220 0%, #090c16 100%)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: '0 25px 70px -15px rgba(0, 0, 0, 0.85)',
+                  }
+            }
+          >
+            {/* Top Accent Strip */}
+            <div className="h-1.5 w-full" style={{ background: 'var(--accent-gradient)' }} />
+
             {/* Header */}
-            <div className="flex justify-between items-center pb-2 flex-shrink-0 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <div className="flex items-center gap-2">
-                <HelpCircle className="w-4 h-4" style={{ color: 'var(--accent-primary)' }} />
-                <h3 className={`text-sm font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>Pusat Bantuan RoboLab</h3>
+            <div
+              className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-b"
+              style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.07)' : 'rgba(255,255,255,0.07)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm border"
+                  style={{
+                    background: 'rgba(var(--accent-rgb), 0.12)',
+                    borderColor: 'rgba(var(--accent-rgb), 0.28)',
+                    color: 'var(--accent-primary)',
+                  }}
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-extrabold tracking-tight ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                    Pusat Bantuan RoboLab
+                  </h3>
+                  <p className={`text-[11px] ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Panduan interaktif, pintasan keyboard, dan informasi studio
+                  </p>
+                </div>
               </div>
-              <button 
-                onClick={() => setShowHelpModal(false)} 
-                className={`transition cursor-pointer p-1 rounded-lg ${themeMode === 'light' ? 'text-slate-400 hover:text-slate-650 hover:bg-slate-100' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white'
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Tab navigation inside help modal */}
-            <div className="flex gap-2 py-1.5 flex-shrink-0 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
+            <div
+              className="flex gap-2 px-6 py-3 flex-shrink-0 border-b"
+              style={{
+                borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)',
+                background: themeMode === 'light' ? 'rgba(248,250,252,0.7)' : 'rgba(15,20,36,0.5)',
+              }}
+            >
               {[
-                { id: 'quickstart', label: 'Panduan Cepat' },
-                { id: 'shortcuts', label: 'Pintasan Keyboard' },
-                { id: 'about', label: 'Tentang Aplikasi' }
+                { id: 'quickstart', label: '🚀 Panduan Cepat' },
+                { id: 'shortcuts', label: '⌨️ Pintasan Keyboard' },
+                { id: 'about', label: '✨ Tentang Aplikasi' }
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setHelpTab(tab.id as any)}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
                     helpTab === tab.id
-                      ? 'shadow-sm'
+                      ? 'shadow-xs'
                       : themeMode === 'light'
-                        ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                        ? 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-800'
                         : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                   }`}
-                  style={helpTab === tab.id ? { 
-                    background: 'rgba(var(--accent-rgb), 0.11)', 
+                  style={helpTab === tab.id ? {
+                    background: 'rgba(var(--accent-rgb), 0.14)',
                     color: 'var(--accent-primary)',
-                    border: '1px solid rgba(var(--accent-rgb), 0.25)' 
+                    border: '1px solid rgba(var(--accent-rgb), 0.3)'
                   } : {
                     border: '1px solid transparent'
                   }}
@@ -12270,42 +12508,119 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
 
             {/* Tab Content Box - Scrollable */}
-            <div className={`flex-1 overflow-y-auto py-4 text-xs leading-relaxed min-h-0 select-text ${themeMode === 'light' ? 'text-slate-650' : 'text-slate-300'}`}>
+            <div className={`flex-1 overflow-y-auto p-6 text-xs leading-relaxed min-h-0 select-text ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
               {helpTab === 'quickstart' && (
-                <div className="space-y-3.5">
-                  <h4 className={`text-xs font-bold flex items-center gap-1.5 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}><Play className="w-3 h-3" style={{ color: 'var(--accent-primary)' }} /> Langkah Memulai Project:</h4>
-                  <ol className="list-decimal pl-4.5 space-y-2 text-[11px]">
-                    <li>
-                      <strong className={themeMode === 'light' ? 'text-slate-800' : 'text-slate-200'}>Pilih Board Mikrokontroler:</strong> Pada menu di header kanan, pilih board (ESP32 DevKit V1, Arduino Uno, atau BBC micro:bit).
-                    </li>
-                    <li>
-                      <strong className={themeMode === 'light' ? 'text-slate-800' : 'text-slate-200'}>Susun Rangkaian Simulator:</strong> Hubungkan pin mikrokontroler ke komponen sirkuit (LED, Motor, Potensiometer, LCD) secara interaktif dengan membuat kabel (klik antar pin/lubang).
-                    </li>
-                    <li>
-                      <strong className={themeMode === 'light' ? 'text-slate-800' : 'text-slate-200'}>Tulis Program:</strong> Gunakan editor <strong style={{ color: 'var(--accent-primary)' }}>Blockly</strong> (visual block-based coding) atau editor <strong className="text-sky-550">Monaco</strong> (teks berbasis C++ Arduino / Python). Kode dapat disinkronkan secara otomatis.
-                    </li>
-                    <li>
-                      <strong className={themeMode === 'light' ? 'text-slate-800' : 'text-slate-200'}>Jalankan Simulasi:</strong> Klik tombol <strong className="text-emerald-550">Run All</strong>. Rangkaian sirkuit 3D akan mensimulasikan status logika sirkuit, telemetri data, dan pembacaan sensor secara langsung.
-                    </li>
-                  </ol>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className={`text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                      <Play className="w-3.5 h-3.5" style={{ color: 'var(--accent-primary)' }} />
+                      <span>Langkah Memulai Project</span>
+                    </h4>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      themeMode === 'light' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      4 Langkah Mudah
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      {
+                        step: '01',
+                        title: 'Pilih Board Mikrokontroler',
+                        desc: 'Pilih target perangkat (Arduino Uno, ESP32 DevKit V1, atau BBC micro:bit) pada menu bar bagian atas.',
+                        badge: 'Hardware Target',
+                      },
+                      {
+                        step: '02',
+                        title: 'Tulis Blok & Kode Auto-Sync',
+                        desc: 'Susun blok visual di Blockly atau ketik kode C++/Python di Monaco. Keduanya tersinkronisasi otomatis secara real-time.',
+                        badge: 'Two-Way Auto Sync',
+                      },
+                      {
+                        step: '03',
+                        title: 'Susun Rangkaian & Arena Robot',
+                        desc: 'Gunakan Auto Wire PCB atau klik titik-titik transparan untuk merouting kabel, atau uji robot line follower di Arena 3D.',
+                        badge: 'Simulator 3D & PCB',
+                      },
+                      {
+                        step: '04',
+                        title: 'Jalankan atau Upload ke Board',
+                        desc: 'Klik Run All untuk simulasi interaktif, atau klik Verify / Upload untuk mengirim firmware ke perangkat melalui USB.',
+                        badge: 'Live Telemetry',
+                      },
+                    ].map((card) => (
+                      <div
+                        key={card.step}
+                        className={`p-3.5 rounded-2xl border flex flex-col justify-between gap-2 transition-all ${
+                          themeMode === 'light'
+                            ? 'bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs'
+                            : 'bg-[#121728]/80 border-white/[0.07] hover:border-white/15'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span
+                              className="w-7 h-7 rounded-xl text-[11px] font-black flex items-center justify-center text-white-force shadow-xs"
+                              style={{ background: 'var(--accent-gradient)' }}
+                            >
+                              {card.step}
+                            </span>
+                            <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md border ${
+                              themeMode === 'light' ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-white/5 border-white/10 text-slate-400'
+                            }`}>
+                              {card.badge}
+                            </span>
+                          </div>
+                          <h5 className={`font-extrabold text-xs mb-1 ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                            {card.title}
+                          </h5>
+                          <p className={`text-[11px] leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                            {card.desc}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {helpTab === 'shortcuts' && (
-                <div className="space-y-3">
-                  <h4 className={`text-xs font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>Pintasan keyboard editor kode:</h4>
-                  <div className="grid grid-cols-2 gap-3 text-[11px] font-mono">
+                <div className="space-y-3.5">
+                  <h4 className={`text-xs font-extrabold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                    Pintasan Keyboard Studio &amp; Editor:
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
                     {[
                       { key: 'Ctrl + S', desc: 'Simpan berkas aktif' },
+                      { key: 'Ctrl + O', desc: 'Buka berkas dari komputer' },
                       { key: 'F5 / Ctrl + Enter', desc: 'Jalankan simulasi' },
-                      { key: 'Ctrl + Space', desc: 'Auto-complete teks' },
+                      { key: 'Ctrl + Space', desc: 'Auto-complete kode' },
                       { key: 'Ctrl + F', desc: 'Cari teks di editor' },
                       { key: 'Ctrl + H', desc: 'Ganti kata di editor' },
-                      { key: 'Esc', desc: 'Keluar / Tutup modal' }
+                      { key: 'Ctrl + K', desc: 'Buka Command Palette' },
+                      { key: 'Esc', desc: 'Keluar / Tutup dialog' }
                     ].map((item, idx) => (
-                      <div key={idx} className={`flex justify-between items-center border rounded-lg p-2 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/5'}`}>
-                        <span className="font-bold" style={{ color: 'var(--accent-primary)' }}>{item.key}</span>
-                        <span className={`text-[10px] text-right font-sans ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{item.desc}</span>
+                      <div
+                        key={idx}
+                        className={`flex justify-between items-center border rounded-xl px-3.5 py-2.5 ${
+                          themeMode === 'light'
+                            ? 'bg-white border-slate-200/90 shadow-2xs'
+                            : 'bg-[#121728]/80 border-white/[0.07]'
+                        }`}
+                      >
+                        <span className={`text-[11px] font-semibold ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-200'}`}>
+                          {item.desc}
+                        </span>
+                        <kbd
+                          className={`px-2 py-1 rounded-lg font-mono text-[10px] font-extrabold border shadow-2xs ${
+                            themeMode === 'light'
+                              ? 'bg-slate-100 border-slate-300 text-slate-800'
+                              : 'bg-[#090c15] border-slate-700 text-sky-300'
+                          }`}
+                        >
+                          {item.key}
+                        </kbd>
                       </div>
                     ))}
                   </div>
@@ -12313,18 +12628,40 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
               )}
 
               {helpTab === 'about' && (
-                <div className="space-y-3.5 flex flex-col items-center text-center">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden mt-1 shadow-lg border ${themeMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/10'}`}>
-                    <img src="./icon-only.png" className="w-9 h-9 object-contain" alt="RoboLab Logo" />
+                <div className="space-y-4 flex flex-col items-center text-center py-2">
+                  <div
+                    className={`w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden shadow-lg border ${
+                      themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-[#121728] border-white/10'
+                    }`}
+                  >
+                    <img src="./icon-only.png" className="w-11 h-11 object-contain" alt="RoboLab Logo" />
                   </div>
                   <div>
-                    <h4 className={`text-sm font-bold tracking-wide ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>RoboLab Studio</h4>
-                    <p className="text-[10px] font-bold font-mono" style={{ color: 'var(--accent-primary)' }}>Versi 1.0.0 (Production Build)</p>
+                    <h4 className={`text-base font-extrabold tracking-tight ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                      RoboLab Studio
+                    </h4>
+                    <p className="text-[11px] font-extrabold font-mono mt-0.5" style={{ color: 'var(--accent-primary)' }}>
+                      Versi 1.0.0 (Production Build)
+                    </p>
                   </div>
-                  <p className={`text-[11px] max-w-sm ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
-                    RoboLab Studio adalah platform pembelajaran robotika terintegrasi yang menggabungkan blockly coding, editor monaco profesional, sirkuit simulator 3D interaktif, AI Camera Vision, dan telemetri data IoT dalam satu sistem terpadu.
+                  <p className={`text-xs max-w-md leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
+                    RoboLab Studio adalah platform pembelajaran dan pengembangan robotika terintegrasi yang menggabungkan Visual Blockly Coding, Monaco Code Editor Auto-Sync, Simulator Rangkaian PCB &amp; Arena Robot 3D, serta Native Compiler Bridge dalam satu ekosistem modern.
                   </p>
-                  <p className="text-[9px] text-slate-500 font-medium">
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                    {['Blockly & Monaco Auto-Sync', 'Arena Robot 3D • PID 1-5', 'Auto-Route PCB', 'Native USB Compiler'].map((feat) => (
+                      <span
+                        key={feat}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                          themeMode === 'light'
+                            ? 'bg-slate-100 border-slate-200 text-slate-700'
+                            : 'bg-white/5 border-white/10 text-slate-300'
+                        }`}
+                      >
+                        ✦ {feat}
+                      </span>
+                    ))}
+                  </div>
+                  <p className={`text-[10px] font-medium pt-2 ${themeMode === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>
                     &copy; 2026 RoboLab Studio &amp; Pymasterclass. All rights reserved.
                   </p>
                 </div>
@@ -12332,11 +12669,20 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end pt-2 flex-shrink-0 border-t" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
-              <button 
+            <div
+              className="flex justify-end px-6 py-4 flex-shrink-0 border-t"
+              style={{
+                borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.07)' : 'rgba(255,255,255,0.07)',
+                background: themeMode === 'light' ? 'rgba(248,250,252,0.8)' : 'rgba(9,12,22,0.6)',
+              }}
+            >
+              <button
                 onClick={() => setShowHelpModal(false)}
-                className="text-[10px] font-bold text-white-force px-5 py-2 rounded-xl transition cursor-pointer shadow-md"
-                style={{ background: 'var(--accent-gradient)' }}
+                className="text-xs font-extrabold text-white-force px-6 py-2.5 rounded-xl transition cursor-pointer shadow-md hover:opacity-95"
+                style={{
+                  background: 'var(--accent-gradient)',
+                  boxShadow: '0 6px 18px rgba(var(--accent-rgb), 0.32)'
+                }}
               >
                 Tutup Bantuan
               </button>

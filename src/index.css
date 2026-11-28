@@ -311,7 +311,6 @@
 
 .app-root.theme-light {
   background: var(--theme-bg-gradient, linear-gradient(180deg, #dbeafe 0%, #bfdbfe 35%, #93c5fd 75%, #60a5fa 100%)) !important;
-  background-attachment: fixed !important;
   color: #0f172a !important;
 }
 
@@ -748,28 +747,23 @@ body.color-sky.theme-light .app-root {
 }
 
 /* ============================================================
-   GLOW ORBS — background ambiance
+   GLOW ORBS — background ambiance (GPU-friendly radial gradients)
    ============================================================ */
 .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.6;
+  opacity: 0.45;
   pointer-events: none;
-  animation: orb-float 12s ease-in-out infinite alternate;
+  contain: layout style paint;
 }
 .orb-blue {
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.35) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.28) 0%, rgba(var(--accent-rgb), 0.08) 45%, transparent 72%);
 }
 .orb-purple {
-  background: radial-gradient(circle, rgba(139,92,246,0.35) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(139,92,246,0.28) 0%, rgba(139,92,246,0.08) 45%, transparent 72%);
 }
 .orb-cyan {
-  background: radial-gradient(circle, rgba(6,182,212,0.35) 0%, transparent 70%);
-}
-@keyframes orb-float {
-  0% { transform: translateY(0px) scale(1); }
-  100% { transform: translateY(-30px) scale(1.08); }
+  background: radial-gradient(circle, rgba(6,182,212,0.24) 0%, rgba(6,182,212,0.06) 45%, transparent 72%);
 }
 
 /* ============================================================

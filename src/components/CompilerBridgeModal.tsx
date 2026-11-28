@@ -120,35 +120,66 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
       }}
     >
       <div
-        className={`w-full max-w-4xl rounded-2xl flex flex-col shadow-2xl relative overflow-hidden max-h-[92vh] border transition-colors ${
+        className={`w-full max-w-4xl rounded-3xl flex flex-col shadow-2xl relative overflow-hidden max-h-[92vh] border transition-colors ${
           isLight
-            ? 'bg-white text-slate-900 border-slate-200'
-            : 'bg-[#0f111a] text-slate-100 border-white/10'
+            ? 'bg-gradient-to-b from-white to-slate-50/95 text-slate-900 border-slate-200/90'
+            : 'bg-gradient-to-b from-[#111626] to-[#0a0d17] text-slate-100 border-white/10'
         }`}
       >
-        {/* ── Modal Header (Clean & Minimal: No Subtitle, No AI Badges) ── */}
+        {/* Top Accent Strip */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-sky-500 to-indigo-500" />
+
+        {/* ── Modal Header (Elegant & Professional Studio Style) ── */}
         <div
           className={`flex items-center justify-between px-6 py-4 border-b ${
-            isLight ? 'border-slate-200 bg-slate-50/70' : 'border-white/10 bg-white/[0.02]'
+            isLight ? 'border-slate-200/80 bg-white/80' : 'border-white/10 bg-white/[0.02]'
           }`}
         >
-          <div className="flex items-center gap-2.5">
-            <Cpu className={`w-5 h-5 ${isLight ? 'text-slate-800' : 'text-slate-200'}`} />
-            <h3 className={`text-base font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
-              RoboLab Compiler Bridge
-            </h3>
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-xs ${
+                isLight
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                  : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+              }`}
+            >
+              <Cpu className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className={`text-base font-extrabold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  RoboLab Compiler Bridge
+                </h3>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                    isOnline
+                      ? isLight
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : isLight
+                      ? 'bg-slate-100 text-slate-600 border-slate-200'
+                      : 'bg-white/5 text-slate-400 border-white/10'
+                  }`}
+                >
+                  v1.3 • Local Toolchain
+                </span>
+              </div>
+              <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Layanan kompilasi C++ lokal resmi untuk Arduino Uno, Nano, Mega, ESP32 &amp; ESP8266
+              </p>
+            </div>
           </div>
 
           <button
             onClick={onClose}
-            className={`p-1.5 rounded-lg transition cursor-pointer ${
+            className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer ${
               isLight
-                ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
-                : 'text-slate-400 hover:text-white hover:bg-white/10'
+                ? 'bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200'
+                : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
             }`}
             title="Tutup (Esc)"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 

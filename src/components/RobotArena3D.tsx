@@ -2504,15 +2504,19 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
   const boardPins = getBoardPinOptions(hardwareConfig.mcu);
   const sensorPresets = getSensorPresetOptions(hardwareConfig.sensorCount);
-  const controlStyle = `min-h-9 rounded-lg border px-2 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 ${isLight ? 'border-slate-300 bg-white text-slate-800' : 'border-slate-600 bg-slate-800 text-slate-100'}`;
+  const controlStyle = `min-h-8.5 rounded-xl border px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 ${
+    isLight
+      ? 'border-slate-200/90 bg-white text-slate-800 hover:border-slate-300 shadow-2xs'
+      : 'border-slate-700/80 bg-[#0d1627] text-slate-100 hover:border-slate-600'
+  }`;
 
   return (
     <div
       className={`${
         isFullscreen ? 'fixed inset-0 z-[9999]' : 'w-full h-full relative'
       } flex flex-col ${
-        isLight ? 'bg-slate-50 text-slate-800' : 'bg-[#060d18] text-slate-100'
-      } select-none overflow-y-auto transition-colors`}
+        isLight ? 'bg-slate-50 text-slate-800' : 'bg-[#060c17] text-slate-100'
+      } select-none overflow-hidden transition-colors`}
     >
       {/* Hidden File Input for PDF / Track Upload */}
       <input
@@ -2523,325 +2527,394 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         className="hidden"
       />
 
-      {/* ── UNIFIED SLEEK TOP BAR (User-Friendly, Responsive, Elegant) ── */}
+      {/* ── UNIFIED STUDIO COMMAND BAR (Friendly, Elegant, Responsive, Neat & Professional) ── */}
       <header
         className={`shrink-0 border-b px-3 py-2 transition-colors ${
-          isLight ? 'border-slate-200 bg-white/95' : 'border-slate-800 bg-[#080f1d]/95'
+          isLight
+            ? 'border-slate-200/90 bg-gradient-to-b from-white to-slate-50/95 shadow-2xs'
+            : 'border-slate-800/90 bg-gradient-to-b from-[#0b1324] to-[#080e1b]'
         }`}
       >
+        {/* Row 1: Track & Plan Selection (Left) + Studio Modules & Transport Controls (Right) */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Left: Track Selector + Upload PDF + Plan + Start Index */}
+          {/* Left Group: Arena Track Capsule + Plan & Start Index Capsule */}
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <select
-              value={selectedTrackId}
-              disabled={isRunning}
-              aria-label="Lintasan"
-              onChange={(event) => handleSelectTrack(event.target.value)}
-              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none ${
+            {/* Capsule 1: Track & PDF */}
+            <div
+              className={`inline-flex flex-wrap items-center gap-1 p-1 rounded-2xl border ${
                 isLight
-                  ? 'border-slate-300 bg-slate-50 text-slate-900 hover:border-slate-400'
-                  : 'border-slate-700 bg-slate-900 text-slate-100 hover:border-slate-600'
+                  ? 'bg-slate-100/90 border-slate-200/90'
+                  : 'bg-[#0c1629] border-slate-800'
               }`}
             >
-              {tracks.map((track) => (
-                <option key={track.id} value={track.id}>
-                  🏁 {track.name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => pdfInputRef.current?.click()}
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition cursor-pointer disabled:opacity-50 ${
-                isLight
-                  ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
-                  : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
-              }`}
-              title="Upload file PDF atau gambar lintasan"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Upload PDF</span>
-            </button>
-
-            <select
-              value={currentPlan?.planId ?? ''}
-              disabled={isRunning || !plans.length}
-              aria-label="Plan"
-              onChange={(event) => {
-                setStartStep(null);
-                onChangePlans(plans, Number(event.target.value));
-              }}
-              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none ${
-                isLight
-                  ? 'border-slate-300 bg-slate-50 text-slate-800'
-                  : 'border-slate-700 bg-slate-900 text-slate-100'
-              }`}
-            >
-              {!currentPlan && <option value="">Belum ada Plan</option>}
-              {(plans.length ? plans : currentPlan ? [currentPlan] : []).map((plan) => (
-                <option key={plan.planId} value={plan.planId}>
-                  📋 Plan {plan.planId}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={chosenStep ?? ''}
-              disabled={isRunning || !steps.length}
-              aria-label="Mulai dari langkah"
-              onChange={(event) =>
-                setStartStep(event.target.value === '' ? null : Number(event.target.value))
-              }
-              title="Pilih langkah index awal saat simulasi dijalankan"
-              className={`min-h-8 rounded-xl border px-2.5 py-1 text-xs font-bold cursor-pointer outline-none ${
-                isLight
-                  ? 'border-slate-300 bg-slate-50 text-slate-700'
-                  : 'border-slate-700 bg-slate-900 text-slate-200'
-              }`}
-            >
-              <option value="">Mulai: Awal (#0)</option>
-              {steps.map((step, index) => (
-                <option key={index} value={step.index}>
-                  Mulai: Index #{step.index}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Right: Primary Actions (Run/Stop, Reset, OLED, Setup Robot, PID, Arena Tools, Sync) */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {onToggleRun && (
-              <button
-                type="button"
-                disabled={!isRunning && !steps.length}
-                onClick={onToggleRun}
-                className={`inline-flex min-h-8 items-center gap-1.5 rounded-xl px-3.5 py-1 text-xs font-extrabold text-white shadow-sm transition cursor-pointer disabled:opacity-50 ${
-                  isRunning
-                    ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25'
-                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
+              <select
+                value={selectedTrackId}
+                disabled={isRunning}
+                aria-label="Lintasan"
+                onChange={(event) => handleSelectTrack(event.target.value)}
+                className={`min-h-7.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none transition ${
+                  isLight
+                    ? 'border-slate-200 bg-white text-slate-900 hover:border-sky-300 shadow-2xs'
+                    : 'border-slate-700/80 bg-[#121f38] text-slate-100 hover:border-sky-500/50'
                 }`}
               >
-                {isRunning ? <Square className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
-                <span>{isRunning ? 'Berhenti' : 'Jalankan'}</span>
+                {tracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    🏁 {track.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => pdfInputRef.current?.click()}
+                className={`inline-flex min-h-7.5 items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition cursor-pointer disabled:opacity-50 ${
+                  isLight
+                    ? 'bg-white hover:bg-sky-50 text-sky-700 border-slate-200 hover:border-sky-300'
+                    : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
+                }`}
+                title="Upload file PDF atau gambar lintasan kustom"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Upload PDF</span>
               </button>
-            )}
 
-            <button
-              type="button"
-              onClick={() => resetRobotToStart()}
-              disabled={isRunning}
-              title="Kembalikan robot ke posisi Start"
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer disabled:opacity-50 ${
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(activeDrawer === 'pdf_samples' ? 'none' : 'pdf_samples')}
+                className={`inline-flex min-h-7.5 items-center gap-1 rounded-xl border px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
+                  activeDrawer === 'pdf_samples'
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-xs'
+                    : isLight
+                    ? 'bg-white hover:bg-emerald-50 text-emerald-700 border-slate-200'
+                    : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/25'
+                }`}
+                title="Lihat & unduh paket contoh file PDF lintasan siap pakai"
+              >
+                <span>📄</span>
+                <span className="hidden md:inline"> Track PDF</span>
+              </button>
+            </div>
+
+            {/* Capsule 2: Plan & Start Index */}
+            <div
+              className={`inline-flex items-center gap-1 p-1 rounded-2xl border ${
                 isLight
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  ? 'bg-slate-100/90 border-slate-200/90'
+                  : 'bg-[#0c1629] border-slate-800'
               }`}
             >
-              <RotateCcw className="size-3.5" />
-              <span className="hidden sm:inline">Reset</span>
-            </button>
+              <select
+                value={currentPlan?.planId ?? ''}
+                disabled={isRunning || !plans.length}
+                aria-label="Plan"
+                onChange={(event) => {
+                  setStartStep(null);
+                  onChangePlans(plans, Number(event.target.value));
+                }}
+                className={`min-h-7.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold cursor-pointer outline-none transition ${
+                  isLight
+                    ? 'border-slate-200 bg-white text-slate-800 hover:border-amber-300 shadow-2xs'
+                    : 'border-slate-700/80 bg-[#121f38] text-amber-300 hover:border-amber-500/50'
+                }`}
+              >
+                {!currentPlan && <option value="">Belum ada Plan</option>}
+                {(plans.length ? plans : currentPlan ? [currentPlan] : []).map((plan) => (
+                  <option key={plan.planId} value={plan.planId}>
+                    📋 Plan {plan.planId}
+                  </option>
+                ))}
+              </select>
 
-            <button
-              type="button"
-              onClick={() => setActiveDrawer(activeDrawer === 'oled' ? 'none' : 'oled')}
-              aria-expanded={activeDrawer === 'oled'}
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
-                activeDrawer === 'oled'
-                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
-                  : isLight
-                  ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border-cyan-300'
-                  : 'bg-cyan-950/60 hover:bg-cyan-900/70 text-cyan-300 border-cyan-500/40'
+              <select
+                value={chosenStep ?? ''}
+                disabled={isRunning || !steps.length}
+                aria-label="Mulai dari langkah"
+                onChange={(event) =>
+                  setStartStep(event.target.value === '' ? null : Number(event.target.value))
+                }
+                title="Pilih langkah index awal saat simulasi dijalankan"
+                className={`min-h-7.5 rounded-xl border px-2.5 py-1 text-xs font-bold cursor-pointer outline-none transition ${
+                  isLight
+                    ? 'border-slate-200 bg-white text-slate-700 hover:border-sky-300 shadow-2xs'
+                    : 'border-slate-700/80 bg-[#121f38] text-slate-200 hover:border-sky-500/50'
+                }`}
+              >
+                <option value="">🎯 Mulai: Awal (#0)</option>
+                {steps.map((step, index) => (
+                  <option key={index} value={step.index}>
+                    🎯 Mulai: Index #{step.index}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Right Group: Studio Drawers Capsule + Transport & Sync Capsule */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Capsule 3: Studio Drawers (OLED, Robot Hardware, PID 1-5, Plan Steps) */}
+            <div
+              className={`inline-flex flex-wrap items-center gap-1 p-1 rounded-2xl border ${
+                isLight
+                  ? 'bg-slate-100/90 border-slate-200/90'
+                  : 'bg-[#0c1629] border-slate-800'
               }`}
-              title="Tampilkan Layar OLED Ichibot & Tombol UPL/OKL/DWNL - UPR/OKR/DWNR"
             >
-              <span>📟 OLED</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(activeDrawer === 'oled' ? 'none' : 'oled')}
+                aria-expanded={activeDrawer === 'oled'}
+                className={`inline-flex min-h-7.5 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                  activeDrawer === 'oled'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm shadow-cyan-500/25'
+                    : isLight
+                    ? 'bg-white hover:bg-cyan-50 text-cyan-800 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-cyan-950/70 text-cyan-300 border-slate-700/80'
+                }`}
+                title="Tampilkan Layar Interaktif OLED Ichibot & 6 Tombol Navigasi"
+              >
+                <span>📟</span>
+                <span>OLED</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
-              aria-expanded={activeDrawer === 'hardware'}
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
-                activeDrawer === 'hardware'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                  : isLight
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(activeDrawer === 'hardware' ? 'none' : 'hardware')}
+                aria-expanded={activeDrawer === 'hardware'}
+                className={`inline-flex min-h-7.5 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                  activeDrawer === 'hardware'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm shadow-amber-500/25'
+                    : isLight
+                    ? 'bg-white hover:bg-amber-50 text-amber-800 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-amber-500/20 text-amber-300 border-slate-700/80'
+                }`}
+                title="Konfigurasi Sasis Robot, Jumlah Sensor, Motor RPM & Pinout"
+              >
+                <Cpu className="size-3.5" />
+                <span>Robot ({hardwareConfig.sensorCount}S)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
+                aria-expanded={activeDrawer === 'pid'}
+                className={`inline-flex min-h-7.5 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                  activeDrawer === 'pid'
+                    ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-sm shadow-fuchsia-500/25'
+                    : isLight
+                    ? 'bg-white hover:bg-fuchsia-50 text-fuchsia-700 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-fuchsia-500/20 text-fuchsia-300 border-slate-700/80'
+                }`}
+                title="Tuning Kombinasi PID 1 - 5"
+              >
+                <Sliders className="size-3.5" />
+                <span>PID</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
+                aria-expanded={activeDrawer === 'plan'}
+                className={`inline-flex min-h-7.5 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                  activeDrawer === 'plan'
+                    ? 'bg-sky-500 text-white border-sky-400 shadow-sm shadow-sky-500/25'
+                    : isLight
+                    ? 'bg-white hover:bg-sky-50 text-slate-700 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-slate-800 text-slate-200 border-slate-700/80'
+                }`}
+                title="Daftar & Editor Langkah Plan"
+              >
+                <span>Langkah ({steps.length})</span>
+              </button>
+            </div>
+
+            {/* Capsule 4: Transport Run/Reset & Sync Code */}
+            <div
+              className={`inline-flex items-center gap-1 p-1 rounded-2xl border ${
+                isLight
+                  ? 'bg-slate-100/90 border-slate-200/90'
+                  : 'bg-[#0c1629] border-slate-800'
               }`}
-              title="Konfigurasi Sasis Robot, Jumlah Sensor, Motor RPM & Pinout"
             >
-              <Cpu className="size-3.5" />
-              <span>Robot ({hardwareConfig.sensorCount}S)</span>
-            </button>
+              {onToggleRun && (
+                <button
+                  type="button"
+                  disabled={!isRunning && !steps.length}
+                  onClick={onToggleRun}
+                  className={`inline-flex min-h-7.5 items-center gap-1.5 rounded-xl px-3.5 py-1 text-xs font-extrabold text-white shadow-sm transition cursor-pointer disabled:opacity-50 ${
+                    isRunning
+                      ? 'bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 shadow-rose-600/25'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-emerald-600/25'
+                  }`}
+                >
+                  {isRunning ? <Square className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+                  <span>{isRunning ? 'Berhenti' : 'Jalankan'}</span>
+                </button>
+              )}
 
-            <button
-              type="button"
-              onClick={() => setActiveDrawer(activeDrawer === 'pid' ? 'none' : 'pid')}
-              aria-expanded={activeDrawer === 'pid'}
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
-                activeDrawer === 'pid'
-                  ? 'bg-fuchsia-500 text-white border-fuchsia-400 shadow-sm'
-                  : isLight
-                  ? 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300'
-                  : 'bg-fuchsia-500/15 hover:bg-fuchsia-500/25 text-fuchsia-300 border-fuchsia-500/30'
-              }`}
-              title="Tuning Kombinasi PID 1 - 5"
-            >
-              <Sliders className="size-3.5" />
-              <span>PID</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => resetRobotToStart()}
+                disabled={isRunning}
+                title="Kembalikan robot ke posisi Start"
+                className={`inline-flex min-h-7.5 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer disabled:opacity-50 ${
+                  isLight
+                    ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-slate-800 text-slate-200 border-slate-700/80'
+                }`}
+              >
+                <RotateCcw className="size-3.5" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
-              aria-expanded={activeDrawer === 'plan'}
-              className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
-                activeDrawer === 'plan'
-                  ? 'bg-sky-500 text-white border-sky-400 shadow-sm'
-                  : isLight
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-              }`}
-              title="Daftar Langkah Plan"
-            >
-              <span>Langkah ({steps.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
-              className="inline-flex min-h-8 items-center gap-1 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 px-2.5 py-1 text-xs font-extrabold shadow-sm cursor-pointer transition"
-              title="Sinkronkan konfigurasi robot, pinout, dan Plan ke Blok & Kode Arduino (.ino)"
-            >
-              <Sparkles className="size-3.5" />
-              <span className="hidden xl:inline">Sync Kode</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId)}
+                className="inline-flex min-h-7.5 items-center gap-1 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 px-2.5 py-1 text-xs font-extrabold shadow-xs cursor-pointer transition"
+                title="Sinkronkan konfigurasi robot, pinout, dan Plan ke Blok & Kode Arduino (.ino)"
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden xl:inline">Sync Kode</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* ── SUB-BAR: Checkpoints (ST, CP1-CP6), Free Move, Geleng, Camera & Track Tools ── */}
         <div
-          className={`mt-1.5 pt-1.5 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${
-            isLight ? 'border-slate-200/80' : 'border-slate-800/90'
+          className={`mt-1.5 pt-1.5 border-t flex flex-wrap items-center justify-between gap-2 text-[11px] ${
+            isLight ? 'border-slate-200/80' : 'border-slate-800/80'
           }`}
         >
-          {/* Left: Checkpoints + Free Move + Geleng */}
-          <div className="flex flex-wrap items-center gap-1">
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => handleJumpToCheckpoint(0)}
-              className={`px-2 py-0.5 rounded-lg font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
-                activeCheckpoint === 0
-                  ? 'bg-purple-600 text-white border-purple-500 shadow-xs'
-                  : isLight
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+          {/* Left: Checkpoints Capsule + Interactive Robot Test Mode Capsule */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div
+              className={`inline-flex flex-wrap items-center gap-0.5 px-1.5 py-0.5 rounded-xl border ${
+                isLight ? 'bg-slate-100/80 border-slate-200/90' : 'bg-[#0c1629] border-slate-800'
               }`}
-              title="Kembali ke Titik Start Utama (ST)"
             >
-              ST
-            </button>
-            {[1, 2, 3, 4, 5, 6].map((cpId) => {
-              const cp = checkpoints[cpId];
-              const isSelected = activeCheckpoint === cpId;
-              return (
-                <button
-                  key={cpId}
-                  type="button"
-                  disabled={isRunning}
-                  onClick={() => handleJumpToCheckpoint(cpId)}
-                  className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
-                    isSelected
-                      ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-xs font-extrabold'
-                      : cp?.saved
-                      ? isLight
-                        ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
-                        : 'bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border-sky-700/60'
-                      : isLight
-                      ? 'bg-white hover:bg-slate-100 text-slate-400 border-slate-200'
-                      : 'bg-slate-900 hover:bg-slate-800 text-slate-500 border-slate-800'
-                  }`}
-                  title={
-                    cp?.saved
-                      ? `Lompat ke CP${cpId}: (${cp.x}, ${cp.y}, ${cp.deg}°)`
-                      : `Simpan posisi ke CP${cpId}`
-                  }
-                >
-                  CP{cpId}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={handleSaveCurrentToCheckpoint}
-              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
-                isLight
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-              }`}
-              title="Simpan posisi & sudut robot saat ini ke slot Checkpoint aktif"
-            >
-              +Simpan CP
-            </button>
+              <span className={`text-[9.5px] font-extrabold uppercase tracking-wider mr-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Posisi:
+              </span>
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => handleJumpToCheckpoint(0)}
+                className={`px-2 py-0.5 rounded-lg font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                  activeCheckpoint === 0
+                    ? 'bg-purple-600 text-white border-purple-500 shadow-2xs'
+                    : isLight
+                    ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                    : 'bg-[#121f38] hover:bg-slate-800 text-slate-300 border-slate-700/80'
+                }`}
+                title="Kembali ke Titik Start Utama (ST)"
+              >
+                ST
+              </button>
+              {[1, 2, 3, 4, 5, 6].map((cpId) => {
+                const cp = checkpoints[cpId];
+                const isSelected = activeCheckpoint === cpId;
+                return (
+                  <button
+                    key={cpId}
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => handleJumpToCheckpoint(cpId)}
+                    className={`px-1.5 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                      isSelected
+                        ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-2xs font-extrabold'
+                        : cp?.saved
+                        ? isLight
+                          ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
+                          : 'bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border-sky-700/60'
+                        : isLight
+                        ? 'bg-white/80 hover:bg-slate-100 text-slate-400 border-slate-200/80'
+                        : 'bg-[#091120] hover:bg-slate-800 text-slate-500 border-slate-800'
+                    }`}
+                    title={
+                      cp?.saved
+                        ? `Lompat ke CP${cpId}: (${cp.x}, ${cp.y}, ${cp.deg}°)`
+                        : `Simpan posisi ke CP${cpId}`
+                    }
+                  >
+                    CP{cpId}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={handleSaveCurrentToCheckpoint}
+                className={`ml-0.5 px-2 py-0.5 rounded-lg font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                  isLight
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                }`}
+                title="Simpan posisi & sudut robot saat ini ke slot Checkpoint aktif"
+              >
+                +Simpan CP
+              </button>
+            </div>
 
-            <span className={`mx-0.5 h-3.5 w-px ${isLight ? 'bg-slate-300' : 'bg-slate-800'}`} />
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => setFreeMoveMode((v) => !v)}
+                className={`px-2.5 py-1 rounded-xl font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                  freeMoveMode
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-xs'
+                    : isLight
+                    ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200/90'
+                    : 'bg-[#0c1629] hover:bg-slate-800 text-slate-300 border-slate-800'
+                }`}
+                title="Geser posisi robot dengan klik langsung di arena atau tombol panah keyboard (↑↓←→)"
+              >
+                🕹️ Free Move {freeMoveMode ? 'ON' : ''}
+              </button>
 
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => setFreeMoveMode((v) => !v)}
-              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
-                freeMoveMode
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-xs'
-                  : isLight
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-              }`}
-              title="Geser posisi robot dengan klik langsung di arena atau tombol panah keyboard (↑↓←→)"
-            >
-              🕹️ Free Move {freeMoveMode ? 'ON' : ''}
-            </button>
-
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => setIsGelengActive((v) => !v)}
-              className={`px-2 py-0.5 rounded-lg font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
-                isGelengActive
-                  ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
-                  : isLight
-                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
-                  : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30'
-              }`}
-              title="Goyangkan robot kiri-kanan untuk menguji sensor garis"
-            >
-              〰️ Geleng
-            </button>
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => setIsGelengActive((v) => !v)}
+                className={`px-2.5 py-1 rounded-xl font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                  isGelengActive
+                    ? 'bg-rose-500 text-white border-rose-400 animate-pulse shadow-xs'
+                    : isLight
+                    ? 'bg-rose-50/80 hover:bg-rose-100 text-rose-700 border-rose-200'
+                    : 'bg-rose-500/12 hover:bg-rose-500/25 text-rose-300 border-rose-500/25'
+                }`}
+                title="Goyangkan robot kiri-kanan di tempat untuk menguji pembacaan sensor garis"
+              >
+                〰️ Geleng
+              </button>
+            </div>
           </div>
 
-          {/* Right: Speed, Camera View, Placement Tools & Fullscreen */}
-          <div className="flex flex-wrap items-center gap-1">
+          {/* Right: Speed, Camera View, Placement Tools & Fullscreen Capsule */}
+          <div
+            className={`inline-flex flex-wrap items-center gap-1 px-1.5 py-0.5 rounded-xl border ${
+              isLight ? 'bg-slate-100/80 border-slate-200/90' : 'bg-[#0c1629] border-slate-800'
+            }`}
+          >
             {/* Speed Selector */}
             <select
               value={playbackRate}
               aria-label="Laju simulasi"
               onChange={(event) => setPlaybackRate(Number(event.target.value))}
-              className={`rounded-lg border px-1.5 py-0.5 text-[10px] font-bold cursor-pointer outline-none ${
+              className={`rounded-lg border px-2 py-0.5 text-[10px] font-extrabold cursor-pointer outline-none ${
                 isLight
-                  ? 'bg-slate-100 border-slate-300 text-slate-700'
-                  : 'bg-slate-800 border-slate-700 text-slate-200'
+                  ? 'bg-white border-slate-200 text-slate-700'
+                  : 'bg-[#121f38] border-slate-700/80 text-slate-200'
               }`}
               title="Kecepatan jalannya simulasi"
             >
-              <option value={0.1}>0.1× Slow</option>
-              <option value={0.25}>0.25× Sensor</option>
-              <option value={0.5}>0.5× Pelan</option>
-              <option value={1}>1× Normal</option>
-              <option value={2}>2× Cepat</option>
+              <option value={0.1}>⏱️ 0.1× Slow</option>
+              <option value={0.25}>⏱️ 0.25× Sensor</option>
+              <option value={0.5}>⏱️ 0.5× Pelan</option>
+              <option value={1}>⚡ 1× Normal</option>
+              <option value={2}>🚀 2× Cepat</option>
             </select>
 
             {/* Camera View Selector */}
@@ -2849,10 +2922,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               value={cameraMode}
               aria-label="Kamera"
               onChange={(e) => setCameraMode(e.target.value as CameraViewMode)}
-              className={`rounded-lg border px-1.5 py-0.5 text-[10px] font-bold cursor-pointer outline-none ${
+              className={`rounded-lg border px-2 py-0.5 text-[10px] font-extrabold cursor-pointer outline-none ${
                 isLight
-                  ? 'bg-slate-100 border-slate-300 text-sky-700'
-                  : 'bg-slate-800 border-slate-700 text-sky-300'
+                  ? 'bg-white border-slate-200 text-sky-700'
+                  : 'bg-[#121f38] border-slate-700/80 text-sky-300'
               }`}
             >
               <option value="2d_top">📐 2D Atas</option>
@@ -2861,16 +2934,18 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               <option value="pov_cam">👁️ Kamera Robot</option>
             </select>
 
-            {/* Quick Placement & Heading Popover / Controls */}
+            <span className={`mx-0.5 h-3.5 w-px ${isLight ? 'bg-slate-300' : 'bg-slate-700'}`} />
+
+            {/* Quick Placement & Heading Controls */}
             <button
               type="button"
               onClick={() => setPlacementTool(placementTool === 'start' ? 'none' : 'start')}
-              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] cursor-pointer ${
+              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] transition cursor-pointer ${
                 placementTool === 'start'
-                  ? 'bg-purple-600 text-white border-purple-400'
+                  ? 'bg-purple-600 text-white border-purple-400 shadow-2xs'
                   : isLight
-                  ? 'bg-slate-100 hover:bg-purple-50 border-slate-300 text-purple-700'
-                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-purple-300'
+                  ? 'bg-white hover:bg-purple-50 border-slate-200 text-purple-700'
+                  : 'bg-[#121f38] hover:bg-slate-800 border-slate-700/80 text-purple-300'
               }`}
               title="Klik di lintasan untuk memindahkan titik START"
             >
@@ -2880,12 +2955,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             <button
               type="button"
               onClick={() => setPlacementTool(placementTool === 'finish' ? 'none' : 'finish')}
-              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] cursor-pointer ${
+              className={`px-2 py-0.5 rounded-lg border font-bold text-[10px] transition cursor-pointer ${
                 placementTool === 'finish'
-                  ? 'bg-emerald-600 text-white border-emerald-400'
+                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-2xs'
                   : isLight
-                  ? 'bg-slate-100 hover:bg-emerald-50 border-slate-300 text-emerald-700'
-                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-emerald-300'
+                  ? 'bg-white hover:bg-emerald-50 border-slate-200 text-emerald-700'
+                  : 'bg-[#121f38] hover:bg-slate-800 border-slate-700/80 text-emerald-300'
               }`}
               title="Klik di lintasan untuk memindahkan titik FINIS"
             >
@@ -2894,7 +2969,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
             <div
               className={`inline-flex items-center gap-0.5 border rounded-lg px-1.5 py-0.5 text-[10px] ${
-                isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-800 border-slate-700'
+                isLight ? 'bg-white border-slate-200' : 'bg-[#121f38] border-slate-700/80'
               }`}
               title="Sudut hadap awal robot (derajat)"
             >
@@ -2923,10 +2998,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                     : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                   : isLight
-                  ? 'bg-slate-100 text-slate-500 border-slate-300'
-                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                  ? 'bg-white text-slate-500 border-slate-200'
+                  : 'bg-[#121f38] text-slate-400 border-slate-700/80'
               }`}
-              title="Tampilkan/Sembunyikan garis jejak hijau"
+              title="Tampilkan/Sembunyikan garis jejak lintasan robot"
             >
               🟢 Jejak
             </button>
@@ -2934,7 +3009,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             <button
               type="button"
               onClick={() => setIsFullscreen((f) => !f)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[10px] cursor-pointer"
+              className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
               title={isFullscreen ? 'Keluar Layar Penuh' : 'Layar Penuh'}
             >
               {isFullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
@@ -3137,20 +3212,60 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           </div>
         )}
         {activeDrawer === 'plan' && (
-          <section aria-label="Langkah Plan" className={`absolute inset-x-2 top-2 z-30 max-h-[calc(100%-1rem)] overflow-auto rounded-2xl border p-3 shadow-xl ${isLight ? 'border-sky-200 bg-white' : 'border-slate-600 bg-slate-900'}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-extrabold">{currentPlan ? `Langkah Plan ${currentPlan.planId}` : 'Langkah Plan'}</h3>
-              <div className="flex gap-2">
-                <button type="button" onClick={addStep} disabled={!currentPlan || isRunning || newStepIndex === undefined} className={controlStyle}>Tambah langkah</button>
-                <button type="button" onClick={() => setActiveDrawer('none')} className={controlStyle}>Tutup</button>
+          <section
+            aria-label="Langkah Plan"
+            className={`absolute inset-x-2 top-2 z-30 max-h-[calc(100%-1rem)] overflow-auto rounded-2xl border p-3.5 shadow-2xl backdrop-blur-md ${
+              isLight
+                ? 'border-sky-300/90 bg-white/95 text-slate-800'
+                : 'border-sky-500/40 bg-[#0b1324]/95 text-slate-100'
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-500/20">
+              <div>
+                <h3 className="text-sm font-extrabold flex items-center gap-1.5">
+                  <span>📑</span>
+                  <span>{currentPlan ? `Langkah Plan ${currentPlan.planId}` : 'Langkah Plan'}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    isLight ? 'bg-sky-100 text-sky-700' : 'bg-sky-500/20 text-sky-300'
+                  }`}>
+                    {steps.length} Index
+                  </span>
+                </h3>
+                <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Klik baris langkah untuk membuka pengaturan pola sensor, kecepatan PWM kiri/kanan, rem, dan PID.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addStep}
+                  disabled={!currentPlan || isRunning || newStepIndex === undefined}
+                  className={`inline-flex min-h-8 items-center gap-1 rounded-xl border px-3 py-1 text-xs font-extrabold transition cursor-pointer disabled:opacity-50 ${
+                    isLight
+                      ? 'bg-sky-600 hover:bg-sky-500 text-white border-sky-500 shadow-xs'
+                      : 'bg-sky-500 hover:bg-sky-400 text-slate-950 border-sky-400 shadow-xs'
+                  }`}
+                >
+                  + Tambah langkah
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('none')}
+                  className={`inline-flex min-h-8 items-center rounded-xl border px-3 py-1 text-xs font-bold transition cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                >
+                  Tutup
+                </button>
               </div>
             </div>
-            <p className="my-2 text-xs text-slate-500 dark:text-slate-400">Pilih langkah untuk mengatur sensor, motor, dan kapan robot berhenti.</p>
             {currentPlan?.items.length ? (
-              <ol className="divide-y divide-slate-500/20">
+              <ol className="mt-2.5 space-y-1.5">
                 {currentPlan.items.map((item, position) => {
                   if (item.type !== 'step') return position === 0 || currentPlan.items[position - 1].type === 'stop_here'
-                    ? <li key={position} className="py-2 text-xs">Stop · {item.stage}</li> : null;
+                    ? <li key={position} className="py-1.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs">🛑 Stop · {item.stage}</li> : null;
                   const active = isRunning && execStatus.stepIndex === item.index;
                   const nextItem = currentPlan.items[position + 1];
                   const numericFields = [
@@ -3172,48 +3287,132 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                     ['timerUnit', 'Satuan Speed A', unitOptions],
                     ['lineColor', 'Warna garis', [['HITAM', 'Hitam'], ['PUTIH', 'Putih']]],
                   ] as const;
-                  return <li key={item.blockId ?? position} aria-current={active ? 'step' : undefined}>
-                    <button type="button" aria-expanded={expandedStep === position} onClick={() => setExpandedStep(value => value === position ? null : position)}
-                      className={`flex min-h-10 w-full items-center justify-between gap-2 px-2 text-left text-xs font-semibold ${active ? (isLight ? 'bg-sky-100' : 'bg-sky-950') : ''}`}>
-                      <span>Langkah {item.index} · {choices[3][2].find(([value]) => value === item.action)?.[1]}</span>
-                      <span className="font-mono">{item.speedL} / {item.speedR} PWM</span>
-                    </button>
-                    {expandedStep === position && <fieldset disabled={isRunning || !plans.length} className="grid grid-cols-2 gap-2 px-2 pb-3 text-xs sm:grid-cols-3">
-                      {choices.map(([field, label, options]) => <label key={field} className="grid min-w-0 gap-1">
-                        {label}
-                        <select value={item[field]} className={controlStyle}
-                          onChange={event => editStep(position, { [field]: field === 'pidId' ? Number(event.target.value) : event.target.value })}>
-                          {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-                        </select>
-                      </label>)}
-                      {numericFields.map(([field, label, min, max]) => <label key={field} className="grid min-w-0 gap-1">
-                        {label}
-                        <input key={item[field]} type="number" min={min} max={max} defaultValue={item[field]} className={controlStyle}
-                          onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                          onBlur={event => {
-                            const input = event.currentTarget;
-                            const value = Number.isFinite(input.valueAsNumber) ? Math.min(max, Math.max(min, Math.round(input.valueAsNumber))) : item[field];
-                            input.value = String(value);
-                            if (value !== item[field]) editStep(position, { [field]: value });
-                          }} />
-                      </label>)}
-                      <label className="grid min-w-0 gap-1">Berhenti setelah
-                        <select value={nextItem?.type === 'stop_here' ? nextItem.stage : ''} className={controlStyle}
-                          onChange={event => changeStop(position, event.target.value as '' | 'ACTION' | 'SPEED_A')}>
-                          <option value="">Lanjut ke langkah berikutnya</option>
-                          <option value="ACTION">Gerakan dan rem</option>
-                          <option value="SPEED_A">Speed A</option>
-                        </select>
-                      </label>
-                      <button type="button" className={controlStyle} onClick={() => {
-                        replacePlanItems(currentPlan.items.filter((_, i) => i !== position && !(i === position + 1 && nextItem?.type === 'stop_here')));
-                        setExpandedStep(null);
-                      }}>Hapus langkah</button>
-                    </fieldset>}
-                  </li>;
+                  const actionLabel = choices[3][2].find(([value]) => value === item.action)?.[1];
+                  return (
+                    <li
+                      key={item.blockId ?? position}
+                      aria-current={active ? 'step' : undefined}
+                      className={`rounded-xl border transition-all overflow-hidden ${
+                        active
+                          ? isLight
+                            ? 'bg-sky-50 border-sky-400 ring-1 ring-sky-400/50'
+                            : 'bg-sky-950/70 border-sky-400 ring-1 ring-sky-400/50'
+                          : expandedStep === position
+                          ? isLight
+                            ? 'bg-slate-50/90 border-slate-300'
+                            : 'bg-[#101b31] border-slate-700'
+                          : isLight
+                          ? 'bg-white hover:bg-slate-50 border-slate-200/90'
+                          : 'bg-[#0d1628] hover:bg-[#111d34] border-slate-800'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={expandedStep === position}
+                        onClick={() => setExpandedStep(value => value === position ? null : position)}
+                        className="flex min-h-10 w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-lg font-mono font-extrabold text-[11px] ${
+                            active
+                              ? 'bg-sky-500 text-slate-950'
+                              : isLight
+                              ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                              : 'bg-slate-800 text-sky-300 border border-slate-700'
+                          }`}>
+                            Langkah {item.index} · {actionLabel}
+                          </span>
+                          <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono text-[10px] border ${
+                            isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-900/80 border-slate-800 text-slate-300'
+                          }`}>
+                            {item.triggerMode === 'SENSOR' ? `Pola: ${item.sensorPattern}` : 'Gerak Langsung'}
+                          </span>
+                          {nextItem?.type === 'stop_here' && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-extrabold">
+                              🛑 Stop
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold ${
+                            isLight ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                          }`}>
+                            {item.speedL} / {item.speedR} PWM
+                          </span>
+                          <span className="text-[10px] opacity-60">{expandedStep === position ? '▲' : '▼'}</span>
+                        </div>
+                      </button>
+                      {expandedStep === position && (
+                        <fieldset disabled={isRunning || !plans.length} className={`grid grid-cols-2 gap-2.5 px-3 pb-3 pt-2 border-t text-xs sm:grid-cols-4 ${
+                          isLight ? 'border-slate-200/80' : 'border-slate-800'
+                        }`}>
+                          {choices.map(([field, label, options]) => (
+                            <label key={field} className="grid min-w-0 gap-1 font-semibold">
+                              <span className={`text-[10.5px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{label}</span>
+                              <select
+                                value={item[field]}
+                                className={controlStyle}
+                                onChange={event => editStep(position, { [field]: field === 'pidId' ? Number(event.target.value) : event.target.value })}
+                              >
+                                {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+                              </select>
+                            </label>
+                          ))}
+                          {numericFields.map(([field, label, min, max]) => (
+                            <label key={field} className="grid min-w-0 gap-1 font-semibold">
+                              <span className={`text-[10.5px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{label}</span>
+                              <input
+                                key={item[field]}
+                                type="number"
+                                min={min}
+                                max={max}
+                                defaultValue={item[field]}
+                                className={controlStyle}
+                                onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                                onBlur={event => {
+                                  const input = event.currentTarget;
+                                  const value = Number.isFinite(input.valueAsNumber) ? Math.min(max, Math.max(min, Math.round(input.valueAsNumber))) : item[field];
+                                  input.value = String(value);
+                                  if (value !== item[field]) editStep(position, { [field]: value });
+                                }}
+                              />
+                            </label>
+                          ))}
+                          <label className="grid min-w-0 gap-1 font-semibold">
+                            <span className={`text-[10.5px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Berhenti setelah</span>
+                            <select
+                              value={nextItem?.type === 'stop_here' ? nextItem.stage : ''}
+                              className={controlStyle}
+                              onChange={event => changeStop(position, event.target.value as '' | 'ACTION' | 'SPEED_A')}
+                            >
+                              <option value="">Lanjut ke langkah berikutnya</option>
+                              <option value="ACTION">Gerakan dan rem</option>
+                              <option value="SPEED_A">Speed A</option>
+                            </select>
+                          </label>
+                          <div className="flex items-end">
+                            <button
+                              type="button"
+                              className={`w-full min-h-8.5 rounded-xl border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                                isLight
+                                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                  : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30'
+                              }`}
+                              onClick={() => {
+                                replacePlanItems(currentPlan.items.filter((_, i) => i !== position && !(i === position + 1 && nextItem?.type === 'stop_here')));
+                                setExpandedStep(null);
+                              }}
+                            >
+                              Hapus langkah
+                            </button>
+                          </div>
+                        </fieldset>
+                      )}
+                    </li>
+                  );
                 })}
               </ol>
-            ) : <p className="text-xs">Susun Plan di editor blok untuk mulai.</p>}
+            ) : <p className="mt-3 text-xs">Susun Plan di editor blok untuk mulai.</p>}
           </section>
         )}
         {/* Floating Collapsible Drawers with Close Button */}
@@ -3873,43 +4072,46 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         )}
       </div>
 
-      {/* ── KIDS-FRIENDLY BOTTOM TELEMETRY & SENSOR STATUS DOCK (Never covers the Arena Track!) ── */}
+      {/* ── STUDIO BOTTOM TELEMETRY & SENSOR STATUS DOCK (Never covers the Arena Track!) ── */}
       <div
-        className={`flex flex-wrap items-center justify-between gap-1.5 px-2.5 py-1.5 border-t text-xs shrink-0 transition-colors ${
+        className={`flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-t text-xs shrink-0 transition-colors ${
           isLight
-            ? 'bg-white border-slate-200 text-slate-700'
-            : 'bg-[#0a1324] border-slate-800/90 text-slate-100'
+            ? 'bg-gradient-to-t from-slate-100/90 to-white border-slate-200/90 text-slate-700'
+            : 'bg-gradient-to-t from-[#060c17] to-[#0a1324] border-slate-800/90 text-slate-100'
         }`}
       >
         {trackResults.length > 0 && (
-          <p className="w-full text-xs font-semibold">
-            Finis terakhir: {trackResults[0].seconds.toFixed(2)} dtk · Terbaik sesi ini: {Math.min(...trackResults.map(result => result.seconds)).toFixed(2)} dtk
+          <p className={`w-full text-[11px] font-bold flex items-center gap-2 ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
+            <span>🏆</span>
+            <span>
+              Finis terakhir: {trackResults[0].seconds.toFixed(2)} dtk · Terbaik sesi ini: {Math.min(...trackResults.map(result => result.seconds)).toFixed(2)} dtk
+            </span>
           </p>
         )}
         {/* Left: Timer, RPM & Motor Speeds */}
         <div className="flex flex-wrap items-center gap-1.5">
           <div
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-mono ${
-              isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-900 border-slate-700/80'
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border font-mono shadow-2xs ${
+              isLight ? 'bg-white border-slate-200/90' : 'bg-[#0e182c] border-slate-800'
             }`}
           >
-            <span className={`text-[10px] font-bold ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>⏱️ WAKTU</span>
-            <span className={`font-extrabold text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            <span className={`text-[10px] font-extrabold ${isLight ? 'text-amber-600' : 'text-amber-400'}`}>⏱️ WAKTU</span>
+            <span className={`font-black text-xs ${isLight ? 'text-slate-900' : 'text-white'}`}>
               {simElapsedSec.toFixed(2)}s
             </span>
           </div>
 
           <div
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-mono text-[11px] ${
+            className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border font-mono text-[11px] shadow-2xs ${
               isLight
-                ? 'bg-slate-100 border-slate-300 text-slate-700'
-                : 'bg-slate-900 border-slate-800 text-slate-300'
+                ? 'bg-white border-slate-200/90 text-slate-700'
+                : 'bg-[#0e182c] border-slate-800 text-slate-300'
             }`}
           >
-            <span className={`font-bold ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
+            <span className={`font-extrabold ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
               ⚡ {hardwareConfig.motorRpm} RPM
             </span>
-            <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+            <span className={isLight ? 'text-slate-300' : 'text-slate-700'}>|</span>
             <span>
               PWM L/R:{' '}
               <b className={isLight ? 'text-slate-900' : 'text-white'}>{liveSpeeds.l}</b> /{' '}
@@ -3917,7 +4119,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             </span>
             {hardwareConfig.hasEncoder && (
               <>
-                <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-700'}>|</span>
                 <span className={isLight ? 'text-cyan-700' : 'text-cyan-300'}>
                   Enc: <b>{encoderLeft}</b>/<b>{encoderRight}</b>
                 </span>
@@ -3925,7 +4127,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             )}
             {hardwareConfig.ultrasonicMode !== 'none' && (
               <>
-                <span className={isLight ? 'text-slate-300' : 'text-slate-600'}>|</span>
+                <span className={isLight ? 'text-slate-300' : 'text-slate-700'}>|</span>
                 <span className={isLight ? 'text-sky-700' : 'text-sky-300'}>
                   Ultra: <b>{ultrasonicCm}cm</b>
                 </span>
@@ -3936,12 +4138,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
         {/* Center: Kids-Friendly Live Sensor Array ('0' = Garis, 'X' = Luar Garis) */}
         <div
-          className={`flex items-center gap-1.5 border px-2.5 py-0.5 rounded-xl ${
-            isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-900/90 border-slate-800'
+          className={`flex items-center gap-2 border px-2.5 py-1 rounded-xl shadow-2xs ${
+            isLight ? 'bg-white border-slate-200/90' : 'bg-[#0e182c] border-slate-800'
           }`}
         >
           <span
-            className={`text-[10px] font-extrabold uppercase tracking-wide ${
+            className={`text-[10px] font-extrabold uppercase tracking-wider ${
               isLight ? 'text-sky-700' : 'text-sky-300'
             }`}
           >
@@ -3952,12 +4154,12 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
               <span
                 key={i}
                 title={active ? `Sensor ${i + 1}: 0 (Membaca Garis)` : `Sensor ${i + 1}: X (Tidak Membaca Garis)`}
-                className={`w-4 h-4 rounded flex items-center justify-center font-mono text-[10px] font-extrabold border transition-all ${
+                className={`w-4 h-4 rounded-md flex items-center justify-center font-mono text-[10px] font-extrabold border transition-all ${
                   active
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_6px_rgba(34,197,94,0.75)] scale-105'
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.8)] scale-105'
                     : isLight
-                      ? 'bg-white text-rose-600 border-slate-300'
-                      : 'bg-slate-800 text-rose-400 border-slate-700'
+                      ? 'bg-slate-50 text-rose-600 border-slate-200'
+                      : 'bg-slate-900 text-rose-400 border-slate-700/80'
                 }`}
               >
                 {active ? '0' : 'X'}
@@ -3968,7 +4170,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
         {/* Right: Active Running Block / Step Index Status */}
         <div
-          className={`px-2.5 py-0.5 rounded-xl border text-[11px] font-extrabold flex items-center gap-1.5 transition-all ${
+          className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold flex items-center gap-1.5 transition-all shadow-2xs ${
             execStatus.stoppedByInterrupt
               ? isLight
                 ? 'bg-rose-50 border-rose-400 text-rose-700 animate-pulse'
@@ -3978,8 +4180,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                   ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
                   : 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
                 : isLight
-                  ? 'bg-slate-100 border-slate-300 text-slate-600'
-                  : 'bg-slate-900 border-slate-800 text-slate-300'
+                  ? 'bg-white border-slate-200/90 text-slate-600'
+                  : 'bg-[#0e182c] border-slate-800 text-slate-300'
           }`}
         >
           {execStatus.stoppedByInterrupt ? (
