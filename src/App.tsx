@@ -3931,20 +3931,21 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     }
   };
 
-  // Layout mode
+  // Layout mode — Default to 'student' mode and Sync ON as requested
   const [workspaceMode, setWorkspaceMode] = useState<'blockly' | 'code' | 'split'>('split');
-  const [uiMode, setUiMode] = useState<'student' | 'pro'>('pro');
+  const [uiMode, setUiMode] = useState<'student' | 'pro'>('student');
   const [studentSubMode, setStudentSubMode] = useState<'block' | 'code'>('block');
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [showLearningProjects, setShowLearningProjects] = useState(false);
   const [learningCategory, setLearningCategory] = useState<'fundamental' | 'micropython' | 'hardware'>('fundamental');
   const [showTechDetails, setShowTechDetails] = useState<boolean>(false);
 
-  // Code Synchronization with Blockly statuses (Real Device Workspace)
+  // Code Synchronization with Blockly statuses (Real Device Workspace) — Default Sync ON (true)
   const [syncStatuses, setSyncStatuses] = useState<Record<string, boolean>>(() => {
-    const defaults = { 'firmware/main.ino': true, 'python/main.py': true };
+    const defaults: Record<string, boolean> = { 'firmware/main.ino': true, 'python/main.py': true };
     try {
-      return { ...defaults, ...JSON.parse(localStorage.getItem('robolab_syncStatuses') ?? '{}') };
+      const saved = JSON.parse(localStorage.getItem('robolab_syncStatuses') ?? '{}');
+      return { ...saved, ...defaults };
     } catch {
       return defaults;
     }
@@ -4029,7 +4030,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': BLANK_SIM_XML,
     };
   });
-  const [showSimulatorCode, setShowSimulatorCode] = useState(true);
+  const [showSimulatorCode, setShowSimulatorCode] = useState(false);
   const [simShowConsole, setSimShowConsole] = useState<boolean>(false);
   const [simResetKey, setSimResetKey] = useState<number>(0);
 
@@ -4091,27 +4092,56 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     sync: typeof simSyncStatuses;
     board: string;
     activeFile: string;
+    components: string[];
+    wires: Wire[];
   }>>>({});
+
+  const isRobotPlanGeneratedCode = (code?: string) =>
+    Boolean(code && (code.includes('Robot Plan Executor') || code.includes('MOTOR_PWM_L') || code.includes('PLAN_COUNT')));
 
   const handleSimulatorModeChange = (nextMode: 'robot' | 'circuit') => {
     if (simulatorMode === nextMode) return;
     if (isRunningRef.current) handleStopCode();
     setActiveRobotHighlight(null);
     simulatorWorkspaces.current[simulatorMode] = {
-      files: simFiles, xmls: simWorkspaceXmls, sync: simSyncStatuses, board: simBoard, activeFile: simActiveFile,
+      files: simFiles,
+      xmls: simWorkspaceXmls,
+      sync: simSyncStatuses,
+      board: simBoard,
+      activeFile: simActiveFile,
+      components: simulatorMode === 'circuit' ? simulatorActiveComponents : [],
+      wires: simulatorMode === 'circuit' ? simulatorWires : [],
     };
     setSimulatorMode(nextMode);
     const saved = simulatorWorkspaces.current[nextMode];
-    if (saved) {
+    if (saved && !(nextMode === 'circuit' && isRobotPlanGeneratedCode(saved.files['firmware/main.ino']))) {
       setSimFiles(saved.files);
       setSimWorkspaceXmls(saved.xmls);
       setSimSyncStatuses(saved.sync);
       setSimBoard(saved.board);
       setSimActiveFile(saved.activeFile);
+      if (nextMode === 'circuit') {
+        setSimulatorActiveComponents(saved.components || []);
+        setSimulatorWires(saved.wires || []);
+      }
       setSimResetKey(previous => previous + 1);
     } else if (nextMode === 'robot') {
       setSimActiveFile('firmware/main.ino');
       syncRobotToSimulatorWorkspace(robotHardwareConfig, robotPlans, activeRobotPlanId, true);
+    } else if (nextMode === 'circuit') {
+      // Ensure switching to circuit mode starts with clean isolated circuit workspace, completely separate from Robot Arena
+      setSimFiles(BLANK_SIM_FILES);
+      setSimWorkspaceXmls({
+        'firmware/main.ino': BLANK_SIM_XML,
+        'python/main.py': BLANK_SIM_XML,
+      });
+      setSimSyncStatuses({
+        'firmware/main.ino': true,
+        'python/main.py': true,
+      });
+      setSimulatorActiveComponents([]);
+      setSimulatorWires([]);
+      setSimResetKey(previous => previous + 1);
     }
   };
 
@@ -5701,9 +5731,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       if (workspaceMode === 'blockly' || workspaceMode === 'code') {
         setWorkspaceMode('split');
       }
-      if (uiMode === 'student') {
-        setUiMode('pro');
-      }
     }
 
     // Redirect .hex active view to firmware/main.ino (or python/main.py for micro:bit)
@@ -5748,7 +5775,9 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     if (isBlockSourceFile(filename)) {
       if (!workspaceXmls[filename] || explicitFilesMap) {
         updatedXmls[filename] = sourceFileToBlockly(filename, content);
-        setSyncStatuses(prev => ({ ...prev, [filename]: false }));
+        const canAutoSync = !updatedXmls[filename]?.includes('type="imported_source_preview"') &&
+          (fileExtension(filename) !== 'ino' || !hasNativeOnlyArduinoCode(content));
+        setSyncStatuses(prev => ({ ...prev, [filename]: canAutoSync }));
       }
     }
     else if (extension === 'hex') {
@@ -5873,7 +5902,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
           setIsBlocklyCollapsed(false);
           setIsEditorCollapsed(false);
           if (workspaceMode === 'blockly') setWorkspaceMode('split');
-          if (uiMode === 'student') setUiMode('pro');
 
           const fileKeys = Object.keys(cleanedFiles);
           const firstFile = fileKeys.find(f => f.endsWith('.ino') || f.endsWith('.py')) || fileKeys[0];
@@ -5902,7 +5930,6 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
         setIsBlocklyCollapsed(false);
         setIsEditorCollapsed(false);
         if (workspaceMode === 'blockly') setWorkspaceMode('split');
-        if (uiMode === 'student') setUiMode('pro');
 
         const fileKeys = Object.keys(cleanedFiles);
         const firstFile = fileKeys.find(f => f.endsWith('.ino') || f.endsWith('.py')) || fileKeys[0];
@@ -8690,7 +8717,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
     setWorkspaceMode('split');
     setIsBlocklyCollapsed(false);
     setIsEditorCollapsed(false);
-    if (uiMode === 'student') setUiMode('pro');
+    setStudentSubMode('block');
     setCurrentTab('ide');
 
     // Set handcrafted code sebagai fallback awal
@@ -8766,16 +8793,16 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
       'python/main.py': targetXml
     });
 
-    // Aktifkan auto-sync HANYA jika targetXml memiliki block statements (hindari empty overwrite)
-    const hasBlocksInXml = !!(targetXml && (targetXml.includes('<statement name="STACK">') || targetXml.includes('custom_library_')));
+    // Aktifkan auto-sync secara default untuk template proyek
+    const hasBlocksInXml = !!(targetXml && (targetXml.includes('<block') || targetXml.includes('<statement name="STACK">') || targetXml.includes('custom_library_')));
     setSyncStatuses({
-      'firmware/main.ino': hasBlocksInXml,
-      'python/main.py': hasBlocksInXml
+      'firmware/main.ino': hasBlocksInXml || true,
+      'python/main.py': hasBlocksInXml || true
     });
 
     setSimSyncStatuses({
-      'firmware/main.ino': hasBlocksInXml,
-      'python/main.py': hasBlocksInXml
+      'firmware/main.ino': hasBlocksInXml || true,
+      'python/main.py': hasBlocksInXml || true
     });
 
     setSensorData(prev => ({ ...prev, rfidCardPresent: false }));
@@ -9328,73 +9355,113 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                           handleOpenTemplate(proj.name || "");
                           setActiveCardIndex(index);
                         }}
-                        className={`w-[min(76vw,${isCompactLaptop ? "250px" : (isMobile ? "240px" : "280px")})] ${isCompactLaptop ? "h-[305px] p-4 sm:p-5" : (isMobile ? "h-[285px] p-4" : "h-[340px] p-6")} rounded-3xl cursor-pointer relative flex flex-col justify-between overflow-hidden`}
+                        className={`w-[min(82vw,${isCompactLaptop ? "265px" : (isMobile ? "250px" : "305px")})] ${isCompactLaptop ? "h-[315px] p-5" : (isMobile ? "h-[295px] p-4" : "h-[350px] p-6")} rounded-3xl cursor-pointer relative flex flex-col justify-between overflow-hidden group/card`}
                         style={{
                           position: 'absolute',
                           zIndex: zIndexValue,
                           transformStyle: 'preserve-3d',
                           background: themeMode === 'light'
-                             ? 'linear-gradient(135deg, rgba(255,255,255,0.90) 0%, rgba(248,250,252,0.95) 100%)'
-                             : 'linear-gradient(135deg, rgba(16,18,27,0.95) 0%, rgba(8,9,15,0.98) 100%)',
-                          border: `1px solid ${diff === 0 ? accentColor : themeMode === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)'}`,
+                             ? 'linear-gradient(155deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)'
+                             : 'linear-gradient(155deg, rgba(19,23,36,0.96) 0%, rgba(10,12,20,0.98) 100%)',
+                          border: `1.5px solid ${diff === 0 ? accentColor : themeMode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)'}`,
                           boxShadow: diff === 0 
                             ? themeMode === 'light'
-                              ? `0 15px 35px -5px ${bgGlow}, 0 0 0 1px ${accentColor}40, 0 10px 20px -10px rgba(0,0,0,0.08)`
-                              : `0 15px 35px -5px ${bgGlow}, 0 0 0 1px ${accentColor}33, 0 10px 20px -10px rgba(0,0,0,0.5)`
+                              ? `0 22px 45px -10px ${bgGlow}, 0 0 0 1px ${accentColor}38, 0 12px 24px -10px rgba(15,23,42,0.1)`
+                              : `0 22px 48px -8px ${bgGlow}, 0 0 0 1px ${accentColor}40, 0 16px 32px -12px rgba(0,0,0,0.7)`
                             : themeMode === 'light'
-                              ? '0 8px 24px -10px rgba(0,0,0,0.05)'
-                              : '0 8px 24px -10px rgba(0,0,0,0.4)',
+                              ? '0 10px 28px -10px rgba(15,23,42,0.07)'
+                              : '0 10px 28px -10px rgba(0,0,0,0.5)',
                         }}
                       >
+                        {/* Top Accent Gradient Strip */}
+                        <div
+                          className="absolute top-0 inset-x-0 h-1.5 transition-opacity"
+                          style={{
+                            background: `linear-gradient(90deg, ${accentColor}, var(--accent-primary))`,
+                            opacity: diff === 0 ? 1 : 0.45,
+                          }}
+                        />
+
                         {/* Accent top glow */}
                         {diff === 0 && (
                           <div 
-                            className="absolute -top-24 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full blur-[60px]"
-                            style={{ background: accentColor, opacity: themeMode === 'light' ? 0.08 : 0.15 }}
+                            className="absolute -top-24 left-1/2 -translate-x-1/2 w-52 h-52 rounded-full blur-[65px] pointer-events-none"
+                            style={{ background: accentColor, opacity: themeMode === 'light' ? 0.11 : 0.18 }}
                           />
                         )}
 
                         {/* Card body */}
                         <div className="relative z-10 flex flex-col h-full justify-between">
                           <div>
-                            {diff === 0 ? <div className={isCompactLaptop ? "mb-1.5" : "mb-3"}><HomeRobot /></div> : <div
-                              className={`${isCompactLaptop ? "w-9 h-9 rounded-xl mb-2" : "w-12 h-12 rounded-2xl mb-4"} flex items-center justify-center border`}
-                              style={{ 
-                                color: accentColor, 
-                                backgroundColor: `${accentColor}12`,
-                                borderColor: `${accentColor}25`
-                              }}
-                            >
-                              <IconComponent className={isCompactLaptop ? "w-4 h-4" : "w-6 h-6"} />
-                            </div>}
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              {diff === 0 ? (
+                                <div className="-mt-1"><HomeRobot /></div>
+                              ) : (
+                                <div
+                                  className={`${isCompactLaptop ? "w-10 h-10 rounded-xl" : "w-12 h-12 rounded-2xl"} flex items-center justify-center border shadow-xs transition-transform group-hover/card:scale-105`}
+                                  style={{ 
+                                    color: accentColor, 
+                                    backgroundColor: `${accentColor}14`,
+                                    borderColor: `${accentColor}30`
+                                  }}
+                                >
+                                  <IconComponent className={isCompactLaptop ? "w-5 h-5" : "w-6 h-6"} />
+                                </div>
+                              )}
+                              <span
+                                className="text-[9.5px] font-extrabold px-2.5 py-1 rounded-full border tracking-wide shrink-0"
+                                style={{
+                                  color: accentColor,
+                                  backgroundColor: `${accentColor}12`,
+                                  borderColor: `${accentColor}28`,
+                                }}
+                              >
+                                {proj.board}
+                              </span>
+                            </div>
                             
-                            <h3 className={`${isCompactLaptop ? "text-xs font-bold mb-1" : "text-sm font-bold mb-2"} leading-tight font-display ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{proj.name}</h3>
-                            <p className={`${isCompactLaptop ? "text-[10px] line-clamp-3" : "text-[11px] line-clamp-4"} leading-relaxed font-sans ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{proj.description}</p>
+                            <h3 className={`${isCompactLaptop ? "text-sm font-extrabold mb-1.5" : "text-base font-extrabold mb-2"} leading-snug font-display tracking-tight ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                              {proj.name}
+                            </h3>
+                            <p className={`${isCompactLaptop ? "text-[10.5px] line-clamp-3" : "text-xs line-clamp-3"} leading-relaxed font-sans ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                              {proj.description}
+                            </p>
                           </div>
 
-                          <div>
+                          <div className="pt-2">
                             {/* Component list badge preview if present */}
                             {proj.components && proj.components.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-3">
+                              <div className="flex flex-wrap gap-1.5 mb-3">
                                 {proj.components.map((comp: string) => (
-                                  <span key={comp} className={`text-[8px] border px-1.5 py-0.5 rounded uppercase ${themeMode === 'light' ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+                                  <span
+                                    key={comp}
+                                    className={`text-[8.5px] font-bold border px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 ${
+                                      themeMode === 'light'
+                                        ? 'bg-slate-100/90 border-slate-200/90 text-slate-700'
+                                        : 'bg-white/[0.06] border-white/10 text-slate-300'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
                                     {comp}
                                   </span>
                                 ))}
                               </div>
                             )}
 
-                            <div className={`flex items-center justify-between border-t pt-3 ${themeMode === 'light' ? 'border-slate-200/50' : 'border-white/5'}`}>
-                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">BOARD:</span>
+                            <div className={`flex items-center justify-between border-t pt-3 ${themeMode === 'light' ? 'border-slate-200/70' : 'border-white/10'}`}>
+                              <span className={`text-[9.5px] font-bold uppercase tracking-wider ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                                Siap Praktik
+                              </span>
                               <span 
-                                className="text-[9px] font-bold px-2.5 py-0.5 rounded-full border"
+                                className="inline-flex items-center gap-1 text-[10px] font-extrabold px-3 py-1 rounded-full transition-transform group-hover/card:translate-x-0.5"
                                 style={{
-                                  color: accentColor,
-                                  backgroundColor: `${accentColor}12`,
-                                  borderColor: `${accentColor}25`
+                                  color: diff === 0 ? '#ffffff' : accentColor,
+                                  background: diff === 0 ? `linear-gradient(135deg, ${accentColor}, var(--accent-primary))` : `${accentColor}15`,
+                                  boxShadow: diff === 0 ? `0 4px 12px ${accentColor}40` : 'none',
                                 }}
                               >
-                                {proj.board}
+                                <span>{t(language, 'home', 'openProject')}</span>
+                                <ArrowRight className="w-3 h-3" />
                               </span>
                             </div>
                           </div>
@@ -9488,7 +9555,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                 </div>
 
                 {/* Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
                   {allProjectsList.filter(p => {
                     const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                       (p.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -9520,50 +9587,104 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       <div
                         key={`grid-${proj.name}-${idx}`}
                         onClick={() => handleOpenTemplate(proj.name || "")}
-                        className={`rounded-2xl p-5 cursor-pointer transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl border flex flex-col justify-between group ${
+                        className={`relative overflow-hidden rounded-3xl p-5 sm:p-6 cursor-pointer transition-all duration-300 transform hover:-translate-y-1.5 border flex flex-col justify-between group min-h-[240px] ${
                           themeMode === 'light'
-                            ? 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-slate-200/50'
-                            : 'bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:shadow-black/50'
+                            ? 'bg-white/95 border-slate-200/90 hover:border-slate-300 shadow-[0_10px_30px_-12px_rgba(15,23,42,0.08)] hover:shadow-[0_20px_40px_-12px_rgba(15,23,42,0.16)]'
+                            : 'bg-[#10131e]/90 border-white/[0.08] hover:border-white/20 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)] hover:shadow-[0_22px_45px_-12px_rgba(0,0,0,0.85)]'
                         }`}
-                        style={{ height: '220px' }}
                       >
+                        {/* Top Accent Strip */}
+                        <div
+                          className="absolute top-0 inset-x-0 h-1 opacity-75 group-hover:opacity-100 transition-opacity"
+                          style={{ background: `linear-gradient(90deg, ${accentColor}, var(--accent-primary))` }}
+                        />
+
+                        {/* Subtle Corner Glow on Hover */}
+                        <div
+                          className="absolute -top-16 -right-16 w-36 h-36 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity pointer-events-none"
+                          style={{ backgroundColor: accentColor }}
+                        />
+
                         <div>
-                          <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start justify-between gap-2 mb-3.5">
                             <div 
-                              className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+                              className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 border shadow-xs"
                               style={{ 
                                 color: accentColor, 
-                                backgroundColor: `${accentColor}15`,
+                                backgroundColor: `${accentColor}14`,
+                                borderColor: `${accentColor}30`,
                               }}
                             >
                               <IconComponent className="w-5 h-5" />
                             </div>
-                            <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                              {proj.board}
-                            </span>
-                          </div>
-                          <div className={`flex items-center gap-1.5 mb-1 px-1 font-semibold select-none ${themeMode === 'light' ? 'text-slate-700' : 'text-slate-400'}`}>
-                            {(proj as any).libraryName && (
-                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                                📚 {(proj as any).libraryName}
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {(proj as any).libraryName && (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                                  📚 {(proj as any).libraryName}
+                                </span>
+                              )}
+                              {(proj as any).isCustom && (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  🐙 GitHub
+                                </span>
+                              )}
+                              <span
+                                className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border"
+                                style={{
+                                  color: accentColor,
+                                  backgroundColor: `${accentColor}12`,
+                                  borderColor: `${accentColor}28`,
+                                }}
+                              >
+                                {proj.board}
                               </span>
-                            )}
-                            {(proj as any).isCustom && (
-                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                🐙 GitHub Lib
-                              </span>
-                            )}
+                            </div>
                           </div>
-                          <h4 className="font-bold text-lg mb-2 line-clamp-1">{proj.name}</h4>
-                          <p className={`text-xs line-clamp-3 leading-relaxed ${themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+
+                          <h4 className={`font-extrabold text-base sm:text-lg mb-1.5 line-clamp-1 tracking-tight transition-colors ${
+                            themeMode === 'light' ? 'text-slate-900 group-hover:text-slate-950' : 'text-white'
+                          }`}>
+                            {proj.name}
+                          </h4>
+                          <p className={`text-xs line-clamp-2 sm:line-clamp-3 leading-relaxed ${
+                            themeMode === 'light' ? 'text-slate-600' : 'text-slate-400'
+                          }`}>
                             {proj.description}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-4">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider group-hover:underline`} style={{ color: accentColor }}>
-                            {t(language, 'home', 'openProject')}
+
+                        <div className="pt-4 mt-3 border-t flex items-center justify-between gap-2" style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.06)' }}>
+                          <div className="flex flex-wrap items-center gap-1 min-w-0">
+                            {proj.components && proj.components.length > 0 ? (
+                              proj.components.slice(0, 3).map((comp: string) => (
+                                <span
+                                  key={comp}
+                                  className={`text-[8.5px] font-bold px-2 py-0.5 rounded-md border uppercase ${
+                                    themeMode === 'light'
+                                      ? 'bg-slate-100 border-slate-200 text-slate-600'
+                                      : 'bg-white/5 border-white/10 text-slate-300'
+                                  }`}
+                                >
+                                  {comp}
+                                </span>
+                              ))
+                            ) : (
+                              <span className={`text-[10px] font-semibold ${themeMode === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>
+                                Template Siap Pakai
+                              </span>
+                            )}
+                          </div>
+
+                          <span
+                            className="inline-flex items-center gap-1.5 text-[10.5px] font-extrabold px-3 py-1.5 rounded-full transition-all group-hover:translate-x-0.5 shrink-0"
+                            style={{
+                              color: accentColor,
+                              backgroundColor: `${accentColor}14`,
+                            }}
+                          >
+                            <span>{t(language, 'home', 'openProject')}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
                           </span>
-                          <ArrowRight className="w-3 h-3" style={{ color: accentColor }} />
                         </div>
                       </div>
                     );
@@ -11025,68 +11146,139 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
             
             return (
               <div className={`absolute inset-0 p-4 sm:p-6 lg:p-7 overflow-y-auto space-y-5 transition ${themeMode === 'light' ? 'bg-[#f8fafc] text-slate-800' : 'bg-[#0a0b10] text-slate-100'}`}>
-                <header className={`learning-header rounded-2xl border p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm ${themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-700'}`}>
-                  <h2 className="text-lg font-bold tracking-tight">{t(language, 'learning', 'title')}</h2>
-                  <nav aria-label="Jalur belajar" className="grid grid-cols-2 sm:flex gap-1 rounded-xl bg-slate-500/10 p-1 w-full sm:w-auto">
+                <header
+                  className={`learning-header rounded-2xl border p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm ${
+                    themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-[#0e111a] border-slate-800'
+                  }`}
+                  style={{
+                    borderColor: themeMode === 'light' ? 'rgba(var(--accent-rgb), 0.25)' : 'rgba(var(--accent-rgb), 0.3)',
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center text-white text-lg shadow-sm shrink-0"
+                      style={{ background: 'var(--accent-gradient)' }}
+                    >
+                      🎓
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black tracking-tight">{t(language, 'learning', 'title')}</h2>
+                      <p className={`text-xs ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Belajar koding robotika &amp; elektronika langkah demi langkah dengan simulasi interaktif
+                      </p>
+                    </div>
+                  </div>
+                  <nav aria-label="Jalur belajar" className="grid grid-cols-2 sm:flex gap-1.5 rounded-xl bg-slate-500/10 p-1.5 w-full sm:w-auto">
                     {(['fundamental','micropython','hardware','projects'] as const).map((key,i) => {
                       const active = showLearningProjects ? key === 'projects' : key === learningCategory;
+                      const navLabels = ['🐍 Dasar Python', '⚡ MicroPython IoT', '🤖 Elektronik Arduino', '🛠️ Proyek Seru'];
                       return <button key={key} type="button" aria-pressed={active}
                         onClick={() => {
                           setShowLearningProjects(key === 'projects');
                           if (key !== 'projects' && key !== learningCategory) { setLearningCategory(key); setActiveLessonIndex(0); }
                         }}
-                        className={`learning-nav-button min-h-11 rounded-lg px-3 text-sm font-semibold transition focus-visible:outline-blue-500 ${active ? 'is-active shadow-sm' : 'hover:bg-blue-500/10'}`}>
-                        {['Python','MicroPython','Arduino','Proyek Arduino C++'][i]}
+                        className={`min-h-10 rounded-xl px-3.5 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                          active
+                            ? 'text-white shadow-sm'
+                            : themeMode === 'light'
+                            ? 'text-slate-700 hover:bg-slate-200/70'
+                            : 'text-slate-300 hover:bg-white/10'
+                        }`}
+                        style={
+                          active
+                            ? {
+                                background: 'var(--accent-gradient)',
+                                boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.3)',
+                              }
+                            : undefined
+                        }>
+                        {navLabels[i]}
                       </button>;
                     })}
                   </nav>
                 </header>
-                {showLearningProjects ? <ProjectWorkshop /> : (
+                {showLearningProjects ? <ProjectWorkshop themeMode={themeMode} /> : (
                 <div className="flex flex-col lg:flex-row gap-5 w-full min-h-[580px] items-stretch">
                   {/* Column 1 (Left): Category Selector + Nav List */}
                   <div className="w-full lg:w-64 xl:w-72 flex flex-col gap-3 flex-shrink-0">
-                    <label className="lg:hidden text-sm font-semibold">Pilih pelajaran
-                      <select className="block w-full mt-1 p-2 rounded-xl bg-white text-slate-900 border" value={activeLessonIndex} onChange={e=>setActiveLessonIndex(Number(e.target.value))}>
-                        {currentLessons.map((lesson,i)=><option key={lesson.title} value={i}>{lesson.title}</option>)}
+                    <label className="lg:hidden text-xs font-extrabold">Pilih Topik Pelajaran:
+                      <select
+                        className={`block w-full mt-1 p-2.5 rounded-xl border font-bold text-xs ${
+                          themeMode === 'light' ? 'bg-white text-slate-900 border-slate-300' : 'bg-slate-900 text-slate-100 border-slate-700'
+                        }`}
+                        value={activeLessonIndex}
+                        onChange={e=>setActiveLessonIndex(Number(e.target.value))}
+                      >
+                        {currentLessons.map((lesson,i)=><option key={lesson.title} value={i}>{i + 1}. {lesson.title.replace(/^\d+\.\s*/, '')}</option>)}
                       </select>
                     </label>
-                    <div className="hidden lg:flex flex-col gap-2 overflow-y-auto lg:max-h-[580px] pr-1">
-                      {currentLessons.map((lesson, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveLessonIndex(idx)}
-                          className={`text-left p-3 rounded-2xl border transition cursor-pointer select-none flex items-start gap-2.5 ${
-                            activeLessonIndex === idx
-                              ? themeMode === 'light'
-                                ? 'bg-blue-50 text-blue-900 border-blue-400 shadow-sm font-bold ring-2 ring-blue-500/20'
-                                : 'bg-blue-950/50 text-sky-300 border-blue-600 shadow-lg ring-1 ring-blue-500/30'
-                              : themeMode === 'light'
-                                ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                                : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/30'
-                          }`}
-                        >
-                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5 ${
-                            activeLessonIndex === idx
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : (themeMode === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-white/5 text-slate-400')
-                          }`}>
-                            {idx + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-[11px] font-bold truncate leading-tight">{lesson.title.replace(/^\d+\.\s*/, '')}</h4>
-                            <p className="text-[9.5px] text-slate-500 dark:text-slate-400 mt-1 leading-snug line-clamp-2">{lesson.desc}</p>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="hidden lg:flex flex-col gap-2 overflow-y-auto lg:max-h-[640px] pr-1">
+                      {currentLessons.map((lesson, idx) => {
+                        const isSelected = activeLessonIndex === idx;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setActiveLessonIndex(idx)}
+                            className={`text-left p-3 rounded-2xl border transition cursor-pointer select-none flex items-start gap-2.5 ${
+                              isSelected
+                                ? 'font-bold shadow-sm'
+                                : themeMode === 'light'
+                                  ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/30'
+                            }`}
+                            style={
+                              isSelected
+                                ? {
+                                    background: themeMode === 'light' ? 'rgba(var(--accent-rgb), 0.10)' : 'rgba(var(--accent-rgb), 0.16)',
+                                    borderColor: 'var(--accent-primary)',
+                                    color: themeMode === 'light' ? '#0f172a' : '#ffffff',
+                                  }
+                                : undefined
+                            }
+                          >
+                            <div
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10.5px] font-black flex-shrink-0 mt-0.5 ${
+                                isSelected
+                                  ? 'text-white shadow-xs'
+                                  : (themeMode === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-white/5 text-slate-400')
+                              }`}
+                              style={isSelected ? { background: 'var(--accent-gradient)' } : undefined}
+                            >
+                              {idx + 1}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-extrabold truncate leading-tight">{lesson.title.replace(/^\d+\.\s*/, '')}</h4>
+                              <p className={`text-[10px] mt-1 leading-snug line-clamp-2 ${themeMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                                {lesson.desc}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {/* Column 2 (Middle): Kids-Friendly Analogy & Module Detail Panel */}
                   <div className={`flex-1 min-w-0 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto shadow-xl border ${themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-[#0c0d12] border-[#181b28]'}`}>
-                    <div className="flex items-center justify-between pb-3 flex-shrink-0 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 flex-shrink-0 border-b" style={{ borderColor: themeMode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' }}>
                       <div>
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">{t(language, 'learning', 'moduleDetail')}</span>
-                        <h3 className={`text-sm font-extrabold ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>{currentLesson.title}</h3>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span
+                            className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md"
+                            style={{
+                              background: 'rgba(var(--accent-rgb), 0.14)',
+                              color: 'var(--accent-primary)',
+                            }}
+                          >
+                            Pelajaran {activeLessonIndex + 1} dari {currentLessons.length}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                            {t(language, 'learning', 'moduleDetail')}
+                          </span>
+                        </div>
+                        <h3 className={`text-base sm:text-lg font-black ${themeMode === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                          {currentLesson.title.replace(/^\d+\.\s*/, '')}
+                        </h3>
                       </div>
                       <button
                         onClick={() => {
@@ -11110,8 +11302,8 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
 
                             setSyncStatuses(prev => ({
                               ...prev,
-                              'firmware/main.ino': false,
-                              'python/main.py': false
+                              'firmware/main.ino': true,
+                              'python/main.py': true
                             }));
 
                             setActiveFile('firmware/main.ino');
@@ -11151,7 +11343,7 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                             ]);
                           }
                         }}
-                        className="px-3.5 py-1.5 text-white rounded-xl text-[10px] font-bold transition shadow-md cursor-pointer select-none hover:opacity-95 flex items-center gap-1.5"
+                        className="px-4 py-2 text-white rounded-xl text-xs font-extrabold transition shadow-md cursor-pointer select-none hover:opacity-95 flex items-center gap-1.5"
                         style={{ background: 'var(--accent-gradient)' }}
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
@@ -11159,18 +11351,36 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                       </button>
                     </div>
 
-                    {exampleBlocks && <section className="min-w-0 rounded-xl border border-slate-400/40 p-3">
-                      <h3 className="mb-1 font-bold">Contoh program Blockly</h3>
-                      <p className="mb-3 text-xs">Blok kode bebas menampung bagian yang belum punya blok khusus. Lihat kode teks untuk contoh lengkap.</p>
-                      <BlocklyPreview key={currentLesson.title} xml={exampleBlocks} />
-                    </section>}
-                    <LessonMission category={learningCategory} index={activeLessonIndex} />
-                    {learningCategory === 'hardware' && <BlockFieldGuide />}
+                    {/* 1. Friendly Visual Story & Analogy First! */}
                     <KidsAnalogyCard
                       category={learningCategory}
                       lessonIndex={activeLessonIndex}
                       themeMode={themeMode}
                     />
+
+                    {/* 2. Clear 3-Step Interactive Mission */}
+                    <LessonMission category={learningCategory} index={activeLessonIndex} themeMode={themeMode} />
+
+                    {/* 3. Visual Blockly Preview */}
+                    {exampleBlocks && (
+                      <section
+                        className={`min-w-0 rounded-2xl border p-3.5 ${
+                          themeMode === 'light' ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-900/50 border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <h3 className="text-xs sm:text-sm font-extrabold flex items-center gap-1.5">
+                            <span>🧩</span>
+                            <span>Susunan Blok Visual untuk Materi Ini</span>
+                          </h3>
+                          <span className="text-[10px] font-semibold opacity-75">Geser untuk melihat blok</span>
+                        </div>
+                        <BlocklyPreview key={currentLesson.title} xml={exampleBlocks} />
+                      </section>
+                    )}
+
+                    {/* 4. Block Dictionary for Hardware track */}
+                    {learningCategory === 'hardware' && <BlockFieldGuide themeMode={themeMode} />}
 
                     {/* Collapsible Technical Manual for Teachers / Pro Learners */}
                     <div className="pt-1">
@@ -11253,15 +11463,43 @@ function App({ authUser, onSignOut }: { authUser?: AuthUser; onSignOut?: () => v
                         </button>
                         <span className="absolute right-2 top-8 text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded opacity-0 transition-opacity pointer-events-none z-10">{t(language, 'learning', 'copied')}</span>
                       </div>
-                      <pre className={`p-3.5 rounded-xl font-mono text-[9.5px] overflow-auto flex-1 select-text border relative ${themeMode === 'light' ? 'bg-[#f1f5f9] border-slate-200 text-emerald-800' : 'bg-[#050608] border-slate-900 text-emerald-400'}`}>
+                      <pre className={`p-3.5 rounded-xl font-mono text-[10.5px] overflow-auto flex-1 select-text border relative ${themeMode === 'light' ? 'bg-[#f1f5f9] border-slate-200 text-emerald-800' : 'bg-[#050608] border-slate-900 text-emerald-400'}`}>
                         {currentLesson.code}
                       </pre>
+                    </div>
+
+                    {/* Next / Previous Lesson Navigation Footer */}
+                    <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: themeMode === 'light' ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)' }}>
+                      <button
+                        type="button"
+                        disabled={activeLessonIndex <= 0}
+                        onClick={() => setActiveLessonIndex((i) => Math.max(0, i - 1))}
+                        className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer disabled:opacity-40 flex items-center gap-1.5 ${
+                          themeMode === 'light'
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                        }`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Pelajaran Sebelumnya</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={activeLessonIndex >= currentLessons.length - 1}
+                        onClick={() => setActiveLessonIndex((i) => Math.min(currentLessons.length - 1, i + 1))}
+                        className="px-4 py-2 rounded-xl text-white text-xs font-extrabold transition cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shadow-sm"
+                        style={{ background: 'var(--accent-gradient)' }}
+                      >
+                        <span>Lanjut Pelajaran Berikutnya</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
                   {/* Column 3 (Right): Interactive Visualizer & Illustration Panel */}
                   <div className={`w-full lg:w-[310px] xl:w-[340px] 2xl:w-[370px] rounded-2xl p-4 sm:p-5 flex flex-col gap-4 flex-shrink-0 shadow-xl border overflow-y-auto ${themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-[#0c0d12] border-[#181b28]'}`}>
-                    <LessonWiring category={learningCategory} index={activeLessonIndex} />
+                    <LessonWiring category={learningCategory} index={activeLessonIndex} themeMode={themeMode} />
                     <div className="lesson-visualizer">{renderLearningVisualizer()}</div>
                   </div>
                 </div>

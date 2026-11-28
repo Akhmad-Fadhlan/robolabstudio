@@ -106,6 +106,7 @@ const registerRobotPlanBlocks = () => {
         ['6 Sensor', '6'],
         ['8 Sensor', '8'],
         ['12 Sensor', '12'],
+        ['14 Sensor (Ichibot)', '14'],
       ];
 
       this.appendDummyInput()
@@ -147,6 +148,10 @@ const registerRobotPlanBlocks = () => {
           const sc = Number(this.getFieldValue('SENSOR_COUNT'));
           if (sc === 2 || sc === 4) {
             this.setFieldValue('direct', 'SENSOR_MODE');
+          } else if (sc === 12 || sc === 14) {
+            if (this.getFieldValue('SENSOR_MODE') === 'mux_4051') {
+              this.setFieldValue('mux_4067', 'SENSOR_MODE');
+            }
           }
         }
       });

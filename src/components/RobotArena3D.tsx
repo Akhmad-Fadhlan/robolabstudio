@@ -61,8 +61,16 @@ interface TrackPreset {
   id: string;
   name: string;
   pdfUrl?: string;
-  type: 'empty' | 'oval' | 'maze' | 'pro' | 'custom_pdf';
+  type: 'empty' | 'oval' | 'maze' | 'pro' | 'technowars' | 'krpy' | 'custom_pdf';
   customCanvas?: HTMLCanvasElement;
+}
+
+interface CheckpointPose {
+  x: number;
+  y: number;
+  deg: number;
+  stepIndex: number | null;
+  saved: boolean;
 }
 
 const TRACK_W = 1200;
@@ -110,6 +118,16 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       type: 'pro',
       pdfUrl: '/tracks/track-lomba-pro.pdf',
     },
+    {
+      id: 'technowars',
+      name: 'Ichibot Technowars Track',
+      type: 'technowars',
+    },
+    {
+      id: 'krpy',
+      name: 'Ichibot KRPY Championship',
+      type: 'krpy',
+    },
   ]);
   const [selectedTrackId, setSelectedTrackId] = useState<string>('maze');
   const [placementTool, setPlacementTool] = useState<PlacementTool>('none');
@@ -129,7 +147,21 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
   const [initialHeadingDeg, setInitialHeadingDeg] = useState<number>(-90); // -90 = facing UP
 
   // Active configuration modals / drawers
-  const [activeDrawer, setActiveDrawer] = useState<'none' | 'hardware' | 'pid' | 'pdf_samples' | 'plan'>('none');
+  const [activeDrawer, setActiveDrawer] = useState<'none' | 'hardware' | 'pid' | 'pdf_samples' | 'plan' | 'oled'>('none');
+  const [robotChassisStyle, setRobotChassisStyle] = useState<'ichibot' | 'classic'>('ichibot');
+  const [showTrail, setShowTrail] = useState<boolean>(true);
+  const [freeMoveMode, setFreeMoveMode] = useState<boolean>(false);
+  const [isGelengActive, setIsGelengActive] = useState<boolean>(false);
+  const [activeCheckpoint, setActiveCheckpoint] = useState<number>(0); // 0 = ST, 1..9 = CP1..CP9
+  const [checkpoints, setCheckpoints] = useState<Record<number, CheckpointPose>>({
+    1: { x: 155, y: 520, deg: -90, stepIndex: 0, saved: true },
+    2: { x: 155, y: 340, deg: 0, stepIndex: 1, saved: true },
+    3: { x: 420, y: 340, deg: -90, stepIndex: 2, saved: true },
+    4: { x: 720, y: 155, deg: 90, stepIndex: 3, saved: true },
+    5: { x: 720, y: 520, deg: 0, stepIndex: 4, saved: true },
+  });
+  const [oledMenuPage, setOledMenuPage] = useState<'home' | 'sensor' | 'plan' | 'pid'>('home');
+  const [oledCursor, setOledCursor] = useState<number>(0);
 
   const [playbackRate, setPlaybackRate] = useState(1);
   const [startStep, setStartStep] = useState<number | null>(null);
@@ -204,8 +236,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     stoppedByInterrupt: false,
   });
 
-  // Trail history
+  // Trail history & step transition markers
   const trailRef = useRef<Array<{ x: number; y: number }>>([]);
+  const stepMarkersRef = useRef<Array<{ x: number; y: number; stepIndex: number; action: string }>>([]);
   const viewportCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackSurfaceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackImageDataRef = useRef<ImageData | null>(null);
@@ -407,6 +440,102 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       ctx.moveTo(975, 500);
       ctx.lineTo(1095, 500);
       ctx.stroke();
+    } else if (currentTrack.type === 'technowars') {
+      // Ichibot Technowars Competition Track: Start bottom-left -> S-curve -> 90° acute turns -> inverse zone -> chicane -> Finish
+      // Inverse black zone top-center
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(460, 80, 320, 210);
+
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.moveTo(150, 670);
+      ctx.lineTo(150, 420);
+      ctx.arc(240, 420, 90, Math.PI, 0, false);
+      ctx.lineTo(330, 560);
+      ctx.lineTo(480, 560);
+      ctx.lineTo(480, 350);
+      ctx.lineTo(260, 350);
+      ctx.lineTo(260, 185);
+      ctx.lineTo(460, 185);
+      ctx.stroke();
+
+      // White line inside inverse black zone
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.moveTo(460, 185);
+      ctx.lineTo(620, 185);
+      ctx.lineTo(620, 125);
+      ctx.lineTo(720, 125);
+      ctx.lineTo(720, 290);
+      ctx.stroke();
+      // Crossbar inside inverse zone
+      ctx.beginPath();
+      ctx.moveTo(560, 185);
+      ctx.lineTo(560, 245);
+      ctx.stroke();
+
+      // Continue black line out of inverse zone -> zig-zag chicane -> finish
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.moveTo(720, 290);
+      ctx.lineTo(720, 430);
+      ctx.lineTo(860, 350);
+      ctx.lineTo(860, 580);
+      ctx.lineTo(1035, 580);
+      ctx.lineTo(1035, 165);
+      ctx.stroke();
+
+      // Index trigger crossbars
+      const twCrosses = [
+        [95, 530, 205, 530],
+        [370, 500, 370, 620],
+        [200, 265, 320, 265],
+        [660, 360, 780, 360],
+        [975, 420, 1095, 420],
+        [975, 280, 1095, 280],
+      ];
+      for (const [x1, y1, x2, y2] of twCrosses) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    } else if (currentTrack.type === 'krpy') {
+      // Ichibot KRPY Championship Track: High-speed technical circuit with loops, acute turns & intersections
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.moveTo(160, 665);
+      ctx.lineTo(160, 160);
+      ctx.lineTo(440, 160);
+      ctx.lineTo(320, 360);
+      ctx.lineTo(560, 360);
+      ctx.lineTo(560, 160);
+      ctx.lineTo(840, 160);
+      ctx.arc(840, 270, 110, -Math.PI / 2, Math.PI / 2, false);
+      ctx.lineTo(560, 380);
+      ctx.lineTo(560, 620);
+      ctx.lineTo(1030, 620);
+      ctx.lineTo(1030, 165);
+      ctx.stroke();
+
+      const krpyCrosses = [
+        [100, 480, 220, 480],
+        [100, 290, 220, 290],
+        [680, 105, 680, 215],
+        [500, 500, 620, 500],
+        [780, 560, 780, 680],
+        [970, 380, 1090, 380],
+      ];
+      for (const [x1, y1, x2, y2] of krpyCrosses) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
     }
 
     trackImageDataRef.current = ctx.getImageData(0, 0, TRACK_W, TRACK_H);
@@ -416,23 +545,68 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     rebuildTrackSurface();
   }, [rebuildTrackSurface]);
 
-  // Adjust default Start/Finish when switching preset track
+  // Adjust default Start/Finish and Checkpoints when switching preset track
   const handleSelectTrack = (id: string) => {
     setSelectedTrackId(id);
-    if (id !== 'empty' && !['oval', 'maze', 'pro'].includes(id)) return;
+    setActiveCheckpoint(0);
+    if (id !== 'empty' && !['oval', 'maze', 'pro', 'technowars', 'krpy'].includes(id)) return;
     setInitialHeadingDeg(-90);
     if (id === 'oval') {
       setStartPos({ x: 205, y: 645 });
       setFinishPos({ x: 985, y: 175 });
+      setCheckpoints({
+        1: { x: 205, y: 380, deg: -90, stepIndex: 0, saved: true },
+        2: { x: 205, y: 180, deg: 0, stepIndex: 1, saved: true },
+        3: { x: 580, y: 300, deg: 90, stepIndex: 2, saved: true },
+        4: { x: 780, y: 410, deg: 0, stepIndex: 3, saved: true },
+        5: { x: 985, y: 320, deg: -90, stepIndex: 4, saved: true },
+      });
       resetRobotToStart(205, 645, -90);
     } else if (id === 'maze') {
       setStartPos({ x: 155, y: 665 });
       setFinishPos({ x: 1035, y: 155 });
+      setCheckpoints({
+        1: { x: 155, y: 520, deg: -90, stepIndex: 0, saved: true },
+        2: { x: 155, y: 340, deg: 0, stepIndex: 1, saved: true },
+        3: { x: 420, y: 340, deg: -90, stepIndex: 2, saved: true },
+        4: { x: 720, y: 155, deg: 90, stepIndex: 3, saved: true },
+        5: { x: 720, y: 520, deg: 0, stepIndex: 4, saved: true },
+      });
       resetRobotToStart(155, 665, -90);
     } else if (id === 'pro') {
       setStartPos({ x: 145, y: 660 });
       setFinishPos({ x: 1035, y: 635 });
+      setCheckpoints({
+        1: { x: 145, y: 440, deg: -90, stepIndex: 0, saved: true },
+        2: { x: 380, y: 360, deg: 90, stepIndex: 1, saved: true },
+        3: { x: 560, y: 410, deg: -90, stepIndex: 2, saved: true },
+        4: { x: 780, y: 230, deg: 0, stepIndex: 3, saved: true },
+        5: { x: 1035, y: 500, deg: 90, stepIndex: 4, saved: true },
+      });
       resetRobotToStart(145, 660, -90);
+    } else if (id === 'technowars') {
+      setStartPos({ x: 150, y: 670 });
+      setFinishPos({ x: 1035, y: 165 });
+      setCheckpoints({
+        1: { x: 150, y: 530, deg: -90, stepIndex: 0, saved: true },
+        2: { x: 370, y: 560, deg: 0, stepIndex: 1, saved: true },
+        3: { x: 260, y: 265, deg: -90, stepIndex: 2, saved: true },
+        4: { x: 560, y: 185, deg: 0, stepIndex: 3, saved: true },
+        5: { x: 720, y: 360, deg: 90, stepIndex: 4, saved: true },
+        6: { x: 1035, y: 420, deg: -90, stepIndex: 5, saved: true },
+      });
+      resetRobotToStart(150, 670, -90);
+    } else if (id === 'krpy') {
+      setStartPos({ x: 160, y: 665 });
+      setFinishPos({ x: 1030, y: 165 });
+      setCheckpoints({
+        1: { x: 160, y: 480, deg: -90, stepIndex: 0, saved: true },
+        2: { x: 440, y: 160, deg: 120, stepIndex: 1, saved: true },
+        3: { x: 560, y: 260, deg: -90, stepIndex: 2, saved: true },
+        4: { x: 780, y: 620, deg: 0, stepIndex: 3, saved: true },
+        5: { x: 1030, y: 380, deg: -90, stepIndex: 4, saved: true },
+      });
+      resetRobotToStart(160, 665, -90);
     } else if (id === 'empty') {
       setStartPos({ x: 200, y: 640 });
       setFinishPos({ x: 980, y: 180 });
@@ -463,6 +637,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         finished: false,
       };
       trailRef.current = [{ x: sx, y: sy }];
+      stepMarkersRef.current = [];
+      setIsGelengActive(false);
       setRobotPose({ x: sx, y: sy, theta: rad });
       setSimElapsedSec(0);
       setEncoderLeft(0);
@@ -616,14 +792,133 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     }
   };
 
+  // Jump to or save a Checkpoint (ST, CP1..CP9) like Ichibot Simulator
+  const handleJumpToCheckpoint = useCallback(
+    (cpId: number) => {
+      if (isRunning) return;
+      setActiveCheckpoint(cpId);
+      if (cpId === 0) {
+        setStartStep(null);
+        resetRobotToStart(startPos.x, startPos.y, initialHeadingDeg);
+        return;
+      }
+      const cp = checkpoints[cpId];
+      if (cp && cp.saved) {
+        if (cp.stepIndex !== null && steps.some((st) => st.index === cp.stepIndex)) {
+          setStartStep(cp.stepIndex);
+        }
+        resetRobotToStart(cp.x, cp.y, cp.deg);
+      } else {
+        // Save current robot pose to this unassigned CP slot
+        const deg = Math.round((simStateRef.current.theta * 180) / Math.PI);
+        setCheckpoints((prev) => ({
+          ...prev,
+          [cpId]: {
+            x: Math.round(simStateRef.current.x),
+            y: Math.round(simStateRef.current.y),
+            deg,
+            stepIndex: chosenStep,
+            saved: true,
+          },
+        }));
+      }
+    },
+    [isRunning, startPos.x, startPos.y, initialHeadingDeg, checkpoints, steps, chosenStep, resetRobotToStart]
+  );
+
+  const handleSaveCurrentToCheckpoint = useCallback(() => {
+    const targetCp = activeCheckpoint >= 1 && activeCheckpoint <= 9 ? activeCheckpoint : 1;
+    const deg = Math.round((simStateRef.current.theta * 180) / Math.PI);
+    setCheckpoints((prev) => ({
+      ...prev,
+      [targetCp]: {
+        x: Math.round(simStateRef.current.x),
+        y: Math.round(simStateRef.current.y),
+        deg,
+        stepIndex: chosenStep,
+        saved: true,
+      },
+    }));
+    setActiveCheckpoint(targetCp);
+    setExecStatus((prev) => ({
+      ...prev,
+      message: `📍 Posisi robot & langkah disimpan ke CP${targetCp} (${Math.round(simStateRef.current.x)}, ${Math.round(simStateRef.current.y)}, ${deg}°)`,
+    }));
+  }, [activeCheckpoint, chosenStep]);
+
+  // Free Move keyboard control (Arrow keys + Shift for fine precision when simulation is not running)
+  useEffect(() => {
+    if (!freeMoveMode || isRunning) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      const stepPx = e.shiftKey ? 3 : 12;
+      const stepRad = ((e.shiftKey ? 3 : 10) * Math.PI) / 180;
+      const s = simStateRef.current;
+      let handled = false;
+      if (e.key === 'ArrowUp') {
+        s.x = Math.max(35, Math.min(TRACK_W - 35, s.x + Math.cos(s.theta) * stepPx));
+        s.y = Math.max(35, Math.min(TRACK_H - 35, s.y + Math.sin(s.theta) * stepPx));
+        handled = true;
+      } else if (e.key === 'ArrowDown') {
+        s.x = Math.max(35, Math.min(TRACK_W - 35, s.x - Math.cos(s.theta) * stepPx));
+        s.y = Math.max(35, Math.min(TRACK_H - 35, s.y - Math.sin(s.theta) * stepPx));
+        handled = true;
+      } else if (e.key === 'ArrowLeft') {
+        s.theta -= stepRad;
+        handled = true;
+      } else if (e.key === 'ArrowRight') {
+        s.theta += stepRad;
+        handled = true;
+      }
+      if (handled) {
+        e.preventDefault();
+        setRobotPose({ x: s.x, y: s.y, theta: s.theta });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [freeMoveMode, isRunning]);
+
+  // Geleng (Check Sensor) oscillation animation when paused
+  useEffect(() => {
+    if (!isGelengActive || isRunning) return;
+    const baseTheta = simStateRef.current.theta;
+    const startT = performance.now();
+    let timer = 0;
+    const animateGeleng = (now: number) => {
+      const elapsed = (now - startT) / 1000;
+      if (elapsed > 2.4) {
+        simStateRef.current.theta = baseTheta;
+        setRobotPose((p) => ({ ...p, theta: baseTheta }));
+        setIsGelengActive(false);
+        return;
+      }
+      const offset = Math.sin(elapsed * Math.PI * 3.5) * ((28 * Math.PI) / 180);
+      simStateRef.current.theta = baseTheta + offset;
+      setRobotPose((p) => ({ ...p, theta: baseTheta + offset }));
+      timer = requestAnimationFrame(animateGeleng);
+    };
+    timer = requestAnimationFrame(animateGeleng);
+    return () => {
+      cancelAnimationFrame(timer);
+      simStateRef.current.theta = baseTheta;
+    };
+  }, [isGelengActive, isRunning]);
+
   // Reset simulation state when isRunning transitions from false -> true
   useEffect(() => {
     if (isRunning) {
-      const rad = (initialHeadingDeg * Math.PI) / 180;
+      setIsGelengActive(false);
+      const cp = activeCheckpoint >= 1 ? checkpoints[activeCheckpoint] : null;
+      const spawnX = cp?.saved ? cp.x : startPos.x;
+      const spawnY = cp?.saved ? cp.y : startPos.y;
+      const spawnDeg = cp?.saved ? cp.deg : initialHeadingDeg;
+      const rad = (spawnDeg * Math.PI) / 180;
       const cursor = chosenStep === null ? 0 : (currentPlan?.items.findIndex(item => item.type === 'step' && item.index === chosenStep) ?? 0);
       simStateRef.current = {
-        x: startPos.x,
-        y: startPos.y,
+        x: spawnX,
+        y: spawnY,
         theta: rad,
         elapsedMs: 0,
         encL: 0,
@@ -640,7 +935,8 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         wheelAngle: 0,
         finished: false,
       };
-      trailRef.current = [{ x: startPos.x, y: startPos.y }];
+      trailRef.current = [{ x: spawnX, y: spawnY }];
+      stepMarkersRef.current = [{ x: spawnX, y: spawnY, stepIndex: chosenStep ?? 0, action: 'START' }];
       setPlacementTool('none');
       setActiveDrawer('none');
       setExecStatus({ stepIndex: null, stage: 'READY', message: 'Robot mulai bergerak', stoppedByInterrupt: false });
@@ -919,6 +1215,15 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                 s.stageStartMs = s.elapsedMs;
                 s.stageStartEncL = s.encL;
                 s.stageStartEncR = s.encR;
+                const nextStepItem = items[s.itemCursor];
+                if (nextStepItem && nextStepItem.type === 'step') {
+                  stepMarkersRef.current.push({
+                    x: s.x,
+                    y: s.y,
+                    stepIndex: nextStepItem.index,
+                    action: nextStepItem.action,
+                  });
+                }
               }
             }
           }
@@ -1187,17 +1492,47 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       ctx.font = 'bold 16px sans-serif';
       ctx.fillText('FINIS', finishPos.x - 22, finishPos.y - 45);
 
-      // Draw Robot Movement Trail on track plane
-      if (trailRef.current.length > 1) {
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.65)';
-        ctx.lineWidth = 4;
-        ctx.setLineDash([6, 4]);
+      // Draw Saved Checkpoints (CP1..CP9) on track plane
+      Object.entries(checkpoints).forEach(([cpKey, cp]) => {
+        if (!cp.saved) return;
+        const isCurrentCp = activeCheckpoint === Number(cpKey);
+        ctx.fillStyle = isCurrentCp ? 'rgba(249, 115, 22, 0.28)' : 'rgba(56, 189, 248, 0.18)';
+        ctx.strokeStyle = isCurrentCp ? '#f97316' : '#0284c7';
+        ctx.lineWidth = isCurrentCp ? 2.5 : 1.5;
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = isCurrentCp ? '#c2410c' : '#0369a1';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(`CP${cpKey}`, cp.x - 11, cp.y + 4);
+      });
+
+      // Draw Ichibot-Style Green Robot Movement Trail & Orange Step Transition Markers on track plane
+      if (showTrail && trailRef.current.length > 1) {
+        ctx.strokeStyle = 'rgba(22, 163, 74, 0.85)';
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.beginPath();
         trailRef.current.forEach((pt, idx) =>
           idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)
         );
         ctx.stroke();
-        ctx.setLineDash([]);
+
+        // Orange step index transition markers along the green trail
+        stepMarkersRef.current.forEach((mk) => {
+          ctx.fillStyle = '#f97316';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(mk.x, mk.y, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px monospace';
+          ctx.fillText(`${mk.stepIndex}`, mk.x - (mk.stepIndex >= 10 ? 5.5 : 3), mk.y + 3);
+        });
       }
 
       // Draw Ultrasonic Raycast Cone if enabled
@@ -1231,9 +1566,10 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
       ctx.restore();
 
       // ============================================================================
-      // REALISTIC 3D LINE FOLLOWER ROBOT RENDERER (T-Hammerhead Competition Chassis)
+      // REALISTIC 3D LINE FOLLOWER ROBOT RENDERER (Ichibot Ultimate 5 & Classic T-Chassis)
       // ============================================================================
       const rScale = (hardwareConfig.robotScale || 1.0) * 1.18;
+      const isIchibotStyle = robotChassisStyle === 'ichibot';
 
       const localToWorld = (lx: number, ly: number) => ({
         wx: s.x + lx * rScale * Math.cos(s.theta) - ly * rScale * Math.sin(s.theta),
@@ -1282,278 +1618,388 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         return { base2D, top2D };
       };
 
-      // 1. Soft Robot Ground Shadow (T-Hammerhead silhouette)
-      const shadowOutline: Array<[number, number]> = [
-        [44, -18],
-        [36, -34],
-        [24, -34],
-        [21, -13],
-        [8, -13],
-        [8, -30],
-        [-28, -30],
-        [-34, -22],
-        [-34, 22],
-        [-28, 30],
-        [8, 30],
-        [8, 13],
-        [21, 13],
-        [24, 34],
-        [36, 34],
-        [44, 18],
-      ];
-      const shadow2D = shadowOutline.map(([lx, ly]) => {
-        const wp = localToWorld(lx, ly);
-        return project3D(wp.wx, wp.wy, 0.5);
-      });
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.38)';
-      ctx.beginPath();
-      shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
-      ctx.closePath();
-      ctx.fill();
+      const sensorWingWidth =
+        hardwareConfig.sensorCount === 2
+          ? 18
+          : hardwareConfig.sensorCount === 4
+          ? 26
+          : Math.max(35, Math.min(46, 25 + hardwareConfig.sensorCount * 1.55));
+      const sSpan =
+        hardwareConfig.sensorCount === 2
+          ? 18
+          : hardwareConfig.sensorCount === 4
+          ? 32
+          : (sensorWingWidth - 4.5) * 2;
 
-      // 2. Left & Right 3D Rubber Tires + Yellow DC Gearbox Motors
-      const wheelSides = [-1, 1]; // -1 = Left, +1 = Right
-      for (const side of wheelSides) {
-        const yInner = side * 22;
-        const yOuter = side * 32;
+      if (isIchibotStyle) {
+        // ── ICHIBOT ULTIMATE 5 DELTA / V-WING MATTE-BLACK PCB CHASSIS ──
+        // 1. Soft ground shadow matching Ichibot delta wing + crescent sensor bar
+        const ichiShadow: Array<[number, number]> = [
+          [44, 0],
+          [38, -sensorWingWidth * 0.72],
+          [24, -sensorWingWidth],
+          [18, -sensorWingWidth * 0.92],
+          [16, -15],
+          [4, -27],
+          [-26, -32],
+          [-34, -18],
+          [-36, 0],
+          [-34, 18],
+          [-26, 32],
+          [4, 27],
+          [16, 15],
+          [18, sensorWingWidth * 0.92],
+          [24, sensorWingWidth],
+          [38, sensorWingWidth * 0.72],
+        ];
+        const shadow2D = ichiShadow.map(([lx, ly]) => {
+          const wp = localToWorld(lx, ly);
+          return project3D(wp.wx, wp.wy, 0.5);
+        });
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.42)';
+        ctx.beginPath();
+        shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
+        ctx.closePath();
+        ctx.fill();
 
-        // Yellow DC Gearbox Motor block (inside wheel)
-        const gearInner = side * 11;
-        const gearOuter = side * 22;
-        drawExtrudedLocalPoly(
-          [
-            [-4, gearInner],
-            [-4, gearOuter],
-            [-23, gearOuter],
-            [-23, gearInner],
-          ],
-          4,
-          14,
-          '#8b9599',
-          '#4a555c',
-          '#66737a',
-          '#dbe6e8',
-          1
-        );
+        // 2. Crimson-Red Rear Competition Wheels with Metallic Silver Inner Hubs
+        for (const side of [-1, 1]) {
+          const yInner = side * 20.5;
+          const yOuter = side * 31.5;
 
-        // Slotted Optical Encoder Disc (if hasEncoder is enabled)
-        if (hardwareConfig.hasEncoder) {
-          const encY = side * 20.5;
+          // Silver metal motor bracket & inner hub
           drawExtrudedLocalPoly(
             [
-              [-6, encY - side * 1.2],
-              [-6, encY + side * 1.2],
-              [-20, encY + side * 1.2],
-              [-20, encY - side * 1.2],
+              [-3, side * 12],
+              [-3, yInner],
+              [-22, yInner],
+              [-22, side * 12],
+            ],
+            4,
+            13,
+            '#cbd5e1',
+            '#64748b',
+            '#94a3b8',
+            '#f8fafc',
+            0.9
+          );
+
+          // Crimson-Red Competition Tire
+          drawExtrudedLocalPoly(
+            [
+              [4, yInner],
+              [4, yOuter],
+              [-25, yOuter],
+              [-25, yInner],
+            ],
+            1,
+            19.5,
+            '#dc2626',
+            '#991b1b',
+            '#b91c1c',
+            '#fca5a5',
+            1.1
+          );
+
+          // Silver Outer Rim Cap
+          drawExtrudedLocalPoly(
+            [
+              [-1, yOuter - side * 2.2],
+              [-1, yOuter - side * 0.3],
+              [-20, yOuter - side * 0.3],
+              [-20, yOuter - side * 2.2],
             ],
             5,
-            18,
-            '#648b89',
-            '#0284c7',
-            '#0369a1',
-            '#e0f2fe',
+            15.5,
+            '#e2e8f0',
+            '#94a3b8',
+            '#cbd5e1',
+            '#475569',
             0.8
           );
+
+          // Rotating Dark Crimson Tread Grooves
+          ctx.strokeStyle = '#450a0a';
+          ctx.lineWidth = 1.5;
+          const treadPhase = ((s.wheelAngle * 6) % 6 + 6) % 6;
+          for (let tx = -22 + treadPhase; tx <= 2; tx += 6) {
+            const pA = localToWorld(tx, yInner + side * 1.1);
+            const pB = localToWorld(tx, yOuter - side * 1.1);
+            const sA = project3D(pA.wx, pA.wy, 19.9 * rScale);
+            const sB = project3D(pB.wx, pB.wy, 19.9 * rScale);
+            ctx.beginPath();
+            ctx.moveTo(sA.sx, sA.sy);
+            ctx.lineTo(sB.sx, sB.sy);
+            ctx.stroke();
+          }
         }
 
-        // Main Black Rubber Tire with Wide Grip Profile
+        // 3. Delta / Arrowhead Matte-Black Ichibot PCB Body with Side Wing Lobes & Rear Curved Bridge
+        const deltaBodyPts: Array<[number, number]> = [
+          [26, -7.5],
+          [26, 7.5],
+          [15, 11],
+          [7, 25],
+          [-2, 26],
+          [-4, 19.5],
+          [-24, 19.5],
+          [-26, 26],
+          [-32, 21],
+          [-35, 10],
+          [-36, 0],
+          [-35, -10],
+          [-32, -21],
+          [-26, -26],
+          [-24, -19.5],
+          [-4, -19.5],
+          [-2, -26],
+          [7, -25],
+          [15, -11],
+        ];
         drawExtrudedLocalPoly(
-          [
-            [6, yInner],
-            [6, yOuter],
-            [-24, yOuter],
-            [-24, yInner],
-          ],
-          1,
-          20,
-          '#111827',
-          '#090d16',
+          deltaBodyPts,
+          5,
+          12.5,
+          '#111622',
+          '#060911',
           '#1e293b',
-          '#475569',
-          1.2
+          '#94a3b8',
+          1.5
         );
 
-        // Sport Yellow Wheel Rim Hub on the outer side of the tire
+        // 4. Sweeping Crescent Front Sensor Wing with Hook Tips (Ichibot Ultimate 5 Signature Nose)
+        const crescentPts: Array<[number, number]> = [
+          [43, 0],
+          [41.5, -sensorWingWidth * 0.35],
+          [37.5, -sensorWingWidth * 0.72],
+          [31, -sensorWingWidth],
+          [21, -sensorWingWidth],
+          [20, -sensorWingWidth * 0.84],
+          [26, -sensorWingWidth * 0.78],
+          [29, -12],
+          [24, -7.5],
+          [24, 7.5],
+          [29, 12],
+          [26, sensorWingWidth * 0.78],
+          [20, sensorWingWidth * 0.84],
+          [21, sensorWingWidth],
+          [31, sensorWingWidth],
+          [37.5, sensorWingWidth * 0.72],
+          [41.5, sensorWingWidth * 0.35],
+        ];
+        drawExtrudedLocalPoly(
+          crescentPts,
+          3.5,
+          11.2,
+          '#0c101a',
+          '#020617',
+          '#1e293b',
+          '#e2e8f0',
+          1.4
+        );
+
+        // 5. White ICHIBOT DRIVER HUB Bar + 4-Color Ribbon Wires to Left & Right Motors
         drawExtrudedLocalPoly(
           [
-            [2, yOuter - side * 1.5],
-            [2, yOuter + side * 0.5],
-            [-20, yOuter + side * 0.5],
-            [-20, yOuter - side * 1.5],
+            [-11, -13],
+            [-11, 13],
+            [-16.5, 13],
+            [-16.5, -13],
           ],
-          5,
-          16,
-          '#707c82',
-          '#333f47',
-          '#444e53',
-          '#aab4bc',
+          12.6,
+          15.5,
+          '#f8fafc',
+          '#cbd5e1',
+          '#94a3b8',
+          '#475569',
           0.9
         );
 
-        // Animated Rotating Tire Tread Grooves across top of tire
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 1.4;
-        const treadPhase = ((s.wheelAngle * 6) % 6 + 6) % 6;
-        for (let tx = -21 + treadPhase; tx <= 4; tx += 6) {
-          const pA = localToWorld(tx, yInner + side * 1.2);
-          const pB = localToWorld(tx, yOuter - side * 1.2);
-          const sA = project3D(pA.wx, pA.wy, 20.4 * rScale);
-          const sB = project3D(pB.wx, pB.wy, 20.4 * rScale);
+        // 4-Color Ribbon Wires (Yellow, Orange, Red, Blue) curving from Driver Hub to Left & Right Motor Terminals
+        const ribbonColors = ['#eab308', '#f97316', '#ef4444', '#3b82f6'];
+        for (const side of [-1, 1]) {
+          ribbonColors.forEach((col, wIdx) => {
+            const startW = localToWorld(-13 - wIdx * 0.8, side * (11 + wIdx * 0.5));
+            const midW = localToWorld(-18 - wIdx * 1.1, side * (16.5 + wIdx * 0.6));
+            const endW = localToWorld(-14 - wIdx * 1.3, side * 19.5);
+            const p0 = project3D(startW.wx, startW.wy, 13.8 * rScale);
+            const p1 = project3D(midW.wx, midW.wy, 14.2 * rScale);
+            const p2 = project3D(endW.wx, endW.wy, 13.2 * rScale);
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.35;
+            ctx.beginPath();
+            ctx.moveTo(p0.sx, p0.sy);
+            ctx.quadraticCurveTo(p1.sx, p1.sy, p2.sx, p2.sy);
+            ctx.stroke();
+          });
+        }
+
+        // 6. Central On-Chassis Ichibot OLED Display Module
+        drawExtrudedLocalPoly(
+          [
+            [11, -9.5],
+            [11, 9.5],
+            [-9.5, 9.5],
+            [-9.5, -9.5],
+          ],
+          12.6,
+          16.5,
+          '#050811',
+          '#0f172a',
+          '#1e293b',
+          '#38bdf8',
+          1.2
+        );
+
+        // Glowing Cyan/White OLED Screen Text & Telemetry Dot
+        const oledTop = localToWorld(4.5, 0);
+        const oledMid = localToWorld(0.5, 0);
+        const oledBot = localToWorld(-4.5, 0);
+        const pOledTop = project3D(oledTop.wx, oledTop.wy, 17 * rScale);
+        const pOledMid = project3D(oledMid.wx, oledMid.wy, 17 * rScale);
+        const pOledBot = project3D(oledBot.wx, oledBot.wy, 17 * rScale);
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(pOledTop.sx, pOledTop.sy, Math.max(1.8, 2.5 * pOledTop.scale), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.arc(pOledMid.sx, pOledMid.sy, Math.max(1.5, 2.1 * pOledMid.scale), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(pOledBot.sx, pOledBot.sy, Math.max(1.5, 2.0 * pOledBot.scale), 0, Math.PI * 2);
+        ctx.fill();
+
+        // 7. 6 Tactile Push Buttons on Left & Right Wings (UPL/OKL/DWNL green, UPR/OKR/DWNR red)
+        const btnOffsets = [6.5, 1.5, -3.5];
+        for (const bx of btnOffsets) {
+          // Left Wing Button (Green Cap)
+          const bLeft = localToWorld(bx, -17.5);
+          const pLeft = project3D(bLeft.wx, bLeft.wy, 13.8 * rScale);
+          ctx.fillStyle = '#10b981';
+          ctx.strokeStyle = '#ecfdf5';
+          ctx.lineWidth = 0.9;
           ctx.beginPath();
-          ctx.moveTo(sA.sx, sA.sy);
-          ctx.lineTo(sB.sx, sB.sy);
+          ctx.arc(pLeft.sx, pLeft.sy, Math.max(2, 2.8 * pLeft.scale * rScale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Right Wing Button (Red Cap)
+          const bRight = localToWorld(bx, 17.5);
+          const pRight = project3D(bRight.wx, bRight.wy, 13.8 * rScale);
+          ctx.fillStyle = '#ef4444';
+          ctx.strokeStyle = '#fef2f2';
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          ctx.arc(pRight.sx, pRight.sy, Math.max(2, 2.8 * pRight.scale * rScale), 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
         }
-      }
 
-      // 3. Main Line Follower T-Hammerhead PCB Chassis (Rear Deck + Neck Bridge + Wide Front Sensor Wing)
-      // 3a. Rear & Center Chassis Deck (Vibrant Robotics Orange/Carbon)
-      const mainDeckPts: Array<[number, number]> = [
-        [27, -9],
-        [27, 9],
-        [7, 14],
-        [4, 22],
-        [-24, 22],
-        [-31, 14],
-        [-31, -14],
-        [-24, -22],
-        [4, -22],
-        [7, -14],
-      ];
-      drawExtrudedLocalPoly(
-        mainDeckPts,
-        5,
-        13,
-        '#2a3e45',
-        '#14282d',
-        '#24363c',
-        '#5f797c',
-        1.5
-      );
-
-      // Gold PCB Traces on the Neck Bridge connecting MCU to Front Sensor Bar
-      for (const traceY of [-6, -2, 2, 6]) {
-        const tStart = localToWorld(6, traceY);
-        const tEnd = localToWorld(27, traceY * 1.4);
-        const pStart = project3D(tStart.wx, tStart.wy, 13.4 * rScale);
-        const pEnd = project3D(tEnd.wx, tEnd.wy, 13.4 * rScale);
-        ctx.strokeStyle = '#648b89';
-        ctx.lineWidth = 1.1;
+        // Rear Bridge Silkscreen Accent & Status LEDs
+        const rearLogo = localToWorld(-30.5, 0);
+        const pRearLogo = project3D(rearLogo.wx, rearLogo.wy, 13.2 * rScale);
+        ctx.fillStyle = '#38bdf8';
         ctx.beginPath();
-        ctx.moveTo(pStart.sx, pStart.sy);
-        ctx.lineTo(pEnd.sx, pEnd.sy);
-        ctx.stroke();
+        ctx.arc(pRearLogo.sx, pRearLogo.sy, Math.max(1.8, 2.6 * pRearLogo.scale), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // ── CLASSIC T-HAMMERHEAD COMPETITION CHASSIS ──
+        const shadowOutline: Array<[number, number]> = [
+          [44, -18],
+          [36, -34],
+          [24, -34],
+          [21, -13],
+          [8, -13],
+          [8, -30],
+          [-28, -30],
+          [-34, -22],
+          [-34, 22],
+          [-28, 30],
+          [8, 30],
+          [8, 13],
+          [21, 13],
+          [24, 34],
+          [36, 34],
+          [44, 18],
+        ];
+        const shadow2D = shadowOutline.map(([lx, ly]) => {
+          const wp = localToWorld(lx, ly);
+          return project3D(wp.wx, wp.wy, 0.5);
+        });
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.38)';
+        ctx.beginPath();
+        shadow2D.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy + 3) : ctx.lineTo(pt.sx, pt.sy + 3)));
+        ctx.closePath();
+        ctx.fill();
+
+        for (const side of [-1, 1]) {
+          const yInner = side * 22;
+          const yOuter = side * 32;
+          const gearInner = side * 11;
+          const gearOuter = side * 22;
+          drawExtrudedLocalPoly(
+            [
+              [-4, gearInner],
+              [-4, gearOuter],
+              [-23, gearOuter],
+              [-23, gearInner],
+            ],
+            4,
+            14,
+            '#8b9599',
+            '#4a555c',
+            '#66737a',
+            '#dbe6e8',
+            1
+          );
+          drawExtrudedLocalPoly(
+            [
+              [6, yInner],
+              [6, yOuter],
+              [-24, yOuter],
+              [-24, yInner],
+            ],
+            1,
+            20,
+            '#111827',
+            '#090d16',
+            '#1e293b',
+            '#475569',
+            1.2
+          );
+        }
+
+        const mainDeckPts: Array<[number, number]> = [
+          [27, -9],
+          [27, 9],
+          [7, 14],
+          [4, 22],
+          [-24, 22],
+          [-31, 14],
+          [-31, -14],
+          [-24, -22],
+          [4, -22],
+          [7, -14],
+        ];
+        drawExtrudedLocalPoly(mainDeckPts, 5, 13, '#2a3e45', '#14282d', '#24363c', '#5f797c', 1.5);
+
+        const innerW = Math.min(13, sensorWingWidth - 3);
+        const frontWingPts: Array<[number, number]> = [
+          [44, -sensorWingWidth * 0.48],
+          [37, -sensorWingWidth],
+          [25, -sensorWingWidth],
+          [23, -innerW],
+          [23, innerW],
+          [25, sensorWingWidth],
+          [37, sensorWingWidth],
+          [44, sensorWingWidth * 0.48],
+        ];
+        drawExtrudedLocalPoly(frontWingPts, 3, 11, '#0f172a', '#020617', '#1e293b', '#648b89', 1.6);
       }
 
-      // 3b. Wide Curved/Angled Front Sensor Array Wing Bar (Iconic Line Follower Nose)
-      const sensorWingWidth =
-        hardwareConfig.sensorCount === 2
-          ? 16
-          : hardwareConfig.sensorCount === 4
-          ? 24
-          : Math.max(33, Math.min(44, 24 + hardwareConfig.sensorCount * 1.6));
-      const sSpan =
-        hardwareConfig.sensorCount === 2
-          ? 16
-          : hardwareConfig.sensorCount === 4
-          ? 30
-          : (sensorWingWidth - 5) * 2;
-      const innerW = Math.min(13, sensorWingWidth - 3);
-      const frontWingPts: Array<[number, number]> = [
-        [44, -sensorWingWidth * 0.48],
-        [37, -sensorWingWidth],
-        [25, -sensorWingWidth],
-        [23, -innerW],
-        [23, innerW],
-        [25, sensorWingWidth],
-        [37, sensorWingWidth],
-        [44, sensorWingWidth * 0.48],
-      ];
-      drawExtrudedLocalPoly(
-        frontWingPts,
-        3,
-        11,
-        '#0f172a',
-        '#020617',
-        '#1e293b',
-        '#648b89',
-        1.6
-      );
-
-      // 4. On-Board Electronics: LiPo Battery + MCU Board + Mini OLED + Push Buttons
-      // 4a. Rear 2S LiPo Battery Pack (Cobalt Blue with Yellow Label)
-      drawExtrudedLocalPoly(
-        [
-          [-16, -15],
-          [-16, 15],
-          [-30, 15],
-          [-30, -15],
-        ],
-        13,
-        20,
-        '#374151',
-        '#1f2937',
-        '#283440',
-        '#778792',
-        1
-      );
-      // Yellow LiPo strap
-      drawExtrudedLocalPoly(
-        [
-          [-21, -15.3],
-          [-21, 15.3],
-          [-25, 15.3],
-          [-25, -15.3],
-        ],
-        13.2,
-        20.4,
-        '#8b9599',
-        '#4a555c',
-        '#66737a'
-      );
-
-      // 4b. Microcontroller Board (Teal/Emerald PCB in Center)
-      drawExtrudedLocalPoly(
-        [
-          [11, -13],
-          [11, 13],
-          [-14, 13],
-          [-14, -13],
-        ],
-        13,
-        18,
-        '#0d9488',
-        '#0f766e',
-        '#115e59',
-        '#5eead4',
-        1
-      );
-
-      // 4c. Glowing Cyan Mini OLED Screen on top of MCU
-      drawExtrudedLocalPoly(
-        [
-          [7, -8],
-          [7, 8],
-          [-7, 8],
-          [-7, -8],
-        ],
-        18,
-        20,
-        '#083344',
-        '#06b6d4',
-        '#0891b2',
-        '#22d3ee',
-        1.2
-      );
-      // Glowing telemetry bars on Mini OLED
-      const oledCenter = localToWorld(0, 0);
-      const oled2D = project3D(oledCenter.wx, oledCenter.wy, 20.5 * rScale);
-      ctx.fillStyle = '#22d3ee';
-      ctx.beginPath();
-      ctx.arc(oled2D.sx, oled2D.sy, Math.max(2, 3.2 * oled2D.scale), 0, Math.PI * 2);
-      ctx.fill();
-
-      // 4d. Ultrasonic Sensor HC-SR04 ("Mata Robot") if enabled
+      // Optional Ultrasonic Sensor HC-SR04 ("Mata Robot") if enabled
       if (hardwareConfig.ultrasonicMode !== 'none') {
         drawExtrudedLocalPoly(
           [
@@ -1570,7 +2016,6 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           '#7dd3fc',
           1
         );
-        // Two silver acoustic cylinders on front of HC-SR04
         for (const eyeY of [-5.5, 5.5]) {
           const eyeW = localToWorld(25.5, eyeY);
           const eye2D = project3D(eyeW.wx, eyeW.wy, 19 * rScale);
@@ -1584,48 +2029,56 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         }
       }
 
-      // 5. Forward Direction Arrow on Robot Nose Bridge
+      // Forward Direction Arrow on Robot Nose Bridge
       const arrowPts = [
-        localToWorld(23, 0),
-        localToWorld(14, -5.5),
-        localToWorld(14, 5.5),
+        localToWorld(24, 0),
+        localToWorld(15, -4.8),
+        localToWorld(15, 4.8),
       ].map((p) => project3D(p.wx, p.wy, 14.5 * rScale));
-      ctx.fillStyle = '#dbe6e8';
+      ctx.fillStyle = '#f8fafc';
       ctx.beginPath();
       arrowPts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.sx, pt.sy) : ctx.lineTo(pt.sx, pt.sy)));
       ctx.closePath();
       ctx.fill();
 
-      // 6. Front Sensor Array LEDs ('0' = Green Glow on Line, 'X' = Red Off Line)
+      // Front Sensor Array LEDs (Ichibot Style: Bright Magenta-Red '#ff1e56' when ON Line '0', Dark Slate when OFF Line 'X')
       const sCount = hardwareConfig.sensorCount;
       for (let i = 0; i < sCount; i++) {
         const frac = sCount <= 1 ? 0 : i / (sCount - 1) - 0.5;
-        // Slight arc along the front wing nose
+        // Sweeping crescent curve along the front sensor wing
         const ly = frac * sSpan;
-        const lx = 35 - Math.abs(frac) * 5;
+        const lx = 36 - Math.pow(Math.abs(frac) * 1.4, 1.55) * 6.5;
         const spWorld = localToWorld(lx, ly);
         const isOnLine = sensorReadings[i];
 
         // Floor projection beam dot
         const floor2d = project3D(spWorld.wx, spWorld.wy, 1);
-        ctx.fillStyle = isOnLine ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.22)';
+        ctx.fillStyle = isOnLine
+          ? isIchibotStyle
+            ? 'rgba(255, 30, 86, 0.52)'
+            : 'rgba(34, 197, 94, 0.45)'
+          : 'rgba(148, 163, 184, 0.18)';
         ctx.beginPath();
-        ctx.arc(floor2d.sx, floor2d.sy, Math.max(2.5, 4.5 * floor2d.scale * rScale), 0, Math.PI * 2);
+        ctx.arc(floor2d.sx, floor2d.sy, Math.max(2.2, 4.0 * floor2d.scale * rScale), 0, Math.PI * 2);
         ctx.fill();
 
         // Top PCB LED indicator with bright halo when detecting line ('0')
         const sp2d = project3D(spWorld.wx, spWorld.wy, 11.8 * rScale);
         if (isOnLine) {
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.45)';
+          ctx.fillStyle = isIchibotStyle ? 'rgba(255, 0, 68, 0.55)' : 'rgba(34, 197, 94, 0.45)';
           ctx.beginPath();
-          ctx.arc(sp2d.sx, sp2d.sy, Math.max(4.5, 7.5 * sp2d.scale * rScale), 0, Math.PI * 2);
+          ctx.arc(sp2d.sx, sp2d.sy, Math.max(4.5, 7.6 * sp2d.scale * rScale), 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.fillStyle = isOnLine ? '#22c55e' : '#ef4444';
-        ctx.strokeStyle = isOnLine ? '#dcfce7' : '#fecaca';
-        ctx.lineWidth = 1.2;
+        ctx.fillStyle = isOnLine
+          ? isIchibotStyle
+            ? '#ff1e56'
+            : '#22c55e'
+          : '#1e293b';
+        ctx.strokeStyle = isOnLine ? '#ffffff' : '#94a3b8';
+        ctx.lineWidth = 1.25;
         ctx.beginPath();
-        ctx.arc(sp2d.sx, sp2d.sy, Math.max(2.8, 4.4 * sp2d.scale * rScale), 0, Math.PI * 2);
+        ctx.arc(sp2d.sx, sp2d.sy, Math.max(2.6, 4.0 * sp2d.scale * rScale), 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
@@ -1652,12 +2105,17 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     onHighlightChange,
     onRunComplete,
     isLight,
+    robotChassisStyle,
+    showTrail,
+    checkpoints,
+    activeCheckpoint,
   ]);
 
   // Convert click on canvas to exact 2D track coordinates (inverting the 3D/2D camera floor projection)
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isRunning) return;
-    if (placementTool === 'none') return;
+    const effectiveTool = placementTool !== 'none' ? placementTool : freeMoveMode ? 'robot' : 'none';
+    if (effectiveTool === 'none') return;
     const canvas = viewportCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1728,19 +2186,19 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
     const tx = Math.max(36, Math.min(TRACK_W - 36, Math.round(clickX)));
     const ty = Math.max(36, Math.min(TRACK_H - 36, Math.round(clickY)));
 
-    if (placementTool === 'start') {
+    if (effectiveTool === 'start') {
       setStartPos({ x: tx, y: ty });
       resetRobotToStart(tx, ty, initialHeadingDeg);
       setPlacementTool('none');
-    } else if (placementTool === 'finish') {
+    } else if (effectiveTool === 'finish') {
       setFinishPos({ x: tx, y: ty });
       setPlacementTool('none');
-    } else if (placementTool === 'robot') {
+    } else if (effectiveTool === 'robot') {
       simStateRef.current.x = tx;
       simStateRef.current.y = ty;
       setRobotPose((p) => ({ ...p, x: tx, y: ty }));
-      setPlacementTool('none');
-    } else if (placementTool === 'draw_line') {
+      if (!freeMoveMode) setPlacementTool('none');
+    } else if (effectiveTool === 'draw_line') {
       if (!lastDrawPoint) {
         setLastDrawPoint({ x: tx, y: ty });
       } else {
@@ -1786,10 +2244,32 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
         className="hidden"
       />
 
-      <header className={`shrink-0 border-b px-3 py-3 ${isLight ? 'border-sky-100 bg-white' : 'border-slate-700 bg-slate-900'}`}>
+      <header className={`shrink-0 border-b px-3 py-2.5 ${isLight ? 'border-sky-100 bg-white' : 'border-slate-700 bg-slate-900'}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-black tracking-tight">Arena Line Follower</h2>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-black tracking-tight">Arena Line Follower</h2>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+              isLight ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+            }`}>
+              Ichibot Ultimate 5 Edition
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveDrawer(activeDrawer === 'oled' ? 'none' : 'oled')}
+              aria-expanded={activeDrawer === 'oled'}
+              className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-extrabold transition cursor-pointer ${
+                activeDrawer === 'oled'
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
+                  : isLight
+                  ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border-cyan-300'
+                  : 'bg-cyan-950/60 hover:bg-cyan-900/70 text-cyan-300 border-cyan-500/40'
+              }`}
+              title="Buka Layar OLED Robot & Tombol UPL/OKL/DWNL - UPR/OKR/DWNR"
+            >
+              📟 Layar OLED
+            </button>
             <button type="button" onClick={() => setActiveDrawer(activeDrawer === 'plan' ? 'none' : 'plan')}
               aria-expanded={activeDrawer === 'plan'} className={controlStyle}>
               Langkah Plan
@@ -1800,7 +2280,7 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
             </button>
             {onToggleRun && (
               <button type="button" disabled={!isRunning && !steps.length} onClick={onToggleRun}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white disabled:opacity-50 ${isRunning ? 'bg-rose-700 hover:bg-rose-800' : 'bg-blue-700 hover:bg-blue-800'}`}>
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white disabled:opacity-50 cursor-pointer ${isRunning ? 'bg-rose-700 hover:bg-rose-800' : 'bg-blue-700 hover:bg-blue-800'}`}>
                 {isRunning ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
                 {isRunning ? 'Berhenti' : 'Jalankan'}
               </button>
@@ -1824,18 +2304,157 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
           </label>
           <label className="grid min-w-0 gap-1 font-semibold">Mulai dari langkah
             <select value={chosenStep ?? ''} disabled={isRunning || !steps.length} onChange={event => setStartStep(event.target.value === '' ? null : Number(event.target.value))}
-              title="Posisi robot tetap di titik Start. Atur titik Start pada Pengaturan arena." className={controlStyle}>
+              title="Pilih langkah index awal saat simulasi dijalankan." className={controlStyle}>
               <option value="">Awal Plan</option>
               {steps.map((step, index) => <option key={index} value={step.index}>Langkah {step.index}</option>)}
             </select>
           </label>
           <label className="grid min-w-0 gap-1 font-semibold">Laju simulasi
             <select value={playbackRate} onChange={event => setPlaybackRate(Number(event.target.value))} className={controlStyle}>
+              <option value={0.1}>0,1× · Ultra Slow</option>
               <option value={0.25}>0,25× · Amati sensor</option>
               <option value={0.5}>0,5× · Pelan</option>
               <option value={1}>1× · Normal</option>
+              <option value={2}>2× · Cepat</option>
             </select>
           </label>
+        </div>
+
+        {/* ── ICHIBOT QUICK CONTROL BAR: Checkpoints (ST, CP1-CP9), Free Move, Geleng & Trail ── */}
+        <div className={`mt-2 pt-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${isLight ? 'border-slate-200/80' : 'border-slate-800'}`}>
+          {/* Checkpoints Bar */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className={`font-bold text-[10px] uppercase tracking-wider mr-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Checkpoint:
+            </span>
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={() => handleJumpToCheckpoint(0)}
+              className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                activeCheckpoint === 0
+                  ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title="Posisi Start Utama (ST)"
+            >
+              ST
+            </button>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((cpId) => {
+              const cp = checkpoints[cpId];
+              const isSelected = activeCheckpoint === cpId;
+              return (
+                <button
+                  key={cpId}
+                  type="button"
+                  disabled={isRunning}
+                  onClick={() => handleJumpToCheckpoint(cpId)}
+                  className={`px-1.5 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                    isSelected
+                      ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-sm font-extrabold'
+                      : cp?.saved
+                      ? isLight
+                        ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-300'
+                        : 'bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border-sky-700/60'
+                      : isLight
+                      ? 'bg-white hover:bg-slate-100 text-slate-400 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-500 border-slate-800'
+                  }`}
+                  title={
+                    cp?.saved
+                      ? `CP${cpId}: (${cp.x}, ${cp.y}, ${cp.deg}°)${cp.stepIndex !== null ? ` • Index #${cp.stepIndex}` : ''}`
+                      : `Klik untuk menyimpan posisi robot saat ini ke CP${cpId}`
+                  }
+                >
+                  CP{cpId}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={handleSaveCurrentToCheckpoint}
+              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                isLight
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+              }`}
+              title="Simpan posisi & arah robot saat ini ke slot CP yang dipilih"
+            >
+              💾 Simpan CP
+            </button>
+          </div>
+
+          {/* Right side: Free Move, Geleng Sensor Test, Trail Toggle & Chassis Style */}
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={() => setFreeMoveMode((v) => !v)}
+              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                freeMoveMode
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-sm'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title="Free Move: Gerakkan robot dengan tombol panah keyboard (↑↓←→ + Shift) atau klik langsung di lintasan"
+            >
+              🕹️ Free Move {freeMoveMode ? 'ON (↑↓←→)' : 'OFF'}
+            </button>
+
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={() => setIsGelengActive((v) => !v)}
+              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer disabled:opacity-50 ${
+                isGelengActive
+                  ? 'bg-rose-500 text-white border-rose-400 animate-pulse'
+                  : isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300'
+                  : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/30'
+              }`}
+              title="Goyangkan kepala robot ke kiri-kanan untuk menguji pembacaan sensor garis"
+            >
+              〰️ Geleng (Cek Sensor)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowTrail((v) => !v)}
+              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer ${
+                showTrail
+                  ? isLight
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : isLight
+                  ? 'bg-slate-100 text-slate-500 border-slate-300'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+              title="Tampilkan/Sembunyikan garis jejak lintasan hijau & titik perpindahan index"
+            >
+              🟢 Jejak: {showTrail ? 'ON' : 'OFF'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRobotChassisStyle((s) => (s === 'ichibot' ? 'classic' : 'ichibot'))}
+              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border transition cursor-pointer ${
+                robotChassisStyle === 'ichibot'
+                  ? isLight
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                    : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                  : isLight
+                  ? 'bg-slate-100 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+              title="Ganti desain sasis robot antara Ichibot Ultimate 5 (Delta V-Wing) dan Classic T-Chassis"
+            >
+              🏎️ Sasis: {robotChassisStyle === 'ichibot' ? 'Ichibot Ultimate 5' : 'Classic'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -2143,6 +2762,197 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
 
       {/* ── MAIN 3D ARENA VIEWPORT (100% Unobstructed Track!) ── */}
       <div className="relative flex-1 w-full min-h-[220px] overflow-hidden">
+        {activeDrawer === 'oled' && (
+          <div className="absolute top-2 right-2 z-30 w-[330px] rounded-2xl border border-cyan-500/40 bg-[#070b14]/95 p-3.5 text-slate-100 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-800">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-[11px] font-black tracking-wider uppercase text-cyan-300">
+                  ICHIBOT ULTIMATE 5 • OLED
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveDrawer('none')}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+              >
+                ✕ Tutup
+              </button>
+            </div>
+
+            {/* Interactive 6-Button + 128x64 OLED Layout */}
+            <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
+              {/* Left 3 Tactile Buttons: UPL, OKL, DWNL */}
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pages: Array<'home' | 'sensor' | 'plan' | 'pid'> = ['home', 'sensor', 'plan', 'pid'];
+                    const idx = pages.indexOf(oledMenuPage);
+                    setOledMenuPage(pages[(idx + pages.length - 1) % pages.length]);
+                  }}
+                  className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-[9px] shadow border border-emerald-400/50 cursor-pointer"
+                  title="UPL: Menu Sebelumnya"
+                >
+                  UPL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (oledMenuPage === 'home' && onToggleRun) {
+                      onToggleRun();
+                    } else if (oledMenuPage === 'sensor') {
+                      setIsGelengActive((v) => !v);
+                    } else if (oledMenuPage === 'plan') {
+                      onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId);
+                    } else if (oledMenuPage === 'pid') {
+                      setActiveDrawer('pid');
+                    }
+                  }}
+                  className="py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-[9px] shadow border border-emerald-300 cursor-pointer"
+                  title="OKL: Pilih / Jalankan"
+                >
+                  OKL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pages: Array<'home' | 'sensor' | 'plan' | 'pid'> = ['home', 'sensor', 'plan', 'pid'];
+                    const idx = pages.indexOf(oledMenuPage);
+                    setOledMenuPage(pages[(idx + 1) % pages.length]);
+                  }}
+                  className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-[9px] shadow border border-emerald-400/50 cursor-pointer"
+                  title="DWNL: Menu Berikutnya"
+                >
+                  DWNL
+                </button>
+              </div>
+
+              {/* Center 128x64 Monochrome Cyan/White OLED Screen */}
+              <div className="h-[132px] rounded-xl border-2 border-cyan-500/60 bg-[#020409] p-2.5 font-mono text-[10px] flex flex-col justify-between shadow-[inset_0_0_18px_rgba(34,211,238,0.18)]">
+                <div className="flex items-center justify-between border-b border-cyan-900/80 pb-1 text-[9px] text-cyan-400 font-bold">
+                  <span>ULTIMATE 5S</span>
+                  <span>PLAN:{currentPlan?.planId ?? 1}</span>
+                  <span>{hardwareConfig.sensorCount}S</span>
+                </div>
+
+                {oledMenuPage === 'home' && (
+                  <div className="my-auto space-y-1 text-center">
+                    <div className="text-xs font-black text-white tracking-wider">ICHIBOT SIMULATOR</div>
+                    <div className="text-[9.5px] text-cyan-300">
+                      IDX: #{execStatus.stepIndex ?? chosenStep ?? 0} • {isRunning ? 'RUNNING' : 'READY'}
+                    </div>
+                    <div className="text-[9px] text-emerald-400">
+                      PWM L:{liveSpeeds.l} R:{liveSpeeds.r} | {simElapsedSec.toFixed(1)}s
+                    </div>
+                  </div>
+                )}
+
+                {oledMenuPage === 'sensor' && (
+                  <div className="my-auto space-y-1.5">
+                    <div className="text-[9px] text-cyan-300 font-bold text-center">CAL / VIEW SENSORS</div>
+                    <div className="flex items-center justify-center gap-0.5 h-8 px-1 bg-slate-950 rounded border border-cyan-950">
+                      {sensorReadings.map((act, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex-1 rounded-xs transition-all ${
+                            act ? 'h-6 bg-rose-500 shadow-[0_0_6px_#ff1e56]' : 'h-2 bg-cyan-900/60'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="text-[8.5px] text-center text-slate-400">
+                      OKL: Geleng • UPR/DWNR: Jml Sensor ({hardwareConfig.sensorCount})
+                    </div>
+                  </div>
+                )}
+
+                {oledMenuPage === 'plan' && (
+                  <div className="my-auto space-y-1 text-center">
+                    <div className="text-[9.5px] text-cyan-300 font-bold">SELECT PLAN &amp; INDEX</div>
+                    <div className="text-xs font-extrabold text-amber-300">
+                      ACTIVE PLAN {currentPlan?.planId ?? 1} ({steps.length} Step)
+                    </div>
+                    <div className="text-[9px] text-slate-300">
+                      Start Idx: {chosenStep === null ? '0 (Awal)' : `#${chosenStep}`}
+                    </div>
+                  </div>
+                )}
+
+                {oledMenuPage === 'pid' && (
+                  <div className="my-auto space-y-1">
+                    <div className="text-[9.5px] text-cyan-300 font-bold text-center">
+                      {hardwareConfig.pids[oledCursor % 5]?.label || 'PID 1'}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-center text-[9px] bg-slate-950 py-1 rounded border border-cyan-950">
+                      <div>Kp:<b className="text-amber-300">{hardwareConfig.pids[oledCursor % 5]?.kp}</b></div>
+                      <div>Ki:<b className="text-emerald-300">{hardwareConfig.pids[oledCursor % 5]?.ki}</b></div>
+                      <div>Kd:<b className="text-sky-300">{hardwareConfig.pids[oledCursor % 5]?.kd}</b></div>
+                    </div>
+                    <div className="text-[8.5px] text-center text-slate-400">
+                      UPR/DWNR: Pilih PID 1-5 • OKL: Edit Detail
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-cyan-900/80 pt-1 text-[8.5px] text-cyan-400">
+                  <span>{oledMenuPage === 'home' ? (isRunning ? '[OKL]STOP' : '[OKL]RUN') : '[OKL]ACT'}</span>
+                  <span>www.ichibot.id</span>
+                </div>
+              </div>
+
+              {/* Right 3 Tactile Buttons: UPR, OKR, DWNR */}
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (oledMenuPage === 'plan' && plans.length > 0 && !isRunning) {
+                      const curIdx = plans.findIndex((p) => p.planId === currentPlan?.planId);
+                      const nextPlan = plans[(curIdx + 1) % plans.length];
+                      if (nextPlan) onChangePlans(plans, nextPlan.planId);
+                    } else if (oledMenuPage === 'sensor' && !isRunning) {
+                      const counts: SensorCount[] = [2, 4, 5, 6, 8, 12, 14];
+                      const nextSc = counts[(counts.indexOf(hardwareConfig.sensorCount) + 1) % counts.length];
+                      updateHardware({ sensorCount: nextSc, sensorMode: nextSc >= 6 ? 'mux_4067' : 'direct' }, true, true);
+                    } else {
+                      setOledCursor((c) => (c + 1) % 5);
+                    }
+                  }}
+                  className="py-2 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-[9px] shadow border border-rose-400/50 cursor-pointer"
+                  title="UPR: Naik / Ganti Nilai"
+                >
+                  UPR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSyncToCodeAndBlocks(hardwareConfig, plans, activePlanId);
+                  }}
+                  className="py-2 rounded-lg bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-black text-[9px] shadow border border-rose-300 cursor-pointer"
+                  title="OKR: Sync ke Kode Arduino & Blok"
+                >
+                  OKR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (oledMenuPage === 'plan' && steps.length > 0 && !isRunning) {
+                      const curStepIdx = steps.findIndex((s) => s.index === chosenStep);
+                      const nextStep = curStepIdx + 1 < steps.length ? steps[curStepIdx + 1].index : null;
+                      setStartStep(nextStep);
+                    } else {
+                      setOledCursor((c) => (c + 4) % 5);
+                    }
+                  }}
+                  className="py-2 rounded-lg bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-[9px] shadow border border-rose-400/50 cursor-pointer"
+                  title="DWNR: Turun / Langkah Berikutnya"
+                >
+                  DWNR
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {activeDrawer === 'plan' && (
           <section aria-label="Langkah Plan" className={`absolute inset-x-2 top-2 z-30 max-h-[calc(100%-1rem)] overflow-auto rounded-2xl border p-3 shadow-xl ${isLight ? 'border-sky-200 bg-white' : 'border-slate-600 bg-slate-900'}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2399,9 +3209,9 @@ export const RobotArena3D: React.FC<RobotArena3DProps> = ({
                     isLight ? 'bg-white text-emerald-700 border-slate-300' : 'bg-[#111e34] text-emerald-300 border-slate-700'
                   }`}
                 >
-                  {[2, 4, 5, 6, 8, 12].map((n) => (
+                  {[2, 4, 5, 6, 8, 12, 14].map((n) => (
                     <option key={n} value={n}>
-                      {n} Sensor (Pola: {'0'.repeat(Math.min(2, n)) + 'x'.repeat(Math.max(0, n - 4)) + (n > 2 ? '0'.repeat(Math.min(2, n - 2)) : '')})
+                      {n} Sensor {n === 14 ? '(Ichibot Ultimate 5)' : `(Pola: ${'0'.repeat(Math.min(2, n)) + 'x'.repeat(Math.max(0, n - 4)) + (n > 2 ? '0'.repeat(Math.min(2, n - 2)) : '')})`}
                     </option>
                   ))}
                 </select>

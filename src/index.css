@@ -1081,6 +1081,36 @@ html body #root .blocklyTreeRow::before {
 .theme-light select {
   color: #0f172a !important;
 }
+
+/* ============================================================================
+   BLOCKLY INLINE FIELD INPUT VISIBILITY FIX (Both Dark & Light Themes)
+   Ensures value editing & text selection inside Blockly blocks are always
+   high-contrast, crisp, and clearly visible when clicked or highlighted.
+   ============================================================================ */
+.blocklyWidgetDiv .blocklyHtmlInput,
+input.blocklyHtmlInput {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+  font-weight: 700 !important;
+  font-family: 'JetBrains Mono', 'Outfit', 'Inter', monospace !important;
+  border: 2px solid var(--accent-primary, #2563eb) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25), 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+  padding: 0 6px !important;
+  opacity: 1 !important;
+  z-index: 99999 !important;
+}
+
+.blocklyWidgetDiv .blocklyHtmlInput::selection,
+input.blocklyHtmlInput::selection,
+.theme-light .blocklyWidgetDiv .blocklyHtmlInput::selection,
+.theme-dark .blocklyWidgetDiv .blocklyHtmlInput::selection {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
 .theme-light input::placeholder,
 .theme-light textarea::placeholder { color: #94a3b8 !important; }
 

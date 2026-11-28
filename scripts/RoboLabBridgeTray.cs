@@ -1,206 +1,92 @@
 using System;
-using System.IO;
 using System.Diagnostics;
 using System.Drawing;
-using System.Windows.Forms;
+using System.IO;
+using System.Net;
+using System.Reflection;
 using System.Threading;
+using System.Windows.Forms;
 
-namespace RoboLabBridgeTray
+[assembly: AssemblyTitle("RoboLab Local Compiler Bridge")]
+[assembly: AssemblyDescription("Official Local Arduino & ESP32/ESP8266 Compiler Service for RoboLab Studio")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("RoboLab Studio Education")]
+[assembly: AssemblyProduct("RoboLab Studio Local Compiler Bridge")]
+[assembly: AssemblyCopyright("Copyright © 2026 RoboLab Studio")]
+[assembly: AssemblyTrademark("RoboLab Studio")]
+[assembly: AssemblyCulture("")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
+
+namespace RoboLabBridge
 {
-    static class Program
+    public class TrayApp : ApplicationContext
     {
-        private static NotifyIcon trayIcon;
-        private static ContextMenuStrip trayMenu;
-        private static Process serverProcess;
-        private static string appDir;
-        private static Mutex singleInstanceMutex;
+        private NotifyIcon _trayIcon;
+        private Process _nodeProcess;
+        private ToolStripMenuItem _statusItem;
+        private string _appDir;
+        private bool _isExiting = false;
 
-        [STAThread]
-        static void Main()
+        public TrayApp()
         {
-            // Ensure only one instance of the tray app runs
-            bool createdNew;
-            singleInstanceMutex = new Mutex(true, "RoboLabBridgeTray_SingleInstance_Mutex", out createdNew);
-            if (!createdNew)
+            _appDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            _statusItem = new ToolStripMenuItem("Status: Starting (Port 3001)...");
+            _statusItem.Enabled = false;
+
+            ContextMenuStrip menu = new ContextMenuStrip();
+            menu.Items.Add(new ToolStripMenuItem("RoboLab Studio Compiler Bridge") { Enabled = false, Font = new Font(SystemFonts.MenuFont, FontStyle.Bold) });
+            menu.Items.Add(_statusItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Buka Status di Browser (127.0.0.1:3001)", null, OnOpenStatus);
+            menu.Items.Add("Restart Compiler Bridge", null, OnRestart);
+            menu.Items.Add("Buka Folder Instalasi", null, OnOpenFolder);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Keluar (Stop Bridge)", null, OnExit);
+
+            _trayIcon = new NotifyIcon()
             {
-                // Already running
-                return;
-            }
-
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            appDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoboLabBridge");
-            if (!Directory.Exists(appDir))
-            {
-                appDir = AppDomain.CurrentDomain.BaseDirectory;
-            }
-
-            // Start server in background
-            StartServer();
-
-            // Create Tray Context Menu
-            trayMenu = new ContextMenuStrip();
-            
-            var headerItem = new ToolStripMenuItem("⚡ RoboLab Compiler Bridge") { Enabled = false, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
-            var statusItem = new ToolStripMenuItem("🟢 Status: Aktif (Port 3001)") { Enabled = false };
-            var sep1 = new ToolStripSeparator();
-
-            var openWebItem = new ToolStripMenuItem("🌐 Buka RoboLab Web");
-            openWebItem.Click += (s, e) =>
-            {
-                try { Process.Start("https://robolabstudio.vercel.app"); }
-                catch { Process.Start("http://localhost:3001"); }
-            };
-
-            var restartItem = new ToolStripMenuItem("🔄 Restart Server");
-            restartItem.Click += (s, e) =>
-            {
-                StartServer();
-                trayIcon.ShowBalloonTip(2000, "RoboLab Compiler Bridge", "Server lokal berhasil direstart di http://localhost:3001", ToolTipIcon.Info);
-            };
-
-            var sep2 = new ToolStripSeparator();
-
-            var exitItem = new ToolStripMenuItem("❌ Tutup Server & Keluar");
-            exitItem.Click += (s, e) =>
-            {
-                StopServer();
-                trayIcon.Visible = false;
-                Application.Exit();
-            };
-
-            trayMenu.Items.Add(headerItem);
-            trayMenu.Items.Add(statusItem);
-            trayMenu.Items.Add(sep1);
-            trayMenu.Items.Add(openWebItem);
-            trayMenu.Items.Add(restartItem);
-            trayMenu.Items.Add(sep2);
-            trayMenu.Items.Add(exitItem);
-
-            // Create Icon (Draw a custom crisp ⚡ icon if no .ico file)
-            Icon icon = CreateDefaultIcon();
-
-            trayIcon = new NotifyIcon()
-            {
-                Text = "RoboLab Compiler Bridge (Port 3001 - AKTIF)",
-                Icon = icon,
-                ContextMenuStrip = trayMenu,
+                Icon = CreateRobotIcon(),
+                ContextMenuStrip = menu,
+                Text = "RoboLab Compiler Bridge (Port 3001)",
                 Visible = true
             };
 
-            trayIcon.DoubleClick += (s, e) =>
-            {
-                trayIcon.ShowBalloonTip(3000, "RoboLab Compiler Bridge", "Server lokal aktif di http://localhost:3001.\nRoboLab Web terhubung secara otomatis.", ToolTipIcon.Info);
-            };
+            _trayIcon.DoubleClick += OnOpenStatus;
 
-            trayIcon.ShowBalloonTip(3000, "RoboLab Compiler Bridge", "Server compiler lokal aktif di latar belakang (Port 3001)!", ToolTipIcon.Info);
+            StartCompilerServer();
 
-            Application.ApplicationExit += (s, e) => StopServer();
-
-            Application.Run();
+            _trayIcon.ShowBalloonTip(
+                3000,
+                "RoboLab Compiler Bridge Aktif",
+                "Server kompilasi lokal berjalan di background pada Port 3001.",
+                ToolTipIcon.Info
+            );
         }
 
-        static void StartServer()
-        {
-            StopServer();
-
-            string scriptPath = Path.Combine(appDir, "compile-server.cjs");
-            if (!File.Exists(scriptPath))
-            {
-                scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "compile-server.cjs");
-            }
-
-            // Find node executable
-            string nodePath = "node";
-            string[] nodeCandidates = new string[]
-            {
-                @"C:\nvm4w\nodejs\node.exe",
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\nodejs\node.exe"),
-                @"C:\Program Files\nodejs\node.exe",
-                Path.Combine(appDir, "node.exe")
-            };
-            foreach (var cand in nodeCandidates)
-            {
-                if (File.Exists(cand))
-                {
-                    nodePath = cand;
-                    break;
-                }
-            }
-
-            try
-            {
-                var psi = new ProcessStartInfo(nodePath, string.Format("\"{0}\"", scriptPath))
-                {
-                    WorkingDirectory = appDir,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
-                serverProcess = Process.Start(psi);
-            }
-            catch { }
-        }
-
-        static void StopServer()
+        private Icon CreateRobotIcon()
         {
             try
             {
-                if (serverProcess != null && !serverProcess.HasExited)
+                using (Bitmap bmp = new Bitmap(32, 32))
+                using (Graphics g = Graphics.FromImage(bmp))
                 {
-                    serverProcess.Kill();
-                }
-            }
-            catch { }
-
-            try
-            {
-                var psi = new ProcessStartInfo("cmd.exe", "/c \"for /f \\\"tokens=5\\\" %a in ('netstat -ano ^| findstr :3001 ^| findstr LISTENING') do taskkill /F /PID %a\"")
-                {
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
-                var p = Process.Start(psi);
-                if (p != null) p.WaitForExit(1500);
-            }
-            catch { }
-        }
-
-        static Icon CreateDefaultIcon()
-        {
-            try
-            {
-                using (var bmp = new Bitmap(32, 32))
-                {
-                    using (var g = Graphics.FromImage(bmp))
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    g.Clear(Color.Transparent);
+                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(16, 185, 129)))
                     {
-                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                        // Blue circular badge
-                        using (var brush = new SolidBrush(Color.FromArgb(37, 99, 235)))
-                        {
-                            g.FillEllipse(brush, 1, 1, 30, 30);
-                        }
-                        // Emerald outline
-                        using (var pen = new Pen(Color.FromArgb(16, 185, 129), 2f))
-                        {
-                            g.DrawEllipse(pen, 1, 1, 30, 30);
-                        }
-                        // Yellow lightning bolt
-                        using (var boltBrush = new SolidBrush(Color.FromArgb(254, 240, 138)))
-                        {
-                            Point[] bolt = new Point[]
-                            {
-                                new Point(17, 4),
-                                new Point(9, 17),
-                                new Point(15, 17),
-                                new Point(13, 28),
-                                new Point(23, 13),
-                                new Point(17, 13)
-                            };
-                            g.FillPolygon(boltBrush, bolt);
-                        }
+                        g.FillEllipse(bg, 2, 2, 28, 28);
+                    }
+                    using (Pen pen = new Pen(Color.White, 2.5f))
+                    {
+                        g.DrawRectangle(pen, 8, 10, 16, 13);
+                        g.DrawLine(pen, 16, 5, 16, 10);
+                    }
+                    using (SolidBrush eye = new SolidBrush(Color.White))
+                    {
+                        g.FillEllipse(eye, 11, 14, 3, 3);
+                        g.FillEllipse(eye, 18, 14, 3, 3);
                     }
                     return Icon.FromHandle(bmp.GetHicon());
                 }
@@ -209,6 +95,141 @@ namespace RoboLabBridgeTray
             {
                 return SystemIcons.Application;
             }
+        }
+
+        private bool IsLocalBridgeAlreadyHealthy()
+        {
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:3001/api/health");
+                req.Method = "GET";
+                req.Timeout = 1200;
+                using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
+                {
+                    return res.StatusCode == HttpStatusCode.OK;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void StartCompilerServer()
+        {
+            StopCompilerServer();
+
+            // Check if another instance of the compiler server is already healthy on port 3001
+            if (IsLocalBridgeAlreadyHealthy())
+            {
+                _statusItem.Text = "Status: Online (Port 3001 Ready)";
+                return;
+            }
+
+            string bundledNode = Path.Combine(_appDir, "node", "node.exe");
+            string nodeExe = File.Exists(bundledNode) ? bundledNode : "node";
+            string scriptPath = Path.Combine(_appDir, "compile-server.cjs");
+
+            if (!File.Exists(scriptPath))
+            {
+                _statusItem.Text = "Status: Error (compile-server.cjs tidak ditemukan)";
+                return;
+            }
+
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo()
+                {
+                    FileName = nodeExe,
+                    Arguments = "\"" + scriptPath + "\"",
+                    WorkingDirectory = _appDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                psi.EnvironmentVariables["ROBOLAB_COMPILE_PORT"] = "3001";
+
+                _nodeProcess = new Process();
+                _nodeProcess.StartInfo = psi;
+                _nodeProcess.EnableRaisingEvents = true;
+                _nodeProcess.Exited += (s, e) =>
+                {
+                    if (!_isExiting)
+                    {
+                        if (IsLocalBridgeAlreadyHealthy())
+                        {
+                            _statusItem.Text = "Status: Online (Port 3001 Ready)";
+                            return;
+                        }
+                        _statusItem.Text = "Status: Stopped (Restarting...)";
+                        Thread.Sleep(2000);
+                        if (!_isExiting) StartCompilerServer();
+                    }
+                };
+                _nodeProcess.Start();
+                _statusItem.Text = "Status: Online (Port 3001)";
+            }
+            catch (Exception ex)
+            {
+                _statusItem.Text = "Status: Gagal (" + ex.Message + ")";
+            }
+        }
+
+        private void StopCompilerServer()
+        {
+            try
+            {
+                if (_nodeProcess != null && !_nodeProcess.HasExited)
+                {
+                    _nodeProcess.Kill();
+                    _nodeProcess.WaitForExit(1500);
+                }
+            }
+            catch { }
+            _nodeProcess = null;
+        }
+
+        private void OnOpenStatus(object sender, EventArgs e)
+        {
+            try { Process.Start("http://127.0.0.1:3001/api/health"); } catch { }
+        }
+
+        private void OnRestart(object sender, EventArgs e)
+        {
+            StartCompilerServer();
+        }
+
+        private void OnOpenFolder(object sender, EventArgs e)
+        {
+            try { Process.Start("explorer.exe", _appDir); } catch { }
+        }
+
+        private void OnExit(object sender, EventArgs e)
+        {
+            _isExiting = true;
+            _trayIcon.Visible = false;
+            StopCompilerServer();
+            Application.Exit();
+        }
+    }
+
+    static class Program
+    {
+        private static Mutex _mutex;
+
+        [STAThread]
+        static void Main()
+        {
+            bool createdNew;
+            _mutex = new Mutex(true, "RoboLabCompilerBridgeTrayMutex", out createdNew);
+            if (!createdNew)
+            {
+                return;
+            }
+
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new TrayApp());
         }
     }
 }

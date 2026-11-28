@@ -241,42 +241,45 @@ export const CompilerBridgeModal: React.FC<CompilerBridgeModalProps> = ({
                 <div className="space-y-1.5 text-xs py-2">
                   <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>Installer otomatis 1-klik (.exe)</span>
+                    <span>100% Aman Antivirus (Tanpa VBS/Malware)</span>
                   </div>
                   <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>Driver USB CH340 &amp; CP2102</span>
+                    <span>Official Arduino CLI + Driver CH340/CP2102</span>
                   </div>
                   <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>Pintasan Desktop &amp; System Tray</span>
+                    <span>Portable ZIP &amp; System Tray 1-Klik</span>
                   </div>
                 </div>
               </div>
 
               <div className={`space-y-2 pt-4 border-t ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                 <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
-                  download="RoboLab-Compiler-Bridge-Setup.exe"
-                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer text-center"
+                  href="/downloads/RoboLab-Compiler-Bridge-Windows.zip"
+                  download="RoboLab-Compiler-Bridge-Windows.zip"
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition cursor-pointer text-center shadow-sm"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Installer (.exe)</span>
-                  <span className="text-[10px] opacity-80">~27 MB</span>
+                  <FolderArchive className="w-3.5 h-3.5" />
+                  <span>Unduh Paket Aman Antivirus (.zip)</span>
                 </a>
 
                 <a
-                  href="/downloads/RoboLab-Compiler-Bridge-Windows.zip"
-                  download="RoboLab-Compiler-Bridge-Windows.zip"
+                  href="/downloads/RoboLab-Compiler-Bridge-Setup.exe"
+                  download="RoboLab-Compiler-Bridge-Setup.exe"
                   className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition cursor-pointer border ${
                     isLight
                       ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
                       : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
                   }`}
                 >
-                  <FolderArchive className="w-3.5 h-3.5" />
-                  <span>Portable ZIP (.zip)</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Installer 1-Klik (.exe)</span>
+                  <span className="text-[10px] opacity-80">~27 MB</span>
                 </a>
+                <p className={`text-[10.5px] leading-snug pt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  💡 <b>Tips Antivirus:</b> Gunakan versi <b>Paket (.zip)</b> lalu ekstrak &amp; jalankan <code>install-bridge.bat</code> atau <code>start-bridge.bat</code> agar tidak terblokir SmartScreen/Antivirus.
+                </p>
               </div>
             </div>
 

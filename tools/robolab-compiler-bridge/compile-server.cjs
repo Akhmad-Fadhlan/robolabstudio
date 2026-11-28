@@ -22,17 +22,22 @@ function getArduinoCliPath() {
   const isWin = process.platform === 'win32';
   const binaryName = isWin ? 'arduino-cli.exe' : 'arduino-cli';
 
-  // 1. Check local tools/robolab-compiler-bridge/bin
+  // 1. Check local tools/robolab-compiler-bridge/bin or working directory bin
   const localBridgeBin = path.join(__dirname, 'bin', binaryName);
   if (fs.existsSync(localBridgeBin)) return localBridgeBin;
+  const cwdBin = path.join(process.cwd(), 'bin', binaryName);
+  if (fs.existsSync(cwdBin)) return cwdBin;
 
   if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || '';
     const candidates = [
+      ...(localAppData ? [path.join(localAppData, 'RoboLabCompilerBridge', 'bin', 'arduino-cli.exe')] : []),
+      path.join(__dirname, '..', 'tools', 'robolab-compiler-bridge', 'bin', 'arduino-cli.exe'),
       path.join(__dirname, '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
       path.join(__dirname, '..', '..', 'resources', 'bin', 'win32', 'arduino-cli.exe'),
       path.join(process.cwd(), 'resources', 'bin', 'win32', 'arduino-cli.exe'),
-      path.join(process.env.LOCALAPPDATA || '', 'Arduino15', 'arduino-cli.exe'),
-      ...[process.env.ProgramFiles, path.join(process.env.LOCALAPPDATA || '', 'Programs')]
+      path.join(localAppData, 'Arduino15', 'arduino-cli.exe'),
+      ...[process.env.ProgramFiles, path.join(localAppData, 'Programs')]
         .filter(Boolean)
         .map(dir => path.join(dir, 'Arduino IDE', 'resources', 'app', 'lib', 'backend', 'resources', 'arduino-cli.exe')),
       'C:\\Program Files\\Arduino CLI\\arduino-cli.exe',
@@ -533,8 +538,13 @@ async function _executeCompileRequest(body, onLogChunk = null, isAborted = null)
 
   // If running on Vercel Serverless or no local arduino-cli binary is installed, use Serverless Cloud Compiler
   if (!hasLocalArduinoCli()) {
-    const { compileWithCloudEngine } = require('./cloud-compiler.cjs');
-    return compileWithCloudEngine({ board, files, fqbn, sketchPath, requireNative });
+    try {
+      const { compileWithCloudEngine } = require('./cloud-compiler.cjs');
+      return compileWithCloudEngine({ board, files, fqbn, sketchPath, requireNative });
+    } catch (cloudErr) {
+      const msg = `Arduino CLI lokal tidak ditemukan dan Cloud Compiler gagal: ${cloudErr.message || cloudErr}`;
+      return { success: false, error: msg, logs: [{ text: msg, type: 'error' }] };
+    }
   }
 
   const sketch = selectArduinoSketch(files, sketchPath);
@@ -677,18 +687,6 @@ static inline void ledcAttachPin(uint8_t pin, uint8_t channel) {
   }
 
   if (shouldCompile) {
-    // Free RAM and COM locks from background KidsBlock or zombie compiler processes on Windows
-    if (process.platform === 'win32') {
-      try {
-        execSync('taskkill /IM "KidsBlock Desktop.exe" /F /T', { stdio: 'ignore' });
-        execSync('taskkill /IM "KidsBlock.exe" /F /T', { stdio: 'ignore' });
-      } catch {}
-      try {
-        execSync('taskkill /IM "cc1plus.exe" /F /T', { stdio: 'ignore' });
-        execSync('taskkill /IM "xtensa-lx106-elf-g++.exe" /F /T', { stdio: 'ignore' });
-      } catch {}
-    }
-
     // Delete only stale top-level .bin/.hex/.elf in buildDir, keeping precompiled core/ and libraries/ object caches!
     if (fs.existsSync(buildDir)) {
       try {
@@ -1767,12 +1765,14 @@ function startCompileServer(port = PORT) {
 
   server.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
+      console.log(`[RoboLab Local Compiler] Port ${port} sudah aktif digunakan oleh instance compiler bridge yang berjalan.`);
     } else {
       console.warn(`[RoboLab Web Compiler] Server warning:`, err.message || err);
     }
   });
 
-  server.listen(port, () => {
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`[RoboLab Local Compiler] Server aktif di http://127.0.0.1:${port} (CLI: ${getArduinoCliPath()})`);
   });
 
   global.__robolabActiveCompileServer = server;

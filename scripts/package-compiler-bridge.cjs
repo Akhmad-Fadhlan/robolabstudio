@@ -12,7 +12,7 @@ if (!fs.existsSync(bridgeDir)) fs.mkdirSync(bridgeDir, { recursive: true });
 if (!fs.existsSync(publicDownloadsDir)) fs.mkdirSync(publicDownloadsDir, { recursive: true });
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-// Copy compile-server.cjs and arduino-sketch.cjs
+// Copy compile-server.cjs, arduino-sketch.cjs, and cloud-compiler.cjs
 fs.copyFileSync(
   path.join(rootDir, 'server', 'compile-server.cjs'),
   path.join(bridgeDir, 'compile-server.cjs')
@@ -21,6 +21,20 @@ fs.copyFileSync(
   path.join(rootDir, 'server', 'arduino-sketch.cjs'),
   path.join(bridgeDir, 'arduino-sketch.cjs')
 );
+const cloudCompilerSrc = path.join(rootDir, 'server', 'cloud-compiler.cjs');
+if (fs.existsSync(cloudCompilerSrc)) {
+  fs.copyFileSync(cloudCompilerSrc, path.join(bridgeDir, 'cloud-compiler.cjs'));
+}
+const cloudBinSrc = path.join(rootDir, 'server', 'cloud-binaries');
+const cloudBinDest = path.join(bridgeDir, 'cloud-binaries');
+if (fs.existsSync(cloudBinSrc)) {
+  fs.cpSync(cloudBinSrc, cloudBinDest, { recursive: true });
+}
+// Remove any legacy .vbs script so antivirus heuristics never flag the package as a VBS dropper
+const legacyVbsPath = path.join(bridgeDir, 'start-silent.vbs');
+if (fs.existsSync(legacyVbsPath)) {
+  try { fs.unlinkSync(legacyVbsPath); } catch (_) {}
+}
 
 // Copy arduino-cli.exe
 const binDir = path.join(bridgeDir, 'bin');
@@ -115,6 +129,7 @@ fs.mkdirSync(unixTemp, { recursive: true });
 const unixFiles = [
   'compile-server.cjs',
   'arduino-sketch.cjs',
+  'cloud-compiler.cjs',
   'start-bridge.sh',
   'start-bridge.command',
   'install-bridge.sh',

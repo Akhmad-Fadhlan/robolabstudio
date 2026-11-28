@@ -7,7 +7,7 @@ export type RobotMcuId =
   | 'ESP32 DevKit V1'
   | 'NodeMCU / ESP8266';
 
-export type SensorCount = 2 | 4 | 5 | 6 | 8 | 12;
+export type SensorCount = 2 | 4 | 5 | 6 | 8 | 12 | 14;
 
 export type SensorReadMode = 'direct' | 'mux_4051' | 'mux_4067';
 
@@ -232,7 +232,7 @@ export function estimateRobotPins(
       pwmR: '14',
       dirR1: '12',
       dirR2: '13',
-      sensorDirectPins: ['34', '35', '36', '39', '32', '33', '15', '4', '2', '16', '17', '5'].slice(0, sensorCount),
+      sensorDirectPins: ['34', '35', '36', '39', '32', '33', '15', '4', '2', '16', '17', '5', '18', '19'].slice(0, sensorCount),
       muxS0: '16',
       muxS1: '17',
       muxS2: '5',
@@ -278,7 +278,7 @@ export function estimateRobotPins(
       pwmR: '6',
       dirR1: '24',
       dirR2: '25',
-      sensorDirectPins: ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'].slice(
+      sensorDirectPins: ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13'].slice(
         0,
         sensorCount
       ),
@@ -400,7 +400,8 @@ export function getDefaultSensorPattern(sensorCount: SensorCount): string {
   if (sensorCount === 5) return 'xx0xx';
   if (sensorCount === 6) return 'xx00xx';
   if (sensorCount === 8) return 'xxx00xxx';
-  return 'xxxxx00xxxxx';
+  if (sensorCount === 12) return 'xxxxx00xxxxx';
+  return 'xxxxxx00xxxxxx';
 }
 
 export interface SensorPresetOption {

@@ -40,26 +40,32 @@ function isRemoteWebOrigin(): boolean {
 
 export async function checkLocalBridgeAvailable(forceRefresh: boolean = false): Promise<boolean> {
   const now = Date.now();
-  if (!forceRefresh && now - _localBridgeCache.checkedAt < 5000) {
+  // Positive status cached for 4s; negative status only cached for 700ms so a newly started PC compiler is detected immediately
+  const ttl = _localBridgeCache.available ? 4000 : 700;
+  if (!forceRefresh && now - _localBridgeCache.checkedAt < ttl) {
     return _localBridgeCache.available;
   }
-  const urls = ['http://127.0.0.1:3001/api/health', 'http://localhost:3001/api/health', `${COMPILE_SERVER_URL}/api/health`];
+  const urls = [
+    `http://127.0.0.1:3001/api/health?t=${now}`,
+    `http://localhost:3001/api/health?t=${now}`,
+    `${COMPILE_SERVER_URL}/api/health?t=${now}`,
+  ];
   for (const url of urls) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 1500);
-      const resp = await fetch(url, { signal: ctrl.signal });
+      const timer = setTimeout(() => ctrl.abort(), 2200);
+      const resp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(timer);
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        if (data && data.ok && !data.cloud) {
-          _localBridgeCache = { available: true, checkedAt: now };
+        if (data && (data.ok || data.status === 'ok') && !data.cloud) {
+          _localBridgeCache = { available: true, checkedAt: Date.now() };
           return true;
         }
       }
     } catch {}
   }
-  _localBridgeCache = { available: false, checkedAt: now };
+  _localBridgeCache = { available: false, checkedAt: Date.now() };
   return false;
 }
 
@@ -70,7 +76,11 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
     apiPath.startsWith('/api/serial-');
 
   const remoteOrigin = isRemoteWebOrigin();
-  const hasLocalBridge = await checkLocalBridgeAvailable();
+  let hasLocalBridge = await checkLocalBridgeAvailable();
+  if (!hasLocalBridge) {
+    // Re-check once with forceRefresh=true in case the user just turned on their PC compiler bridge
+    hasLocalBridge = await checkLocalBridgeAvailable(true);
+  }
 
   let candidates: string[];
   if (isLocalOnlyEndpoint) {
@@ -78,12 +88,12 @@ async function fetchCompilerApi(apiPath: string, init?: RequestInit): Promise<Re
       throw new Error('Local bridge not active on remote origin');
     }
     candidates = remoteOrigin
-      ? [`${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`]
-      : [apiPath, `${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`];
-  } else if (remoteOrigin && hasLocalBridge) {
+      ? [`http://127.0.0.1:3001${apiPath}`, `http://localhost:3001${apiPath}`, `${COMPILE_SERVER_URL}${apiPath}`]
+      : [`http://127.0.0.1:3001${apiPath}`, `${COMPILE_SERVER_URL}${apiPath}`, apiPath];
+  } else if (hasLocalBridge) {
     candidates = [`http://127.0.0.1:3001${apiPath}`, `http://localhost:3001${apiPath}`, `${COMPILE_SERVER_URL}${apiPath}`, apiPath];
   } else {
-    candidates = [apiPath, `${COMPILE_SERVER_URL}${apiPath}`, `http://127.0.0.1:3001${apiPath}`];
+    candidates = [apiPath, `http://127.0.0.1:3001${apiPath}`, `http://localhost:3001${apiPath}`, `${COMPILE_SERVER_URL}${apiPath}`];
   }
 
   let lastErr: any = null;

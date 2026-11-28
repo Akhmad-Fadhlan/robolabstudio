@@ -58,6 +58,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const pendingChangeRef = useRef<{ filename: string; content: string } | null>(null);
   const updatingEditorRef = useRef(false);
   const previousSourceRef = useRef(files[activeFile] ?? '');
+  const lastEmittedContentRef = useRef<{ [filename: string]: string }>({});
+  const lastUserTypeTimeRef = useRef<number>(0);
 
   useEffect(() => {
     onFileChangeRef.current = onFileChange;
@@ -70,7 +72,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     debounceTimeoutRef.current = null;
     const pending = pendingChangeRef.current;
     pendingChangeRef.current = null;
-    if (pending) onFileChangeRef.current(pending.filename, pending.content);
+    if (pending) {
+      lastEmittedContentRef.current[pending.filename] = pending.content;
+      onFileChangeRef.current(pending.filename, pending.content);
+    }
   };
 
   useEffect(() => () => {
@@ -180,9 +185,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
         disposable = editorInstance.onDidChangeModelContent(() => {
           if (updatingEditorRef.current) return;
+          const val = editorInstance.getValue();
+          const fname = activeFileRef.current;
+          lastUserTypeTimeRef.current = Date.now();
+          lastEmittedContentRef.current[fname] = val;
           pendingChangeRef.current = {
-            filename: activeFileRef.current,
-            content: editorInstance.getValue(),
+            filename: fname,
+            content: val,
           };
           if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
           debounceTimeoutRef.current = setTimeout(flushPendingChanges, 150);
@@ -279,22 +288,38 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       const pending = pendingChangeRef.current;
       if (pending && pending.filename !== activeFile) {
         flushPendingChanges();
-      } else if (pending && !fileSwitched) {
-        if (newContent === previousSource) return;
-        // Opening a replacement for the same filename supersedes buffered editor input.
+      } else if (!fileSwitched) {
+        // Prevent cursor jumping: if this prop change is simply a delayed React state echo
+        // of what the user just typed, or the user is actively typing in manual mode, do NOT call setValue()!
+        const isEchoFromSelf = lastEmittedContentRef.current[activeFile] === newContent;
+        const isActivelyTyping =
+          !isSyncWithBlocks &&
+          (Boolean(pending && pending.filename === activeFile) ||
+            (typeof editor.hasTextFocus === 'function' && editor.hasTextFocus() && Date.now() - lastUserTypeTimeRef.current < 1200));
+
+        if (isEchoFromSelf || isActivelyTyping || newContent === previousSource) {
+          return;
+        }
+        // Genuine external replacement for the same filename (e.g. template loaded or Blockly sync toggled on)
         clearTimeout(debounceTimeoutRef.current ?? undefined);
         debounceTimeoutRef.current = null;
         pendingChangeRef.current = null;
       }
+      lastEmittedContentRef.current[activeFile] = newContent;
       const viewState = fileSwitched ? null : editor.saveViewState();
+      const position = fileSwitched ? null : editor.getPosition();
       updatingEditorRef.current = true;
       try {
         editor.setValue(newContent);
       } finally {
         updatingEditorRef.current = false;
       }
-      if (fileSwitched) editor.setScrollTop(0);
-      else if (viewState) editor.restoreViewState(viewState);
+      if (fileSwitched) {
+        editor.setScrollTop(0);
+      } else {
+        if (viewState) editor.restoreViewState(viewState);
+        if (position) editor.setPosition(position);
+      }
     }
   }, [activeFile, files, isSyncWithBlocks, isEditorReady]);
 

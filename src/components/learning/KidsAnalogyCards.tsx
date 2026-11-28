@@ -674,69 +674,121 @@ export const KidsAnalogyCard: React.FC<KidsAnalogyProps> = ({ category, lessonIn
   const data = getAnalogyData();
 
   return (
-    <div className={`w-full rounded-2xl p-4 sm:p-5 border transition flex flex-col gap-3.5 shadow-sm ${
-      isLight ? 'bg-gradient-to-br from-amber-50/50 via-white to-blue-50/30 border-blue-100' : 'bg-gradient-to-br from-[#121626] to-[#0c0d14] border-blue-900/40'
-    }`}>
+    <div
+      className={`w-full rounded-2xl p-4 sm:p-5 border transition flex flex-col gap-3.5 shadow-sm ${
+        isLight ? 'bg-white' : 'bg-[#101320]'
+      }`}
+      style={{
+        borderColor: isLight ? 'rgba(var(--accent-rgb), 0.25)' : 'rgba(var(--accent-rgb), 0.32)',
+        background: isLight
+          ? 'linear-gradient(135deg, rgba(var(--accent-rgb), 0.05) 0%, #ffffff 55%, rgba(var(--accent-rgb), 0.03) 100%)'
+          : 'linear-gradient(135deg, rgba(var(--accent-rgb), 0.10) 0%, #0e111c 65%, #0a0c14 100%)',
+      }}
+    >
       {/* Top Header Badge */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1 ${data.badgeColor}`}>
+          <span
+            className="px-2.5 py-1 rounded-full text-[10px] font-extrabold border flex items-center gap-1"
+            style={{
+              background: 'rgba(var(--accent-rgb), 0.14)',
+              color: 'var(--accent-primary)',
+              borderColor: 'rgba(var(--accent-rgb), 0.3)',
+            }}
+          >
             <Sparkles className="w-3 h-3" />
             <span>{data.badge}</span>
           </span>
-          <span className={`text-[11px] font-extrabold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
+          <span className={`text-xs sm:text-sm font-black ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
             {data.title}
           </span>
         </div>
-        <div className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-lg ${
-          isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
-        }`}>
-          <Lightbulb className="w-3 h-3 text-amber-500" />
-          <span>Analogi Seru</span>
+        <div
+          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg border"
+          style={{
+            background: 'rgba(var(--accent-rgb), 0.10)',
+            color: 'var(--accent-primary)',
+            borderColor: 'rgba(var(--accent-rgb), 0.25)',
+          }}
+        >
+          <Lightbulb className="w-3 h-3" />
+          <span>Cara Kerja Mudah</span>
         </div>
       </div>
 
       {/* Hero Visual Analogy Illustration */}
-      <div className={`w-full rounded-xl p-2 sm:p-3 border flex items-center justify-center overflow-hidden transition ${
-        isLight ? 'bg-white/90 border-slate-200/90 shadow-inner' : 'bg-black/40 border-white/5'
-      }`}>
+      <div
+        className={`w-full rounded-xl p-2.5 sm:p-3.5 border flex items-center justify-center overflow-hidden transition ${
+          isLight ? 'bg-white/95 border-slate-200/90 shadow-inner' : 'bg-black/45 border-white/10'
+        }`}
+      >
         {data.illustration}
       </div>
 
       {/* Kid-Friendly Analogy Story */}
-      <div className={`p-3 rounded-xl border flex items-start gap-2.5 ${
-        isLight ? 'bg-blue-50/70 border-blue-200/70 text-blue-950' : 'bg-blue-950/20 border-blue-800/40 text-blue-200'
-      }`}>
-        <div className="p-1 rounded-lg bg-blue-500 text-white flex-shrink-0 mt-0.5">
-          <Compass className="w-3.5 h-3.5" />
+      <div
+        className="p-3.5 rounded-xl border flex items-start gap-3"
+        style={{
+          background: isLight ? 'rgba(var(--accent-rgb), 0.07)' : 'rgba(var(--accent-rgb), 0.12)',
+          borderColor: isLight ? 'rgba(var(--accent-rgb), 0.25)' : 'rgba(var(--accent-rgb), 0.3)',
+        }}
+      >
+        <div
+          className="p-1.5 rounded-xl text-white flex-shrink-0 mt-0.5 shadow-xs"
+          style={{ background: 'var(--accent-gradient)' }}
+        >
+          <Compass className="w-4 h-4" />
         </div>
         <div className="space-y-0.5">
-          <h4 className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">💡 Analogi Dunia Nyata:</h4>
-          <p className="text-[10.5px] leading-relaxed font-medium">{data.analogy}</p>
+          <h4
+            className="text-[10.5px] font-extrabold uppercase tracking-wider"
+            style={{ color: 'var(--accent-primary)' }}
+          >
+            💡 Bayangkan Seperti Ini:
+          </h4>
+          <p className={`text-xs leading-relaxed font-medium ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>
+            {data.analogy}
+          </p>
         </div>
       </div>
 
       {/* Kid Mission Challenge */}
-      <div className={`p-3 rounded-xl border flex items-start gap-2.5 ${
-        isLight ? 'bg-emerald-50/70 border-emerald-200/70 text-emerald-950' : 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
-      }`}>
-        <div className="p-1 rounded-lg bg-emerald-500 text-white flex-shrink-0 mt-0.5">
-          <Play className="w-3.5 h-3.5" />
+      <div
+        className={`p-3.5 rounded-xl border flex items-start gap-3 ${
+          isLight
+            ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-950'
+            : 'bg-emerald-950/25 border-emerald-800/40 text-emerald-200'
+        }`}
+      >
+        <div className="p-1.5 rounded-xl bg-emerald-500 text-white flex-shrink-0 mt-0.5 shadow-xs">
+          <Play className="w-4 h-4" />
         </div>
         <div className="space-y-0.5">
-          <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">🎯 Misi Robot Cilik:</h4>
-          <p className="text-[10.5px] leading-relaxed font-medium">{data.mission}</p>
+          <h4 className="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            🎯 Misi Kamu:
+          </h4>
+          <p className="text-xs leading-relaxed font-medium">{data.mission}</p>
         </div>
       </div>
 
       {/* Simplified 3-Step Recipe */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-0.5">
         {data.recipe.map((step, idx) => (
-          <div key={idx} className={`p-2.5 rounded-xl border ${
-            isLight ? 'bg-white border-slate-200' : 'bg-white/5 border-white/5'
-          }`}>
-            <span className="text-[9px] font-extrabold text-blue-500 block mb-0.5">{step.step}</span>
-            <p className="text-[9.5px] font-mono leading-tight text-slate-600 dark:text-slate-300">{step.desc}</p>
+          <div
+            key={idx}
+            className={`p-3 rounded-xl border ${
+              isLight ? 'bg-white border-slate-200/90 shadow-2xs' : 'bg-white/[0.04] border-white/10'
+            }`}
+          >
+            <span
+              className="text-[10px] font-extrabold block mb-1"
+              style={{ color: 'var(--accent-primary)' }}
+            >
+              {step.step}
+            </span>
+            <p className={`text-[11px] font-mono leading-snug ${isLight ? 'text-slate-700' : 'text-slate-200'}`}>
+              {step.desc}
+            </p>
           </div>
         ))}
       </div>
