@@ -255,7 +255,7 @@ if (
   window.location.hash.includes('access_token=')
 ) {
   try {
-    window.opener.postMessage({ type: 'ROBOLAB_OAUTH_HASH', hash: window.location.hash }, '*');
+    window.opener.postMessage({ type: 'ROBOLAB_OAUTH_HASH', hash: window.location.hash }, window.location.origin);
     window.close();
   } catch (_) {}
 }

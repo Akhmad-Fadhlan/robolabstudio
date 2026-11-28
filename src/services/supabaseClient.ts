@@ -1,14 +1,41 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ─── Supabase Configuration ────────────────────────────────────────────────
-const SUPABASE_URL = 'https://qcewaspgybtbofjowoxs.supabase.co';
+// SECURITY: Browser/Electron bundles may ONLY contain the public *anon* key.
+// Never put a `service_role` key (or any admin secret) in client code — it
+// bypasses Row Level Security and grants full admin access to the project.
+// Set VITE_SUPABASE_ANON_KEY (Dashboard → Settings → API → anon / public) in
+// `.env.local` for local builds and in the hosting provider's env vars.
+const SUPABASE_URL: string =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) ||
+  'https://qcewaspgybtbofjowoxs.supabase.co';
 
-// PENTING: Gunakan anon key dari Supabase Dashboard → Settings → API
-// Format: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-// Bukan format sb_publishable_... (itu untuk SDK versi baru yang berbeda)
-const SUPABASE_KEY =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZXdhc3BneWJ0Ym9mam93b3hzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjY4NzQ5NCwiZXhwIjoyMTAyMjYzNDk0fQ._kLILomKueHswu6mtpKM3ktVEMsiVCTGk15QdJ29oUo';
+function readJwtRole(token: string): string | null {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json)?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Public anon key (safe for browser/Electron bundles when RLS is enabled on Supabase).
+const DEFAULT_PUBLIC_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjZXdhc3BneWJ0Ym9mam93b3hzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2ODc0OTQsImV4cCI6MjEwMjI2MzQ5NH0.A-xxgkVLau4jVpAi5R_EdjztJ1rAk9NU6VwzRzeLwiU';
+
+const RAW_SUPABASE_KEY: string =
+  ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) || '').trim() ||
+  DEFAULT_PUBLIC_ANON_KEY;
+
+let SUPABASE_KEY = RAW_SUPABASE_KEY;
+if (readJwtRole(SUPABASE_KEY) === 'service_role') {
+  console.error(
+    '[RoboLab Auth] DITOLAK: service_role key terdeteksi di VITE_SUPABASE_ANON_KEY. Menggunakan anon key publik.'
+  );
+  SUPABASE_KEY = DEFAULT_PUBLIC_ANON_KEY;
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
@@ -18,7 +45,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     storageKey: 'rl_auth_session',
   },
 });
-
 // ─── Device Fingerprint via Electron IPC ───────────────────────────────────
 export async function getDeviceId(): Promise<string> {
   try {
@@ -150,71 +176,6 @@ export async function signInWithGoogle(): Promise<void> {
     } catch (_) {}
   }
 
-  // Helper to list users from Supabase Auth Admin API (using service key) to detect completed Google OAuth
-  // even when Supabase Dashboard Site URL is still set to http://localhost:3000
-  const fetchAuthUsersSnapshot = async (): Promise<Map<string, { email: string; stamp: string }>> => {
-    const map = new Map<string, { email: string; stamp: string }>();
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=250`, {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const users = Array.isArray(json?.users) ? json.users : [];
-        for (const u of users) {
-          if (u?.id && u?.email) {
-            map.set(u.id, {
-              email: u.email,
-              stamp: `${u.last_sign_in_at || ''}|${u.updated_at || ''}`,
-            });
-          }
-        }
-      }
-    } catch (_) {}
-    return map;
-  };
-
-  const mintSessionForEmail = async (email: string): Promise<boolean> => {
-    try {
-      const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ type: 'magiclink', email }),
-      });
-      if (!linkRes.ok) return false;
-      const linkData = await linkRes.json();
-      const hashedToken = linkData?.hashed_token || linkData?.properties?.hashed_token;
-      if (!hashedToken) return false;
-
-      const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token_hash: hashedToken, type: 'magiclink' }),
-      });
-      if (!verifyRes.ok) return false;
-      const sessionData = await verifyRes.json();
-      if (sessionData?.access_token && sessionData?.refresh_token) {
-        const { error: setErr } = await supabase.auth.setSession({
-          access_token: sessionData.access_token,
-          refresh_token: sessionData.refresh_token,
-        });
-        return !setErr;
-      }
-    } catch (_) {}
-    return false;
-  };
-
-  const beforeUsers = await fetchAuthUsersSnapshot();
   const redirectOrigin = window.location.origin;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -247,12 +208,10 @@ export async function signInWithGoogle(): Promise<void> {
 
   return new Promise<void>((resolve, reject) => {
     let settled = false;
-    let checkingAdmin = false;
 
     const cleanup = () => {
       settled = true;
       clearInterval(fastTimer);
-      clearInterval(adminTimer);
       clearTimeout(timeoutTimer);
       window.removeEventListener('message', onMessage);
       if (popup && !popup.closed) {
@@ -280,30 +239,9 @@ export async function signInWithGoogle(): Promise<void> {
       return false;
     };
 
-    const checkAdminUsersDiff = async (): Promise<boolean> => {
-      if (settled || checkingAdmin) return false;
-      checkingAdmin = true;
-      try {
-        const currentUsers = await fetchAuthUsersSnapshot();
-        for (const [id, info] of currentUsers.entries()) {
-          const prev = beforeUsers.get(id);
-          if (!prev || prev.stamp !== info.stamp) {
-            const ok = await mintSessionForEmail(info.email);
-            if (ok && !settled) {
-              cleanup();
-              resolve();
-              return true;
-            }
-          }
-        }
-      } finally {
-        checkingAdmin = false;
-      }
-      return false;
-    };
-
     const onMessage = async (event: MessageEvent) => {
       if (settled) return;
+      if (event.origin && event.origin !== window.location.origin) return;
       if (event.data?.type === 'ROBOLAB_OAUTH_HASH' && typeof event.data?.hash === 'string') {
         await tryCompleteFromHash(event.data.hash);
       }
@@ -316,9 +254,8 @@ export async function signInWithGoogle(): Promise<void> {
       try {
         if (popup.closed) {
           clearInterval(fastTimer);
-          // Give one final check in case user or browser closed popup right as callback completed
-          const recovered = await checkAdminUsersDiff();
-          if (!recovered && !settled) {
+          // Popup closed by user (or finished) without delivering a session
+          if (!settled) {
             cleanup();
             reject(new Error('Login Google dibatalkan.'));
           }
@@ -329,15 +266,9 @@ export async function signInWithGoogle(): Promise<void> {
           await tryCompleteFromHash(href);
         }
       } catch (_) {
-        // Cross-origin frame while on accounts.google.com or localhost:3000 — expected
+        // Cross-origin frame while on accounts.google.com — expected
       }
     }, 400);
-
-    // Poll Supabase Auth Admin API every 1.2s to detect completed Google login immediately
-    // even when Supabase redirects the popup to http://localhost:3000
-    const adminTimer = setInterval(() => {
-      checkAdminUsersDiff();
-    }, 1200);
 
     const timeoutTimer = setTimeout(() => {
       if (!settled) {

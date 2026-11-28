@@ -473,12 +473,14 @@ const getGlobalLibraryDirs = () => {
 
 
 // --- Gemini AI Integration for Arduino Library Analysis & Blockly Block Generation ---
-const DEFAULT_KEY_B64 = 'QVEuQWI4Uk42TGZNaHprT21UQnZuaXJVRWRnOGdoY1pmU3pVM2RmSjhtMllhV3FyX043VUE=';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || Buffer.from(DEFAULT_KEY_B64, 'base64').toString('utf8');
+// SECURITY: never embed API keys in source/binaries. Provide GEMINI_API_KEY via environment
+// (e.g. a local .env loaded by your launcher). Without it, AI enrichment is skipped gracefully.
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = 'gemini-3.5-flash';
 
 const callGeminiInMain = (prompt, timeoutMs = 12000) => {
   return new Promise((resolve) => {
+    if (!GEMINI_API_KEY) { resolve(null); return; }
     let resolved = false;
     const data = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -488,10 +490,11 @@ const callGeminiInMain = (prompt, timeoutMs = 12000) => {
     const https = require('https');
     const req = https.request({
       hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      path: `/v1beta/models/${GEMINI_MODEL}:generateContent`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
         'Content-Length': Buffer.byteLength(data)
       }
     }, (res) => {
@@ -3338,6 +3341,16 @@ ipcMain.handle('scan-wifi', async () => {
 
 // ─── Desktop Google OAuth via Local Loopback Server ────────────────────────
 ipcMain.handle('start-google-oauth', async (event, { oauthUrl, port = 54321 }) => {
+  // SECURITY: only open a genuine Supabase https URL and a sane loopback port.
+  let safeOauthUrl;
+  try {
+    const u = new URL(String(oauthUrl));
+    if (u.protocol !== 'https:' || !/(^|\.)supabase\.co$/i.test(u.hostname)) throw new Error('bad host');
+    safeOauthUrl = u.toString();
+  } catch (_) {
+    throw new Error('URL autentikasi tidak valid.');
+  }
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Port callback tidak valid.');
   return new Promise((resolve, reject) => {
     let server = null;
     let timeoutTimer = null;
@@ -3352,7 +3365,15 @@ ipcMain.handle('start-google-oauth', async (event, { oauthUrl, port = 54321 }) =
 
     server = http.createServer((req, res) => {
       try {
-        const parsedUrl = new URL(req.url, `http://127.0.0.1:${port}`);
+        // SECURITY: block DNS-rebinding / cross-site requests to the loopback callback.
+        const expectedHost = `127.0.0.1:${port}`;
+        const expectedOrigin = `http://${expectedHost}`;
+        if (req.headers.host !== expectedHost || (req.headers.origin && req.headers.origin !== expectedOrigin)) {
+          res.writeHead(403);
+          res.end();
+          return;
+        }
+        const parsedUrl = new URL(req.url, expectedOrigin);
 
         // Callback route: Serve HTML that captures hash or query params
         if (parsedUrl.pathname === '/callback' || parsedUrl.pathname === '/auth/callback' || parsedUrl.pathname === '/') {
@@ -3444,8 +3465,7 @@ ipcMain.handle('start-google-oauth', async (event, { oauthUrl, port = 54321 }) =
           req.on('data', chunk => { body += chunk; });
           req.on('end', () => {
             res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
+              'Content-Type': 'application/json'
             });
             res.end(JSON.stringify({ ok: true }));
 
@@ -3488,7 +3508,7 @@ ipcMain.handle('start-google-oauth', async (event, { oauthUrl, port = 54321 }) =
 
     server.listen(port, '127.0.0.1', () => {
       // Launch default OS browser
-      shell.openExternal(oauthUrl);
+      shell.openExternal(safeOauthUrl);
     });
 
     // 2 minutes timeout

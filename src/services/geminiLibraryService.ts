@@ -6,17 +6,15 @@
 
 import { findKnownLibrary } from '../data/knownLibrarySignatures';
 
-const DEFAULT_KEY_B64 = 'QVEuQWI4Uk42TGZNaHprT21UQnZuaXJVRWRnOGdoY1pmU3pVM2RmSjhtMllhV3FyX043VUE=';
+// SECURITY: Never embed secret API keys in client bundles. Users can configure
+// their own key in localStorage ('gemini_api_key') or via VITE_GEMINI_API_KEY in local dev.
 export const getGeminiApiKey = (): string => {
   if (typeof localStorage !== 'undefined') {
     const customKey = localStorage.getItem('gemini_api_key');
     if (customKey && customKey.trim()) return customKey.trim();
   }
-  try {
-    return atob(DEFAULT_KEY_B64);
-  } catch {
-    return '';
-  }
+  const envKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || '';
+  return typeof envKey === 'string' ? envKey.trim() : '';
 };
 export const GEMINI_MODEL = 'gemini-3.5-flash';
 
@@ -37,7 +35,7 @@ export interface ParsedLibraryApi {
 async function callGeminiApi(prompt: string, timeoutMs: number = 12000): Promise<string | null> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -46,6 +44,7 @@ async function callGeminiApi(prompt: string, timeoutMs: number = 12000): Promise
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],

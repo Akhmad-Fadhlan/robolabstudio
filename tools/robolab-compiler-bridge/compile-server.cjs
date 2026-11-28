@@ -1477,6 +1477,28 @@ async function handleFirmwareRequest(board = 'ESP32 DevKit V1') {
   };
 }
 
+// SECURITY: the local bridge can compile, flash and talk to serial ports, so only
+// trusted RoboLab origins may call it from a browser. Extra origins can be added with
+// ROBOLAB_ALLOWED_ORIGINS="https://a.example,https://b.example".
+const ALLOWED_ORIGINS = new Set([
+  'null', // Electron renderer loaded from file://
+  'https://robolabstudio.vercel.app',
+  'https://robolabstudios.vercel.app',
+  ...String(process.env.ROBOLAB_ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // non-browser clients (Electron main, curl, CLI) send no Origin
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') &&
+      (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]');
+  } catch {
+    return false;
+  }
+}
+
 function createApiMiddleware() {
   const handler = async (req, res, next) => {
     const rawUrl = req.url || '';
@@ -1488,7 +1510,17 @@ function createApiMiddleware() {
     }
 
     // CORS headers for browser access (including Chrome Private Network Access)
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const requestOrigin = req.headers.origin;
+    if (!isAllowedOrigin(requestOrigin)) {
+      // Reject server-side too: CORS alone does not stop "simple" cross-site POSTs.
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Origin not allowed' }));
+      return;
+    }
+    if (requestOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Vary', 'Origin');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
@@ -1782,7 +1814,8 @@ function startCompileServer(port = PORT) {
     }
   });
 
-  server.listen(port, '0.0.0.0', () => {
+  // SECURITY: bind to loopback only so other machines on the LAN cannot reach the bridge.
+  server.listen(port, '127.0.0.1', () => {
     console.log(`[RoboLab Local Compiler] Server aktif di http://127.0.0.1:${port} (CLI: ${getArduinoCliPath()})`);
   });
 
